@@ -3192,7 +3192,7 @@ class Player {
     if (air) crouch *= 0.92;
     if (grab) crouch = Math.min(crouch, 0.66);
     const bob = Math.sin(t * (4 + this.speed * 0.35)) * this.chop * 0.04;
-    const side = lean * 0.10;                         // hips shift over the working edge
+    const side = lean * 0.16;                         // hips shift over the working edge
     const hipH = 0.86 * crouch + bob;                 // belt height above the board base
     const STANCE = 0.27;
 
@@ -3209,10 +3209,13 @@ class Player {
       return [V3.cross(V3(), Y, Z), Y, Z];            // right-handed: Z = X × Y
     };
     let open = 0.62 + (air ? clamp(this.spin * 0.08, -0.3, 0.3) : 0);
-    let bend = 0.22 + tuck * 0.40 + (grab ? 0.65 : 0);
+    // toe-side turns (lean > 0) press the chest forward over the toes; heel-side turns
+    // (lean < 0) sit back over the heels — otherwise the constant forward bend
+    // cancels most of a heel-side lean and the rider looks like they lean out
+    let bend = 0.22 + tuck * 0.40 + (grab ? 0.65 : 0) + Math.max(0, lean) * 0.15 + Math.min(0, lean) * 0.30;
     if (crash) { bend += Math.sin(this.crashTimer * 7) * 0.7; open += Math.cos(this.crashTimer * 5) * 0.8; }
-    const [TX, TY, TZ] = frame(open, bend, 0.25);
-    const [PX, PY, PZ] = frame(open * 0.45, bend * 0.3, 0.15);
+    const [TX, TY, TZ] = frame(open, bend, 0.40);
+    const [PX, PY, PZ] = frame(open * 0.45, bend * 0.3, 0.25);
 
     const pelvisP = local(0, hipH, side);
     const torsoP = add(pelvisP, PY, 0.02);

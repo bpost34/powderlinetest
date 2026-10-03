@@ -15,7 +15,7 @@ OUT_DIR = os.path.join(ROOT, 'dist')
 OUT = os.path.join(OUT_DIR, 'powder-line.html')
 
 html = open(SRC, encoding='utf-8').read()
-tag = re.compile(r'<script src="(js/[\w.-]+\.js)"></script>')
+tag = re.compile(r'<script src="(js/[\w.-]+\.js)(?:\?v=[\w.-]+)?"></script>')
 
 
 def inline(m):
