@@ -951,56 +951,62 @@ function geoCyl(g, cx, cy0, cz, r0, r1, y1, col, seg = 10, capTop = true, capBot
 function buildBoard() {
   const g = Geo();
   const L = 1.60, W = 0.15, T = 0.03;     // a real board: 160 cm, ~25 cm waist
-  const segs = 26;
-  const widthAt = (t) => {
-    const nose = sstep(0, 0.22, t), tail = sstep(1, 0.78, t);
-    return W * Math.min(nose, tail) * (1 - 0.16 * Math.sin(t * Math.PI));
-  };
-  const baseY = (t) => {                      // camber + rocker profile
-    const c = -0.012 * Math.sin(t * Math.PI); // camber: mid lifts off the snow
-    const rock = 0.04 * Math.pow(sstep(0.80, 1, t), 2) + 0.035 * Math.pow(sstep(0.20, 0, t), 2);
+  /* Outline: a sidecut body (widest at the contact points, narrower at the waist)
+     closed by elliptical nose and tail caps, so the ends are round, not pointed.
+     Samples are listed along x; caps get extra samples for a smooth curve. */
+  const E = 0.17;                                  // cap length (nose/tail curve)
+  const xs = [], ws = [];
+  const CAP = 10, BODY = 22, xT = -L / 2 + E, xN = L / 2 - E;
+  for (let k = CAP; k >= 1; k--) {                 // tail cap: tip → contact point
+    const ph = k / CAP * Math.PI / 2;
+    xs.push(xT - E * Math.sin(ph)); ws.push(W * Math.cos(ph));
+  }
+  for (let k = 0; k <= BODY; k++) {                // body with sidecut
+    const u = k / BODY;
+    xs.push(lerp(xT, xN, u)); ws.push(W * (1 - 0.16 * Math.sin(u * Math.PI)));
+  }
+  for (let k = 1; k <= CAP; k++) {                 // nose cap: contact point → tip
+    const ph = k / CAP * Math.PI / 2;
+    xs.push(xN + E * Math.sin(ph)); ws.push(W * Math.cos(ph));
+  }
+  const n = xs.length;
+  const baseY = (x) => {                           // camber underfoot, rocker up into the tips
+    const t = x / L + 0.5;
+    const c = -0.012 * Math.sin(clamp(t, 0, 1) * Math.PI);
+    const rock = 0.05 * Math.pow(sstep(0.82, 1, t), 2) + 0.045 * Math.pow(sstep(0.18, 0, t), 2);
     return c + rock;
   };
-  const top = [], bot = [];
-  for (let i = 0; i <= segs; i++) {
-    const t = i / segs, x = (t - 0.5) * L, w = widthAt(t), y = baseY(t);
-    top.push([geoVert(g, x, y + T, -w, 0, 1, 0, 0, 0, 0), geoVert(g, x, y + T, w, 0, 1, 0, 0, 0, 0)]);
-    bot.push([geoVert(g, x, y, -w, 0, -1, 0, 0, 0, 0), geoVert(g, x, y, w, 0, -1, 0, 0, 0, 0)]);
-  }
   const TOPC = [0.06, 0.62, 0.74], BOTC = [0.96, 0.94, 0.90], EDGE = [0.10, 0.11, 0.15];
-  // recolour top/bottom (rewrite colours by index)
-  const setCol = (vi, c) => { const o = vi * STRIDE + 6; g.v[o] = c[0]; g.v[o + 1] = c[1]; g.v[o + 2] = c[2]; };
-  for (let i = 0; i <= segs; i++) { setCol(top[i][0], TOPC); setCol(top[i][1], TOPC); setCol(bot[i][0], BOTC); setCol(bot[i][1], BOTC); }
-  for (let i = 0; i < segs; i++) {
-    // top surface
+  const top = [], bot = [];
+  for (let i = 0; i < n; i++) {
+    const x = xs[i], w = ws[i], y = baseY(x);
+    top.push([geoVert(g, x, y + T, -w, 0, 1, 0, ...TOPC), geoVert(g, x, y + T, w, 0, 1, 0, ...TOPC)]);
+    bot.push([geoVert(g, x, y, -w, 0, -1, 0, ...BOTC), geoVert(g, x, y, w, 0, -1, 0, ...BOTC)]);
+  }
+  // rail normal at sample i: outward from the outline z = ±w(x), i.e. (-dw/dx, 0, ±1)
+  const slope = (i) => {
+    const a = Math.max(0, i - 1), b = Math.min(n - 1, i + 1);
+    return (ws[b] - ws[a]) / ((xs[b] - xs[a]) || 1e-6);
+  };
+  for (let i = 0; i < n - 1; i++) {
+    // top surface / bottom surface (winding flipped)
     geoQuad(g, top[i][0], top[i][1], top[i + 1][1], top[i + 1][0]);
-    // bottom surface (winding flipped)
     geoQuad(g, bot[i][0], bot[i + 1][0], bot[i + 1][1], bot[i][1]);
     // rails
-    const rA = (i / segs - 0.5) * L, rB = ((i + 1) / segs - 0.5) * L;
-    const wA = widthAt(i / segs), wB = widthAt((i + 1) / segs);
+    const xA = xs[i], xB = xs[i + 1], wA = ws[i], wB = ws[i + 1];
+    const yA = baseY(xA), yB = baseY(xB), sA = slope(i), sB = slope(i + 1);
     for (const sgn of [-1, 1]) {
-      const a = geoVert(g, rA, baseY(i / segs) + T, sgn * wA, 0, .4, sgn, EDGE[0], EDGE[1], EDGE[2]);
-      const b = geoVert(g, rA, baseY(i / segs), sgn * wA, 0, -.4, sgn, EDGE[0], EDGE[1], EDGE[2]);
-      const c = geoVert(g, rB, baseY((i + 1) / segs), sgn * wB, 0, -.4, sgn, EDGE[0], EDGE[1], EDGE[2]);
-      const d = geoVert(g, rB, baseY((i + 1) / segs) + T, sgn * wB, 0, .4, sgn, EDGE[0], EDGE[1], EDGE[2]);
-      // the rail faces outward on both sides, but the -Z side traverses the
-      // quad the other way round, so its winding has to be reversed
+      const nA = V3.norm(V3(), V3(-sA, 0, sgn)), nB = V3.norm(V3(), V3(-sB, 0, sgn));
+      const a = geoVert(g, xA, yA + T, sgn * wA, nA.x, 0.3, nA.z, ...EDGE);
+      const b = geoVert(g, xA, yA, sgn * wA, nA.x, -0.3, nA.z, ...EDGE);
+      const c = geoVert(g, xB, yB, sgn * wB, nB.x, -0.3, nB.z, ...EDGE);
+      const d = geoVert(g, xB, yB + T, sgn * wB, nB.x, 0.3, nB.z, ...EDGE);
       if (sgn < 0) geoQuad(g, a, d, c, b); else geoQuad(g, a, b, c, d);
     }
   }
-  // tips
-  for (const t of [0, 1]) {
-    const x = (t - 0.5) * L, y = baseY(t);
-    const c = geoVert(g, x * 1.001, y + T * 0.5, 0, sign(t - 0.5), 0, 0, BOTC[0], BOTC[1], BOTC[2]);
-    const a = bot[t === 0 ? 0 : segs][0], b = bot[t === 0 ? 0 : segs][1];
-    const d = top[t === 0 ? 0 : segs][1], e = top[t === 0 ? 0 : segs][0];
-    if (t === 0) { geoTri(g, c, b, a); geoTri(g, c, d, b); geoTri(g, c, e, d); geoTri(g, c, a, e); }
-    else { geoTri(g, c, a, b); geoTri(g, c, b, d); geoTri(g, c, d, e); geoTri(g, c, e, a); }
-  }
   // bindings
   for (const bx of [-0.27, 0.27]) {
-    const y0 = baseY(0.5 + bx / L) + T;
+    const y0 = baseY(bx) + T;
     geoBox(g, bx, y0 + 0.012, 0.01, 0.20, 0.024, W * 1.75, [0.10, 0.11, 0.14]);   // base plate
     geoBox(g, bx, y0 + 0.10, -0.125, 0.17, 0.17, 0.03, [0.10, 0.11, 0.14]);       // highback (heel side)
   }
