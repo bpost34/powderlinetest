@@ -17,7 +17,7 @@ const Audio = {
     const ctx = this.ctx;
 
     this.master = ctx.createGain();
-    this.master.gain.value = 0.9;
+    this.master.gain.value = this.muted ? 0 : 0.9;
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -14; comp.knee.value = 22; comp.ratio.value = 8;
     comp.attack.value = 0.004; comp.release.value = 0.22;
@@ -77,6 +77,11 @@ const Audio = {
     }
     src.loop = true;
     return src;
+  },
+
+  setMuted(m) {
+    this.muted = m;
+    if (this.master) this.master.gain.setTargetAtTime(m ? 0 : 0.9, this.ctx.currentTime, 0.03);
   },
 
   resume() { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); },

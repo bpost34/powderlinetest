@@ -215,7 +215,6 @@ function buildRider() {
   ], 14);
   geoSphere(t, 0.205, 0.50, 0, 0.085, C.jacket, 10, 6);                 // shoulder caps
   geoSphere(t, -0.205, 0.50, 0, 0.085, C.jacket, 10, 6);
-  geoSphere(t, 0, 0.47, -0.10, 0.12, C.jacket, 10, 6, [1.2, 0.85, 0.75]);   // hood bunched on the back
   geoBox(t, 0, 0.30, 0.128, 0.025, 0.42, 0.012, C.glove);                // front zip
   RiderGeo.torso = t;
 
@@ -261,16 +260,50 @@ function buildRider() {
 
 /* ---------------- vegetation + rocks (instanced) ---------------- */
 function buildTree() {
+  /* Snowy fir: a trunk plus five drooping, star-shaped branch tiers. Flat-shaded
+     facets; each tier's upper surface fades from snow at the top to needles at
+     the tips, the underside is dark. Unit scale: ~4.6 m tall. */
   const g = Geo();
-  geoCyl(g, 0, 0, 0, 0.16, 0.10, 1.1, [0.28, 0.20, 0.15], 6, false, false);
-  const layers = [[1.0, 1.25, 1.95], [1.9, 1.02, 1.55], [2.75, 0.76, 1.20], [3.5, 0.46, 0.85]];
-  for (let i = 0; i < layers.length; i++) {
-    const [y0, , y1] = layers[i];
-    const r0 = layers[i][1], r1 = (i + 1 < layers.length) ? layers[i + 1][1] * 0.72 : 0.02;
-    const shade = 0.30 + i * 0.055;
-    geoCyl(g, 0, y0, 0, r0, r1, y1, [shade * 0.42, shade, shade * 0.62], 7, true, false);
-    // snow cap on top of each tier
-    geoCyl(g, 0, y1 - 0.10, 0, r1 * 1.02 + 0.05, Math.max(0.02, r1 * 0.55), y1 + 0.10, [0.93, 0.96, 1.0], 7, true, false);
+  geoCyl(g, 0, 0, 0, 0.15, 0.08, 1.3, [0.30, 0.21, 0.15], 7, false, false);
+  const SNOW = [0.93, 0.96, 1.0], UNDER = [0.08, 0.20, 0.14];
+  const face = (A, B, C, ca, cb, cc, hint) => {
+    let ux = B[0] - A[0], uy = B[1] - A[1], uz = B[2] - A[2], wx = C[0] - A[0], wy = C[1] - A[1], wz = C[2] - A[2];
+    let nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
+    if (nx * hint[0] + ny * hint[1] + nz * hint[2] < 0) { [B, C] = [C, B]; [cb, cc] = [cc, cb]; nx = -nx; ny = -ny; nz = -nz; }
+    const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
+    geoTri(g, geoVert(g, A[0], A[1], A[2], nx, ny, nz, ...ca),
+              geoVert(g, B[0], B[1], B[2], nx, ny, nz, ...cb),
+              geoVert(g, C[0], C[1], C[2], nx, ny, nz, ...cc));
+  };
+  const K = 10, TIERS = 5;
+  for (let t = 0; t < TIERS; t++) {
+    const k = t / (TIERS - 1);
+    const y0 = 0.95 + t * 0.74;                     // tier skirt height
+    const R = 1.5 * (1 - k * 0.72);                 // radius shrinks up the tree
+    const yTop = y0 + 1.15 - k * 0.15;
+    const rTop = t === TIERS - 1 ? 0.0 : R * 0.16;
+    const green = [0.10 + k * 0.03, 0.30 + k * 0.06, 0.19 + k * 0.03];
+    const tip = [], top = [];
+    for (let i = 0; i < K; i++) {
+      const a = (i + t * 0.5) / K * TAU;            // twist each tier a little
+      const out = i % 2 === 0;
+      const r = out ? R : R * 0.62;
+      const droop = out ? 0.22 : 0.0;
+      tip.push([Math.cos(a) * r, y0 - droop, Math.sin(a) * r]);
+      top.push([Math.cos(a) * rTop, yTop, Math.sin(a) * rTop]);
+    }
+    const snowMix = (c, m) => [lerp(c[0], SNOW[0], m), lerp(c[1], SNOW[1], m), lerp(c[2], SNOW[2], m)];
+    const tipCol = snowMix(green, 0.12), midCol = snowMix(green, 0.55);
+    for (let i = 0; i < K; i++) {
+      const j = (i + 1) % K;
+      const A = top[i], B = top[j], C = tip[i], D = tip[j];
+      const hint = [(C[0] + D[0]) * 0.5, 0.8, (C[2] + D[2]) * 0.5];   // outward + up
+      if (rTop > 0) face(A, D, C, SNOW, i % 2 ? tipCol : midCol, i % 2 ? midCol : tipCol, hint);
+      face(A, B, D, SNOW, SNOW, j % 2 ? midCol : tipCol, hint);
+      if (rTop === 0) face(A, D, C, SNOW, tipCol, tipCol, hint);
+      // underside back to the trunk
+      face(C, D, [0, y0 + 0.28, 0], UNDER, UNDER, UNDER, [(C[0] + D[0]) * 0.5, -1.2, (C[2] + D[2]) * 0.5]);
+    }
   }
   return g;
 }

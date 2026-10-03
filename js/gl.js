@@ -36,7 +36,7 @@ const GL = {
     // uses 3..7, bindParticles uses 3/4. Binding an undeclared name is a no-op.
     const SLOTS = [['aPos', 0], ['aNormal', 1], ['aColor', 2],
                    ['aIM0', 3], ['aIM1', 4], ['aIM2', 5], ['aIM3', 6], ['aTint', 7],
-                   ['aP0', 3], ['aP1', 4]];
+                   ['aP0', 3], ['aP1', 4], ['aAlpha', 1]];
     for (const [nm, loc] of SLOTS) gl.bindAttribLocation(p, loc, nm);
     gl.linkProgram(p);
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('Link "' + name + '": ' + gl.getProgramInfoLog(p));
@@ -406,6 +406,9 @@ GL.buildShaders = function () {
       // groomed corduroy banding down the piste
       float cx = vWorld.x; // visual only
       col *= 1.0 + 0.022 * sin(cx * 1.1 + vWorld.z * 0.02);
+      // cool sheen where the snow turns away from the camera (grazing angles)
+      float fres = pow(1.0 - clamp(dot(n, normalize(uCamPos - vWorld)), 0.0, 1.0), 4.0);
+      col += vec3(0.55, 0.70, 1.0) * fres * 0.16;
       col = applyFog(col, vWorld, normalize(uCamPos - vWorld), dist);
       fragColor = vec4(col, 1.0);
     }`;

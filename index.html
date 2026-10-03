@@ -122,6 +122,17 @@
   #fatal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:30px;
     background:#04060b;font-size:14px;line-height:1.7;color:#cfe6ff;text-align:center}
 
+  /* mute toggle: top centre, right of the lives (and of the pause button on touch) */
+  #muteBtn{position:fixed;top:max(12px,env(safe-area-inset-top));left:50%;margin-left:46px;width:38px;height:38px;
+    border-radius:50%;border:1.5px solid rgba(190,225,255,.35);background:rgba(10,22,38,.38);color:#eaf6ff;
+    display:flex;align-items:center;justify-content:center;padding:0;z-index:6;cursor:pointer;
+    backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);touch-action:manipulation}
+  #muteBtn svg{width:18px;height:18px}
+  #muteBtn .x{display:none}
+  #muteBtn.muted .x{display:inline}#muteBtn.muted .waves{display:none}
+  #muteBtn.muted{color:var(--bad);border-color:rgba(255,122,92,.5)}
+  body.touch.playing #muteBtn{margin-left:92px}
+
   /* ---------- touch controls (phones / tablets) ---------- */
   .touch-only{display:none}
   body.touch .touch-only{display:block}
@@ -270,6 +281,8 @@
   <div class="go"><span class="kb-only">press P to drop back in</span><span class="touch-only">tap to drop back in</span></div>
 </div>
 
+<button id="muteBtn" type="button" aria-label="Mute" title="Mute (M)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" stroke="none"/><g class="waves"><path d="M16 9.5a3.5 3.5 0 0 1 0 5"/><path d="M18.5 7a7 7 0 0 1 0 10"/></g><g class="x"><path d="M16.5 9.5l5 5M21.5 9.5l-5 5"/></g></svg></button>
+
 <div id="touch">
   <div id="steerPad"><span class="tlabel">steer</span><span class="arr" style="left:14px">◀</span><span class="arr" style="right:14px">▶</span><div id="steerKnob"></div></div>
   <div class="tbtn" id="tJ">ollie</div>
@@ -282,14 +295,15 @@
 <div id="fatal"></div>
 <div id="foot">built from scratch — webgl2 · procedural terrain · edge-based carve physics</div>
 
-<script src="js/math.js?v=20261003c"></script>
-<script src="js/world.js?v=20261003c"></script>
-<script src="js/meshes.js?v=20261003c"></script>
-<script src="js/gl.js?v=20261003c"></script>
-<script src="js/render.js?v=20261003c"></script>
-<script src="js/fx.js?v=20261003c"></script>
-<script src="js/audio.js?v=20261003c"></script>
-<script src="js/player.js?v=20261003c"></script>
-<script src="js/game.js?v=20261003c"></script>
+<script src="js/math.js?v=20261003e"></script>
+<script src="js/world.js?v=20261003e"></script>
+<script src="js/meshes.js?v=20261003e"></script>
+<script src="js/gl.js?v=20261003e"></script>
+<script src="js/render.js?v=20261003e"></script>
+<script src="js/scenery.js?v=20261003e"></script>
+<script src="js/fx.js?v=20261003e"></script>
+<script src="js/audio.js?v=20261003e"></script>
+<script src="js/player.js?v=20261003e"></script>
+<script src="js/game.js?v=20261003e"></script>
 </body>
 </html>

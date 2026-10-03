@@ -16,6 +16,7 @@
 const G = 9.81;
 const BOARD_L = 1.60;
 const RIDE_H = 0.12;          // rider origin height above the board base
+const LEAN_VIS = 1;           // visual lean direction (board tilt + body). Set to -1 to reverse. Physics unaffected.
 
 class Player {
   constructor() {
@@ -81,7 +82,7 @@ class Player {
     V3.set(this.right, -c, 0, s);                    // = dir × up: the side we turn toward when lean > 0
     normalAt(this.pos.x, this.pos.z, this.nrm);
     // board up = terrain normal tilted by the lean angle around the nose axis
-    const L = this.lean * 0.62;                      // up to ~35° of ankle lean
+    const L = this.lean * 0.62 * LEAN_VIS;           // up to ~35° of ankle lean
     const cs = Math.cos(L), sn = Math.sin(L);
     V3.set(this.up,
       this.nrm.x * cs + this.right.x * sn,
@@ -406,7 +407,7 @@ class Player {
     const nrm = (x, y, z) => V3.norm(V3(), V3(x, y, z));
     const lerpV = (a, b, k) => V3(lerp(a.x, b.x, k), lerp(a.y, b.y, k), lerp(a.z, b.z, k));
 
-    const t = GL.time, crash = this.crashTimer > 0, air = this.airborne, lean = this.lean;
+    const t = GL.time, crash = this.crashTimer > 0, air = this.airborne, lean = this.lean * LEAN_VIS;
     const grab = !crash && air && this.grab ? this.grab : null;
     const tuck = air ? Math.max(this.tuck, this.braking, Math.min(1, Math.abs(this.flipRate) / 2)) : this.tuck;
 

@@ -295,6 +295,9 @@ const Render = {
     gl.depthMask(true);
     gl.enable(gl.CULL_FACE);
 
+    // ---- distant peaks on the horizon ----
+    Scenery.drawMountains();
+
     // ---- terrain ----
     const wp = GL.prog.world.use();
     Sun.setUniforms(wp);
@@ -308,6 +311,9 @@ const Render = {
       gl.bindVertexArray(m.vao);
       gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0);
     }
+
+    // ---- board tracks in the snow ----
+    Scenery.drawTrail();
 
     // ---- instanced props (trees) ----
     const ip = GL.prog.inst.use();
@@ -371,6 +377,7 @@ const Render = {
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.depthMask(false);
     fx.draw();
+    Scenery.drawSnow();
     gl.depthMask(true);
     gl.disable(gl.BLEND);
     gl.enable(gl.CULL_FACE);

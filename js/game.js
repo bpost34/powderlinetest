@@ -79,6 +79,9 @@ const Input = {
     $('pause').addEventListener('pointerdown', (e) => { if (e.button === 0) Game.togglePause(); });
 
     this.initTouch();
+    const mb = $('muteBtn');
+    mb.addEventListener('pointerdown', (e) => e.stopPropagation());   // don't start a run from the menu
+    mb.addEventListener('click', (e) => { e.stopPropagation(); Audio.init(); Audio.resume(); Game.toggleMute(); mb.blur(); });
   },
 
   /* ---------------- touch: steering pad, buttons, swipe camera, tilt ---------------- */
@@ -193,7 +196,7 @@ const Input = {
   onPress(k) {
     if (k === 'restart') { if (Game.state === 'play' || Game.state === 'over') Game.restart(true); }
     else if (k === 'pause') Game.togglePause();
-    else if (k === 'mute') { Audio.muted = !Audio.muted; Audio.ui(Audio.muted ? 300 : 700); }
+    else if (k === 'mute') Game.toggleMute();
     else if (k === 'debug') $('debug').classList.toggle('on');
   },
 
@@ -228,6 +231,8 @@ const Game = {
     this.fx = new Particles();
     let saved = 0;
     try { saved = +(localStorage.getItem('powderline.best') || 0); } catch (e) { saved = 0; }
+    try { if (localStorage.getItem('powderline.muted') === '1') Audio.setMuted(true); } catch (e) { }
+    $('muteBtn').classList.toggle('muted', Audio.muted);
     this.best = isFinite(saved) ? saved : 0;
     $('best').textContent = 'BEST ' + this.best.toLocaleString();
     this.buildLives();
@@ -273,11 +278,20 @@ const Game = {
     World.prewarm(this.P.pos.x, this.P.pos.z);
     World.update(this.P.pos.x, this.P.pos.z);
     Cam.snap(this.P);
+    Scenery.reset();
     $('over').classList.add('hide'); $('pause').classList.add('hide');
     $('hud').classList.add('on'); $('hint').classList.remove('gone');
     this.state = 'play';
     document.body.classList.add('playing');
     Audio.resume();
+  },
+
+  toggleMute() {
+    Audio.setMuted(!Audio.muted);
+    if (!Audio.muted) Audio.ui(700);
+    $('muteBtn').classList.toggle('muted', Audio.muted);
+    $('muteBtn').setAttribute('aria-label', Audio.muted ? 'Unmute' : 'Mute');
+    try { localStorage.setItem('powderline.muted', Audio.muted ? '1' : '0'); } catch (e) { }
   },
 
   togglePause() {
@@ -419,6 +433,7 @@ const Game = {
 
     P.step(dt, inp, this.fx);
     this.collide();
+    Scenery.update(dt, P);
     this.fx.spray(P, dt);
     this.fx.powder(P, dt);
     this.fx.update(dt);
@@ -519,6 +534,7 @@ const Game = {
       GL.shadowSize = 1024;
     }
     GL.init(canvas);
+    Scenery.init(GL.quality < 1);
     GL.makeShadowMap(GL.shadowSize, GL.shadowSize);
     Game.boot();
     Input.init();
@@ -567,6 +583,7 @@ const Game = {
         Game.P.pos.x = centerX(Game.P.pos.z);
         Game.P.pos.y = heightAt(Game.P.pos.x, Game.P.pos.z) + 0.2;
         Game.P.speed = 7; Game.P.updateBasis();
+        Scenery.update(dt, Game.P);
         World.update(Game.P.pos.x, Game.P.pos.z);
         Cam.update(dt, Game.P, 'menu'); Cam.resolveGround();
         Game.render();

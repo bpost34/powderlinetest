@@ -122,6 +122,17 @@
   #fatal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:30px;
     background:#04060b;font-size:14px;line-height:1.7;color:#cfe6ff;text-align:center}
 
+  /* mute toggle: top centre, right of the lives (and of the pause button on touch) */
+  #muteBtn{position:fixed;top:max(12px,env(safe-area-inset-top));left:50%;margin-left:46px;width:38px;height:38px;
+    border-radius:50%;border:1.5px solid rgba(190,225,255,.35);background:rgba(10,22,38,.38);color:#eaf6ff;
+    display:flex;align-items:center;justify-content:center;padding:0;z-index:6;cursor:pointer;
+    backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);touch-action:manipulation}
+  #muteBtn svg{width:18px;height:18px}
+  #muteBtn .x{display:none}
+  #muteBtn.muted .x{display:inline}#muteBtn.muted .waves{display:none}
+  #muteBtn.muted{color:var(--bad);border-color:rgba(255,122,92,.5)}
+  body.touch.playing #muteBtn{margin-left:92px}
+
   /* ---------- touch controls (phones / tablets) ---------- */
   .touch-only{display:none}
   body.touch .touch-only{display:block}
@@ -269,6 +280,8 @@
   <h1 style="font-size:clamp(34px,7vw,70px)">CATCHING<br>YOUR BREATH</h1>
   <div class="go"><span class="kb-only">press P to drop back in</span><span class="touch-only">tap to drop back in</span></div>
 </div>
+
+<button id="muteBtn" type="button" aria-label="Mute" title="Mute (M)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" stroke="none"/><g class="waves"><path d="M16 9.5a3.5 3.5 0 0 1 0 5"/><path d="M18.5 7a7 7 0 0 1 0 10"/></g><g class="x"><path d="M16.5 9.5l5 5M21.5 9.5l-5 5"/></g></svg></button>
 
 <div id="touch">
   <div id="steerPad"><span class="tlabel">steer</span><span class="arr" style="left:14px">◀</span><span class="arr" style="right:14px">▶</span><div id="steerKnob"></div></div>
@@ -1052,7 +1065,6 @@ function buildRider() {
   ], 14);
   geoSphere(t, 0.205, 0.50, 0, 0.085, C.jacket, 10, 6);                 // shoulder caps
   geoSphere(t, -0.205, 0.50, 0, 0.085, C.jacket, 10, 6);
-  geoSphere(t, 0, 0.47, -0.10, 0.12, C.jacket, 10, 6, [1.2, 0.85, 0.75]);   // hood bunched on the back
   geoBox(t, 0, 0.30, 0.128, 0.025, 0.42, 0.012, C.glove);                // front zip
   RiderGeo.torso = t;
 
@@ -1098,16 +1110,50 @@ function buildRider() {
 
 /* ---------------- vegetation + rocks (instanced) ---------------- */
 function buildTree() {
+  /* Snowy fir: a trunk plus five drooping, star-shaped branch tiers. Flat-shaded
+     facets; each tier's upper surface fades from snow at the top to needles at
+     the tips, the underside is dark. Unit scale: ~4.6 m tall. */
   const g = Geo();
-  geoCyl(g, 0, 0, 0, 0.16, 0.10, 1.1, [0.28, 0.20, 0.15], 6, false, false);
-  const layers = [[1.0, 1.25, 1.95], [1.9, 1.02, 1.55], [2.75, 0.76, 1.20], [3.5, 0.46, 0.85]];
-  for (let i = 0; i < layers.length; i++) {
-    const [y0, , y1] = layers[i];
-    const r0 = layers[i][1], r1 = (i + 1 < layers.length) ? layers[i + 1][1] * 0.72 : 0.02;
-    const shade = 0.30 + i * 0.055;
-    geoCyl(g, 0, y0, 0, r0, r1, y1, [shade * 0.42, shade, shade * 0.62], 7, true, false);
-    // snow cap on top of each tier
-    geoCyl(g, 0, y1 - 0.10, 0, r1 * 1.02 + 0.05, Math.max(0.02, r1 * 0.55), y1 + 0.10, [0.93, 0.96, 1.0], 7, true, false);
+  geoCyl(g, 0, 0, 0, 0.15, 0.08, 1.3, [0.30, 0.21, 0.15], 7, false, false);
+  const SNOW = [0.93, 0.96, 1.0], UNDER = [0.08, 0.20, 0.14];
+  const face = (A, B, C, ca, cb, cc, hint) => {
+    let ux = B[0] - A[0], uy = B[1] - A[1], uz = B[2] - A[2], wx = C[0] - A[0], wy = C[1] - A[1], wz = C[2] - A[2];
+    let nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
+    if (nx * hint[0] + ny * hint[1] + nz * hint[2] < 0) { [B, C] = [C, B]; [cb, cc] = [cc, cb]; nx = -nx; ny = -ny; nz = -nz; }
+    const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
+    geoTri(g, geoVert(g, A[0], A[1], A[2], nx, ny, nz, ...ca),
+              geoVert(g, B[0], B[1], B[2], nx, ny, nz, ...cb),
+              geoVert(g, C[0], C[1], C[2], nx, ny, nz, ...cc));
+  };
+  const K = 10, TIERS = 5;
+  for (let t = 0; t < TIERS; t++) {
+    const k = t / (TIERS - 1);
+    const y0 = 0.95 + t * 0.74;                     // tier skirt height
+    const R = 1.5 * (1 - k * 0.72);                 // radius shrinks up the tree
+    const yTop = y0 + 1.15 - k * 0.15;
+    const rTop = t === TIERS - 1 ? 0.0 : R * 0.16;
+    const green = [0.10 + k * 0.03, 0.30 + k * 0.06, 0.19 + k * 0.03];
+    const tip = [], top = [];
+    for (let i = 0; i < K; i++) {
+      const a = (i + t * 0.5) / K * TAU;            // twist each tier a little
+      const out = i % 2 === 0;
+      const r = out ? R : R * 0.62;
+      const droop = out ? 0.22 : 0.0;
+      tip.push([Math.cos(a) * r, y0 - droop, Math.sin(a) * r]);
+      top.push([Math.cos(a) * rTop, yTop, Math.sin(a) * rTop]);
+    }
+    const snowMix = (c, m) => [lerp(c[0], SNOW[0], m), lerp(c[1], SNOW[1], m), lerp(c[2], SNOW[2], m)];
+    const tipCol = snowMix(green, 0.12), midCol = snowMix(green, 0.55);
+    for (let i = 0; i < K; i++) {
+      const j = (i + 1) % K;
+      const A = top[i], B = top[j], C = tip[i], D = tip[j];
+      const hint = [(C[0] + D[0]) * 0.5, 0.8, (C[2] + D[2]) * 0.5];   // outward + up
+      if (rTop > 0) face(A, D, C, SNOW, i % 2 ? tipCol : midCol, i % 2 ? midCol : tipCol, hint);
+      face(A, B, D, SNOW, SNOW, j % 2 ? midCol : tipCol, hint);
+      if (rTop === 0) face(A, D, C, SNOW, tipCol, tipCol, hint);
+      // underside back to the trunk
+      face(C, D, [0, y0 + 0.28, 0], UNDER, UNDER, UNDER, [(C[0] + D[0]) * 0.5, -1.2, (C[2] + D[2]) * 0.5]);
+    }
   }
   return g;
 }
@@ -1282,7 +1328,7 @@ const GL = {
     // uses 3..7, bindParticles uses 3/4. Binding an undeclared name is a no-op.
     const SLOTS = [['aPos', 0], ['aNormal', 1], ['aColor', 2],
                    ['aIM0', 3], ['aIM1', 4], ['aIM2', 5], ['aIM3', 6], ['aTint', 7],
-                   ['aP0', 3], ['aP1', 4]];
+                   ['aP0', 3], ['aP1', 4], ['aAlpha', 1]];
     for (const [nm, loc] of SLOTS) gl.bindAttribLocation(p, loc, nm);
     gl.linkProgram(p);
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('Link "' + name + '": ' + gl.getProgramInfoLog(p));
@@ -1652,6 +1698,9 @@ GL.buildShaders = function () {
       // groomed corduroy banding down the piste
       float cx = vWorld.x; // visual only
       col *= 1.0 + 0.022 * sin(cx * 1.1 + vWorld.z * 0.02);
+      // cool sheen where the snow turns away from the camera (grazing angles)
+      float fres = pow(1.0 - clamp(dot(n, normalize(uCamPos - vWorld)), 0.0, 1.0), 4.0);
+      col += vec3(0.55, 0.70, 1.0) * fres * 0.16;
       col = applyFog(col, vWorld, normalize(uCamPos - vWorld), dist);
       fragColor = vec4(col, 1.0);
     }`;
@@ -2157,6 +2206,9 @@ const Render = {
     gl.depthMask(true);
     gl.enable(gl.CULL_FACE);
 
+    // ---- distant peaks on the horizon ----
+    Scenery.drawMountains();
+
     // ---- terrain ----
     const wp = GL.prog.world.use();
     Sun.setUniforms(wp);
@@ -2170,6 +2222,9 @@ const Render = {
       gl.bindVertexArray(m.vao);
       gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0);
     }
+
+    // ---- board tracks in the snow ----
+    Scenery.drawTrail();
 
     // ---- instanced props (trees) ----
     const ip = GL.prog.inst.use();
@@ -2233,6 +2288,7 @@ const Render = {
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.depthMask(false);
     fx.draw();
+    Scenery.drawSnow();
     gl.depthMask(true);
     gl.disable(gl.BLEND);
     gl.enable(gl.CULL_FACE);
@@ -2385,6 +2441,247 @@ const Render = {
     gl.activeTexture(gl.TEXTURE0);
     gl.enable(gl.DEPTH_TEST);
     gl.depthMask(true);
+  }
+};
+
+</script>
+<script>/* js/scenery.js */
+/* =====================================================================
+   scenery.js — atmosphere that isn't gameplay:
+     • board tracks carved into the snow behind the rider
+     • a ring of distant snow-capped peaks on the horizon
+     • light ambient snowfall around the camera
+   Everything is procedural; nothing is loaded.
+   ===================================================================== */
+'use strict';
+
+const Scenery = {
+  /* ---------------- init: programs, buffers, static meshes ---------------- */
+  init(lowSpec) {
+    const gl = GL.gl;
+
+    this.prog = {
+      trail: GL.link(`
+        precision highp float;
+        in vec3 aPos; in float aAlpha;
+        uniform mat4 uProj, uView; uniform vec3 uCamPos;
+        out float vA; out float vD;
+        void main(){ vA = aAlpha; vD = length(uCamPos - aPos); gl_Position = uProj * uView * vec4(aPos, 1.0); }`, `
+        precision highp float;
+        in float vA; in float vD; out vec4 fragColor;
+        uniform vec3 uCol;
+        void main(){ fragColor = vec4(uCol, vA * exp(-vD * 0.008)); }`, 'trail'),
+
+      mtn: GL.link(`
+        precision highp float;
+        in vec3 aPos; in vec3 aNormal; in vec3 aColor;
+        uniform mat4 uProj, uView, uModel;
+        out vec3 vN; out vec3 vC; out float vH;
+        void main(){
+          vN = aNormal; vC = aColor; vH = aPos.y;
+          gl_Position = uProj * uView * (uModel * vec4(aPos, 1.0));
+        }`, `
+        precision highp float;
+        in vec3 vN; in vec3 vC; in float vH; out vec4 fragColor;
+        uniform vec3 uSunDir, uSunColor, uHaze; uniform float uHazeAmt;
+        void main(){
+          vec3 n = normalize(vN);
+          float ndl = max(dot(n, uSunDir), 0.0);
+          vec3 amb = mix(vec3(0.34, 0.42, 0.58), vec3(0.62, 0.72, 0.90), n.y * 0.5 + 0.5);
+          vec3 col = vC * (uSunColor * ndl * 0.85 + amb * 0.75);
+          // aerial perspective: the base sinks into the haze, peaks stay crisp
+          float haze = uHazeAmt * (1.0 - smoothstep(-80.0, 200.0, vH) * 0.5);
+          fragColor = vec4(mix(col, uHaze, clamp(haze, 0.0, 1.0)), 1.0);
+        }`, 'mtn')
+    };
+
+    // ---- tracks: dynamic strip, 4 floats per vertex (pos + alpha) ----
+    this.TRAIL_MAX = 520;
+    this.trail = [];                    // {x, z, hw, seg}
+    this.trailSeg = 0; this.trailBreak = true;
+    this.trailData = new Float32Array(this.TRAIL_MAX * 6 * 4);
+    this.trailVAO = gl.createVertexArray();
+    gl.bindVertexArray(this.trailVAO);
+    this.trailBuf = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.trailBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, this.trailData.byteLength, gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 16, 0);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 1, gl.FLOAT, false, 16, 12);
+    gl.bindVertexArray(null);
+
+    // ---- distant peaks: two rings, built once, follow the camera ----
+    this.ranges = [
+      { mesh: GL.upload('_mtnFar', this.buildRange(1050, 1360, 300, 120, 11)), haze: 0.55 },
+      { mesh: GL.upload('_mtnNear', this.buildRange(760, 1010, 190, 96, 29)), haze: 0.40 }
+    ];
+
+    // ---- snowfall ----
+    this.FLAKES = lowSpec ? 260 : 520;
+    this.BOX = 34;
+    this.flakes = new Float32Array(this.FLAKES * 5);   // x y z (box-relative) speed phase
+    for (let i = 0; i < this.FLAKES; i++) {
+      const o = i * 5;
+      this.flakes[o] = rnd(-this.BOX, this.BOX); this.flakes[o + 1] = rnd(-this.BOX, this.BOX);
+      this.flakes[o + 2] = rnd(-this.BOX, this.BOX);
+      this.flakes[o + 3] = rnd(0.7, 1.6); this.flakes[o + 4] = rnd(TAU);
+    }
+    GL.instanceBuffer('snow', this.FLAKES, 8);
+  },
+
+  /* A ring-shaped heightfield of ridged peaks around the origin (y relative to the
+     camera). Grid in (angle, radius); heights from ridged noise under an envelope
+     that is low at the inner/outer edges, so it reads as a mountain range rather
+     than a wall. Flat-shaded: snow on high, gentle faces; rock on steep ones. */
+  buildRange(R0, R1, hMax, A, seed) {
+    const g = Geo(), RAD = 9;
+    const H = (i, j) => {
+      const a = (i % A) / A * TAU, r = lerp(R0, R1, j / (RAD - 1));
+      const u = Math.cos(a) * r * 0.004, v = Math.sin(a) * r * 0.004;   // periodic around the ring
+      let n = 1 - Math.abs(2 * fbm(u + seed, v - seed, 4, seed) - 1); // ridged
+      n = Math.pow(n, 2.2);
+      const env = Math.sin(Math.PI * j / (RAD - 1));                   // 0 at both edges
+      return -120 + (40 + n * hMax) * env;
+    };
+    const P = (i, j) => {
+      const a = (i % A) / A * TAU, r = lerp(R0, R1, j / (RAD - 1));
+      return [Math.cos(a) * r, H(i, j), Math.sin(a) * r];
+    };
+    const SNOW = [0.94, 0.96, 1.0], ROCK = [0.42, 0.47, 0.58], DARK = [0.32, 0.37, 0.48];
+    const tri = (A_, B_, C_) => {
+      let ux = B_[0] - A_[0], uy = B_[1] - A_[1], uz = B_[2] - A_[2], wx = C_[0] - A_[0], wy = C_[1] - A_[1], wz = C_[2] - A_[2];
+      let nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
+      if (ny < 0) { [B_, C_] = [C_, B_]; nx = -nx; ny = -ny; nz = -nz; }   // heightfield: face up
+      const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
+      const yMid = (A_[1] + B_[1] + C_[1]) / 3;
+      const col = (yMid > 20 + (1 - ny) * 140 && ny > 0.45) ? SNOW : (ny > 0.7 ? ROCK : DARK);
+      geoTri(g, geoVert(g, A_[0], A_[1], A_[2], nx, ny, nz, ...col),
+                geoVert(g, B_[0], B_[1], B_[2], nx, ny, nz, ...col),
+                geoVert(g, C_[0], C_[1], C_[2], nx, ny, nz, ...col));
+    };
+    for (let i = 0; i < A; i++) for (let j = 0; j < RAD - 1; j++) {
+      const p00 = P(i, j), p10 = P(i + 1, j), p01 = P(i, j + 1), p11 = P(i + 1, j + 1);
+      tri(p00, p10, p11); tri(p00, p11, p01);
+    }
+    return g;
+  },
+
+  reset() { this.trail.length = 0; this.trailBreak = true; },
+
+  /* ---------------- per-frame ---------------- */
+  update(dt, P) {
+    // tracks: drop a point every ~0.35 m while the board is on the snow
+    if (P.airborne || P.crashTimer > 0 || P.speed < 1) { this.trailBreak = true; }
+    else {
+      const last = this.trail[this.trail.length - 1];
+      if (this.trailBreak || !last || Math.hypot(P.pos.x - last.x, P.pos.z - last.z) > 0.35) {
+        if (this.trailBreak) this.trailSeg++;
+        this.trailBreak = false;
+        // skidding sideways leaves a wider scrape than a clean carve
+        const travel = Math.atan2(P.vel.x, P.vel.z);
+        const skid = Math.abs(Math.sin(angDelta(travel, P.yaw)));
+        this.trail.push({ x: P.pos.x, z: P.pos.z, hw: 0.12 + skid * 0.6, seg: this.trailSeg });
+        if (this.trail.length > this.TRAIL_MAX) this.trail.shift();
+      }
+    }
+    // snowfall
+    const f = this.flakes, t = GL.time;
+    for (let i = 0; i < this.FLAKES; i++) {
+      const o = i * 5;
+      f[o + 1] -= f[o + 3] * dt;
+      f[o] += Math.sin(t * 0.9 + f[o + 4]) * 0.35 * dt;
+      f[o + 2] += Math.cos(t * 0.7 + f[o + 4]) * 0.25 * dt;
+    }
+  },
+
+  /* ---------------- drawing ---------------- */
+  drawMountains() {
+    const gl = GL.gl, p = this.prog.mtn.use();
+    gl.uniformMatrix4fv(p.uProj, false, Cam.proj);
+    gl.uniformMatrix4fv(p.uView, false, Cam.view);
+    gl.uniform3f(p.uSunDir, Sun.dir.x, Sun.dir.y, Sun.dir.z);
+    gl.uniform3f(p.uSunColor, Sun.color[0], Sun.color[1], Sun.color[2]);
+    gl.uniform3f(p.uHaze, 0.76, 0.84, 0.95);
+    const M = _m4.c; m4ident(M);
+    M[12] = Cam.pos.x; M[13] = Cam.pos.y - 40; M[14] = Cam.pos.z;
+    gl.uniformMatrix4fv(p.uModel, false, M);
+    gl.disable(gl.CULL_FACE);
+    for (const r of this.ranges) {
+      gl.uniform1f(p.uHazeAmt, r.haze);
+      gl.bindVertexArray(r.mesh.vao);
+      gl.drawElements(gl.TRIANGLES, r.mesh.count, gl.UNSIGNED_INT, 0);
+    }
+    gl.enable(gl.CULL_FACE);
+  },
+
+  drawTrail() {
+    const tr = this.trail, n = tr.length;
+    if (n < 2) return;
+    const gl = GL.gl, d = this.trailData;
+    let k = 0;
+    const put = (x, y, z, a) => { d[k++] = x; d[k++] = y; d[k++] = z; d[k++] = a; };
+    for (let i = 1; i < n; i++) {
+      const a = tr[i - 1], b = tr[i];
+      if (a.seg !== b.seg) continue;
+      // sideways = perpendicular to the segment on the ground
+      let dx = b.x - a.x, dz = b.z - a.z; const l = Math.hypot(dx, dz) || 1; dx /= l; dz /= l;
+      const sx = -dz, sz = dx;
+      const fa = Math.pow((i - 1) / n, 0.6) * 0.42, fb = Math.pow(i / n, 0.6) * 0.42;
+      const ya = heightAt(a.x, a.z) + 0.05, yb = heightAt(b.x, b.z) + 0.05;
+      const a0x = a.x + sx * a.hw, a0z = a.z + sz * a.hw, a1x = a.x - sx * a.hw, a1z = a.z - sz * a.hw;
+      const b0x = b.x + sx * b.hw, b0z = b.z + sz * b.hw, b1x = b.x - sx * b.hw, b1z = b.z - sz * b.hw;
+      put(a0x, ya, a0z, fa); put(a1x, ya, a1z, fa); put(b0x, yb, b0z, fb);
+      put(b0x, yb, b0z, fb); put(a1x, ya, a1z, fa); put(b1x, yb, b1z, fb);
+    }
+    const verts = k / 4;
+    if (!verts) return;
+    const p = this.prog.trail.use();
+    gl.uniformMatrix4fv(p.uProj, false, Cam.proj);
+    gl.uniformMatrix4fv(p.uView, false, Cam.view);
+    gl.uniform3f(p.uCamPos, Cam.pos.x, Cam.pos.y, Cam.pos.z);
+    gl.uniform3f(p.uCol, 0.42, 0.53, 0.74);                  // cool blue groove shadow
+    gl.bindVertexArray(this.trailVAO);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.trailBuf);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, d, 0, k);
+    gl.disable(gl.CULL_FACE);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.depthMask(false);
+    gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(-2, -8);
+    gl.drawArrays(gl.TRIANGLES, 0, verts);
+    gl.disable(gl.POLYGON_OFFSET_FILL);
+    gl.depthMask(true);
+    gl.disable(gl.BLEND);
+    gl.enable(gl.CULL_FACE);
+  },
+
+  drawSnow() {
+    const gl = GL.gl, ib = GL.buf.snow, d = ib.data, f = this.flakes, B = this.BOX, W = B * 2;
+    const cx = Cam.pos.x, cy = Cam.pos.y, cz = Cam.pos.z;
+    for (let i = 0; i < this.FLAKES; i++) {
+      const o = i * 5, q = i * 8;
+      // wrap each flake into a box that travels with the camera
+      const x = ((f[o] - cx) % W + W * 1.5) % W - B;
+      const y = ((f[o + 1] - cy) % W + W * 1.5) % W - B;
+      const z = ((f[o + 2] - cz) % W + W * 1.5) % W - B;
+      d[q] = cx + x; d[q + 1] = cy + y; d[q + 2] = cz + z; d[q + 3] = 0.045 + (i % 5) * 0.012;
+      d[q + 4] = 1; d[q + 5] = 1; d[q + 6] = 1; d[q + 7] = 0.85;
+    }
+    const p = GL.prog.particle.use();
+    const v = Cam.view;
+    gl.uniformMatrix4fv(p.uProj, false, Cam.proj);
+    gl.uniformMatrix4fv(p.uView, false, v);
+    gl.uniform3f(p.uRight, v[0], v[4], v[8]);
+    gl.uniform3f(p.uUp, v[1], v[5], v[9]);
+    const m = GL.mesh.particle;
+    gl.bindVertexArray(m.vao);
+    GL.bindParticles('snow');
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, d, 0, this.FLAKES * 8);
+    gl.disable(gl.CULL_FACE);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.depthMask(false);
+    gl.drawElementsInstanced(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0, this.FLAKES);
+    gl.depthMask(true);
+    gl.disable(gl.BLEND);
+    gl.enable(gl.CULL_FACE);
   }
 };
 
@@ -2621,7 +2918,7 @@ const Audio = {
     const ctx = this.ctx;
 
     this.master = ctx.createGain();
-    this.master.gain.value = 0.9;
+    this.master.gain.value = this.muted ? 0 : 0.9;
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -14; comp.knee.value = 22; comp.ratio.value = 8;
     comp.attack.value = 0.004; comp.release.value = 0.22;
@@ -2681,6 +2978,11 @@ const Audio = {
     }
     src.loop = true;
     return src;
+  },
+
+  setMuted(m) {
+    this.muted = m;
+    if (this.master) this.master.gain.setTargetAtTime(m ? 0 : 0.9, this.ctx.currentTime, 0.03);
   },
 
   resume() { if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume(); },
@@ -2793,6 +3095,7 @@ const Audio = {
 const G = 9.81;
 const BOARD_L = 1.60;
 const RIDE_H = 0.12;          // rider origin height above the board base
+const LEAN_VIS = 1;           // visual lean direction (board tilt + body). Set to -1 to reverse. Physics unaffected.
 
 class Player {
   constructor() {
@@ -2858,7 +3161,7 @@ class Player {
     V3.set(this.right, -c, 0, s);                    // = dir × up: the side we turn toward when lean > 0
     normalAt(this.pos.x, this.pos.z, this.nrm);
     // board up = terrain normal tilted by the lean angle around the nose axis
-    const L = this.lean * 0.62;                      // up to ~35° of ankle lean
+    const L = this.lean * 0.62 * LEAN_VIS;           // up to ~35° of ankle lean
     const cs = Math.cos(L), sn = Math.sin(L);
     V3.set(this.up,
       this.nrm.x * cs + this.right.x * sn,
@@ -3183,7 +3486,7 @@ class Player {
     const nrm = (x, y, z) => V3.norm(V3(), V3(x, y, z));
     const lerpV = (a, b, k) => V3(lerp(a.x, b.x, k), lerp(a.y, b.y, k), lerp(a.z, b.z, k));
 
-    const t = GL.time, crash = this.crashTimer > 0, air = this.airborne, lean = this.lean;
+    const t = GL.time, crash = this.crashTimer > 0, air = this.airborne, lean = this.lean * LEAN_VIS;
     const grab = !crash && air && this.grab ? this.grab : null;
     const tuck = air ? Math.max(this.tuck, this.braking, Math.min(1, Math.abs(this.flipRate) / 2)) : this.tuck;
 
@@ -3413,6 +3716,9 @@ const Input = {
     $('pause').addEventListener('pointerdown', (e) => { if (e.button === 0) Game.togglePause(); });
 
     this.initTouch();
+    const mb = $('muteBtn');
+    mb.addEventListener('pointerdown', (e) => e.stopPropagation());   // don't start a run from the menu
+    mb.addEventListener('click', (e) => { e.stopPropagation(); Audio.init(); Audio.resume(); Game.toggleMute(); mb.blur(); });
   },
 
   /* ---------------- touch: steering pad, buttons, swipe camera, tilt ---------------- */
@@ -3527,7 +3833,7 @@ const Input = {
   onPress(k) {
     if (k === 'restart') { if (Game.state === 'play' || Game.state === 'over') Game.restart(true); }
     else if (k === 'pause') Game.togglePause();
-    else if (k === 'mute') { Audio.muted = !Audio.muted; Audio.ui(Audio.muted ? 300 : 700); }
+    else if (k === 'mute') Game.toggleMute();
     else if (k === 'debug') $('debug').classList.toggle('on');
   },
 
@@ -3562,6 +3868,8 @@ const Game = {
     this.fx = new Particles();
     let saved = 0;
     try { saved = +(localStorage.getItem('powderline.best') || 0); } catch (e) { saved = 0; }
+    try { if (localStorage.getItem('powderline.muted') === '1') Audio.setMuted(true); } catch (e) { }
+    $('muteBtn').classList.toggle('muted', Audio.muted);
     this.best = isFinite(saved) ? saved : 0;
     $('best').textContent = 'BEST ' + this.best.toLocaleString();
     this.buildLives();
@@ -3607,11 +3915,20 @@ const Game = {
     World.prewarm(this.P.pos.x, this.P.pos.z);
     World.update(this.P.pos.x, this.P.pos.z);
     Cam.snap(this.P);
+    Scenery.reset();
     $('over').classList.add('hide'); $('pause').classList.add('hide');
     $('hud').classList.add('on'); $('hint').classList.remove('gone');
     this.state = 'play';
     document.body.classList.add('playing');
     Audio.resume();
+  },
+
+  toggleMute() {
+    Audio.setMuted(!Audio.muted);
+    if (!Audio.muted) Audio.ui(700);
+    $('muteBtn').classList.toggle('muted', Audio.muted);
+    $('muteBtn').setAttribute('aria-label', Audio.muted ? 'Unmute' : 'Mute');
+    try { localStorage.setItem('powderline.muted', Audio.muted ? '1' : '0'); } catch (e) { }
   },
 
   togglePause() {
@@ -3753,6 +4070,7 @@ const Game = {
 
     P.step(dt, inp, this.fx);
     this.collide();
+    Scenery.update(dt, P);
     this.fx.spray(P, dt);
     this.fx.powder(P, dt);
     this.fx.update(dt);
@@ -3853,6 +4171,7 @@ const Game = {
       GL.shadowSize = 1024;
     }
     GL.init(canvas);
+    Scenery.init(GL.quality < 1);
     GL.makeShadowMap(GL.shadowSize, GL.shadowSize);
     Game.boot();
     Input.init();
@@ -3901,6 +4220,7 @@ const Game = {
         Game.P.pos.x = centerX(Game.P.pos.z);
         Game.P.pos.y = heightAt(Game.P.pos.x, Game.P.pos.z) + 0.2;
         Game.P.speed = 7; Game.P.updateBasis();
+        Scenery.update(dt, Game.P);
         World.update(Game.P.pos.x, Game.P.pos.z);
         Cam.update(dt, Game.P, 'menu'); Cam.resolveGround();
         Game.render();
