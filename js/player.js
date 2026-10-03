@@ -78,7 +78,7 @@ class Player {
   updateBasis() {
     const c = Math.cos(this.yaw), s = Math.sin(this.yaw);
     V3.set(this.dir, s, 0, c);                       // nose direction (flat)
-    V3.set(this.right, c, 0, -s);
+    V3.set(this.right, -c, 0, s);                    // = dir × up: the side we turn toward when lean > 0
     normalAt(this.pos.x, this.pos.z, this.nrm);
     // board up = terrain normal tilted by the lean angle around the nose axis
     const L = this.lean * 0.62;                      // up to ~35° of ankle lean
