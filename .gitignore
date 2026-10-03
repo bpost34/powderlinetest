@@ -1,0 +1,7 @@
+# local tooling / OS junk — not part of the game
+.DS_Store
+.unsloth-packages/
+.unsloth_attachments/
+unsloth-tmp/
+Library/
+__pycache__/
