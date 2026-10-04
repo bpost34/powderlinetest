@@ -721,13 +721,22 @@ class Chunk {
       const sc = 0.75 + hash2(i, 9, 404) * 0.85;
       t.push({ x, y, z, sc, rot: hash2(i, 5, 505) * TAU, sway: hash2(i, 7, 606) * TAU });
     }
-    for (let i = 0; i < 14; i++) {
-      const rx = hash2(this.ix * 71 + i, this.iz * 37 + 11, 707);
-      const rz = hash2(this.ix * 53 + i, this.iz * 61 + 13, 808);
-      const x = this.x0 + rx * CHUNK, z = this.z0 + rz * CHUNK;
-      const cx = centerX(z), d = Math.abs(x - cx);
-      if (d < Level.cur.clearHalf * 1.2) continue;
-      b.push({ x, y: heightAt(x, z), z, sc: 1.1 + hash2(i, 3, 909) * 3.2, rot: hash2(i, 1, 111) * TAU });
+    // occasional boulders on the rideable slope beside the run — never up on the
+    // valley walls (where they read as floating snowballs) or on steep ground.
+    // Mountain terrain only; the built courses stay clean.
+    if (Level.cur.height === mtnHeightAt) {
+      for (let i = 0; i < 4; i++) {
+        if (hash2(this.ix * 19 + i, this.iz * 23 + 5, 919) > 0.2) continue;     // occasional
+        const x = this.x0 + hash2(this.ix * 71 + i, this.iz * 37 + 11, 707) * CHUNK;
+        const z = this.z0 + hash2(this.ix * 53 + i, this.iz * 61 + 13, 808) * CHUNK;
+        if (z < 60) continue;                                                     // keep the start clear
+        const gz = ((z - 90) % GATE_SPACING + GATE_SPACING) % GATE_SPACING;
+        if (gz < 12 || gz > GATE_SPACING - 12) continue;                         // keep gate lines clear
+        const d = Math.abs(x - centerX(z));
+        if (d < 8 || d > 55) continue;                                            // near the path, off the walls
+        if (normalAt(x, z, { x: 0, y: 0, z: 0 }).y < 0.88) continue;              // no steep ground
+        b.push({ x, y: heightAt(x, z), z, sc: 0.8 + hash2(i, this.ix * 3 + this.iz, 909) * 1.1, rot: hash2(i, 1, 111) * TAU });
+      }
     }
     this.props = { trees: t, rocks: b };
   }
