@@ -208,8 +208,8 @@ class Player {
     const centripetal = sp * sp * curv;
     this.load = clamp(1 + centripetal / G, 0, 3.4);
 
-    this.tuck = damp(this.tuck, input.tuck ? 1 : 0, 8, dt);
-    this.braking = damp(this.braking, input.brake ? 1 : 0, 9, dt);
+    this.tuck = damp(this.tuck, +input.tuck || 0, 8, dt);          // analog from the joystick, 0/1 from keys
+    this.braking = damp(this.braking, +input.brake || 0, 9, dt);
 
     // ---- jump: pump a compression, or ollie ----
     if (this.jumpBuffer > 0 && this.pumpCooldown <= 0) {
@@ -316,18 +316,19 @@ class Player {
     // through the takeoff (tucking for speed) doesn't count — the key has to
     // be pressed fresh once airborne, so crest launches never flip you by accident.
     // (flip keys are W/S only — holding Space to load an ollie must never flip you)
-    const fF = input.flipFwd !== undefined ? input.flipFwd : input.tuck;
-    const fB = input.flipBack !== undefined ? input.flipBack : input.brake;
-    if (!fF && !fB) this.flipArmed = true;
-    const want = this.flipArmed ? (fB ? 1 : 0) - (fF ? 1 : 0) : 0;   // + = nose up = backflip
+    // (analog 0..1 from the touch joystick: a half push flips at half speed)
+    const fF = +(input.flipFwd !== undefined ? input.flipFwd : input.tuck) || 0;
+    const fB = +(input.flipBack !== undefined ? input.flipBack : input.brake) || 0;
+    if (fF < 0.1 && fB < 0.1) this.flipArmed = true;
+    const want = this.flipArmed ? fB - fF : 0;                        // + = nose up = backflip
     this.flipRate = damp(this.flipRate, want * 4.2, 9, dt);
     this.flip += this.flipRate * dt;
 
     this.grab = input.grab || null;
     this.grabTime = this.grab ? this.grabTime + dt : 0;
 
-    this.tuck = damp(this.tuck, input.tuck ? 1 : 0, 8, dt);
-    this.braking = damp(this.braking, input.brake ? 1 : 0, 8, dt);
+    this.tuck = damp(this.tuck, +input.tuck || 0, 8, dt);
+    this.braking = damp(this.braking, +input.brake || 0, 8, dt);
   }
 
   /* ---------------- touchdown ---------------- */

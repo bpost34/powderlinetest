@@ -114,7 +114,8 @@ const Input = {
   },
 
   /* ---------------- touch: steering pad, buttons, swipe camera, tilt ---------------- */
-  touchSteer: null,     // analog -1..1 while a thumb is on the steering pad
+  touchSteer: null,     // analog -1..1 while a thumb is on the joystick
+  touchStickY: 0,       // joystick up/down: -1 = pushed forward, +1 = pulled back
   tiltSteer: null,      // analog -1..1 from the gyro when tilt steering is on
   tiltOn: false,
 
@@ -148,18 +149,25 @@ const Input = {
     hold('tJ', 'jump'); hold('tT', 'tuck'); hold('tB', 'brake'); hold('tG', 'Indy');
     $('tP').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); Game.togglePause(); });
 
-    // steering pad: horizontal thumb offset from the centre = analog steer
+    // joystick: x = analog steer, y = tuck (push up) / brake (pull down);
+    // in the air the same up/down throws front / back flips
     const pad = $('steerPad'), knob = $('steerKnob');
     let padId = null;
     const steerAt = (e) => {
       const r = pad.getBoundingClientRect();
-      const half = Math.max(30, r.width / 2 - 26);
-      let v = clamp((e.clientX - (r.left + r.width / 2)) / half, -1, 1);
-      knob.style.transform = 'translateX(' + (v * half).toFixed(0) + 'px)';
-      if (Math.abs(v) < 0.08) v = 0;                       // small dead zone
-      this.touchSteer = v;
+      const half = Math.max(30, Math.min(r.width, r.height) / 2 - 22);
+      let x = (e.clientX - (r.left + r.width / 2)) / half, y = (e.clientY - (r.top + r.height / 2)) / half;
+      const m = Math.hypot(x, y);
+      if (m > 1) { x /= m; y /= m; }                       // knob stays inside the ring
+      knob.style.transform = 'translate(' + (x * half).toFixed(0) + 'px,' + (y * half).toFixed(0) + 'px)';
+      this.touchSteer = Math.abs(x) < 0.08 ? 0 : x;        // small dead zone
+      this.touchStickY = y;
+      pad.classList.toggle('fwd', y < -0.28); pad.classList.toggle('back', y > 0.28);
     };
-    const release = () => { padId = null; this.touchSteer = null; knob.style.transform = ''; };
+    const release = () => {
+      padId = null; this.touchSteer = null; this.touchStickY = 0; knob.style.transform = '';
+      pad.classList.remove('fwd', 'back');
+    };
     pad.addEventListener('pointerdown', (e) => {
       e.preventDefault(); e.stopPropagation();
       try { pad.setPointerCapture(e.pointerId); } catch (_) { }
@@ -242,15 +250,19 @@ const Input = {
     if (this.touchSteer !== null) target = this.touchSteer;          // thumb on the pad wins
     else if (target === 0 && this.tiltOn && this.tiltSteer !== null) target = this.tiltSteer;
     this.steer = damp(this.steer, target, 11, dt);
-    this.brake = !!this.down.brake;
+    // joystick: push forward = tuck (front flip in the air), pull back = brake
+    // (back flip), both analog. Past the dead zone they ramp to full by ~3/4 throw.
+    const sy = this.touchStickY || 0;
+    const fwd = clamp((-sy - 0.28) / 0.47, 0, 1), back = clamp((sy - 0.28) / 0.47, 0, 1);
     const loading = !!this.down.jump && this.jumpHeld;
     if (loading) this.chargeT += dt;
-    this.tuck = !!this.down.tuck || loading;                         // holding Space = tuck
+    this.brake = Math.max(this.down.brake ? 1 : 0, back);
+    this.tuck = Math.max(this.down.tuck || loading ? 1 : 0, fwd);   // holding Space = tuck
     this.grab = this.down.method ? 'method' : this.down.Indy ? 'Indy'
       : this.down.stale ? 'stale' : this.down.mutegrab ? 'mute' : null;
     const j = this.jumpRelease; this.jumpRelease = false;
     return { steer: this.steer, brake: this.brake, tuck: this.tuck, jump: j, charge: this.releaseCharge,
-             flipFwd: !!this.down.tuck, flipBack: !!this.down.brake, grab: this.grab };
+             flipFwd: Math.max(this.down.tuck ? 1 : 0, fwd), flipBack: Math.max(this.down.brake ? 1 : 0, back), grab: this.grab };
   }
 };
 
