@@ -85,14 +85,21 @@ const Input = {
     if (screen) screen.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;               // right/middle = camera, not "start"
       if (e.target && e.target.closest && e.target.closest('a')) return;
+      if (performance.now() - Game.menuAt < 450) return;   // the tap that opened the menu
       Audio.init(); Audio.resume();   // user gesture: safe to start audio here
       this.anyKey = true;
     });
     $('over').addEventListener('pointerdown', (e) => { if (e.button === 0 && Game.state === 'over') Game.restart(true); });
     // fallback: some touch stacks deliver only a synthesized click for a quick tap
-    $('menu').addEventListener('click', () => { if (Game.state === 'menu') { Audio.init(); Audio.resume(); this.anyKey = true; } });
+    $('menu').addEventListener('click', () => { if (Game.state === 'menu' && performance.now() - Game.menuAt >= 450) { Audio.init(); Audio.resume(); this.anyKey = true; } });
     $('over').addEventListener('click', () => { if (Game.state === 'over') Game.restart(true); });
     $('pause').addEventListener('pointerdown', (e) => { if (e.button === 0) Game.togglePause(); });
+    // pause-screen buttons (stopPropagation so the screen's own tap-to-resume doesn't also fire)
+    for (const [id, fn] of [['pResume', () => Game.togglePause()], ['pRestart', () => Game.restart(true)], ['pMenu', () => Game.toMenu()]]) {
+      const b = $(id);
+      b.addEventListener('pointerdown', (e) => e.stopPropagation());
+      b.addEventListener('click', (e) => { e.stopPropagation(); fn(); b.blur(); });
+    }
 
     this.initTouch();
     for (const b of document.querySelectorAll('.lvl')) {
@@ -147,7 +154,10 @@ const Input = {
       el.addEventListener('lostpointercapture', off);
     };
     hold('tJ', 'jump'); hold('tT', 'tuck'); hold('tB', 'brake'); hold('tG', 'Indy');
-    $('tP').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); Game.togglePause(); });
+    const tap = (id, fn) => $(id).addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); fn(); });
+    tap('tP', () => Game.togglePause());
+    tap('tR', () => { if (Game.state === 'play' || Game.state === 'pause') Game.restart(true); });
+    tap('tM', () => Game.toMenu());
 
     // joystick: x = analog steer, y = tuck (push up) / brake (pull down);
     // in the air the same up/down throws front / back flips
@@ -231,7 +241,7 @@ const Input = {
   },
 
   onPress(k) {
-    if (k === 'restart') { if (Game.state === 'play' || Game.state === 'over') Game.restart(true); }
+    if (k === 'restart') { if (Game.state === 'play' || Game.state === 'over' || Game.state === 'pause') Game.restart(true); }
     else if (k === 'pause') Game.togglePause();
     else if (k === 'mute') Game.toggleMute();
     else if (k === 'atmos') { if (Level.cur.zen) Atmos.cycle(); }
@@ -276,6 +286,7 @@ const Game = {
   flash: 0, desat: 0, hintTimer: 14,
   air: { t: 0, spin: 0, flip: 0, grab: null, grabT: 0 },
   lastZ: 0, startY: 0, t: 0, frames: 0, fps: 60, _fpsT: 0, _mt: 0,
+  menuAt: -1e9,                  // when the menu last opened (swallows that tap's trailing click)
   frameNo: 0,                    // monotonic; never reset (chunk cache ages on it)
 
   boot() {
@@ -328,7 +339,7 @@ const Game = {
   },
 
   toMenu() {
-    this.state = 'menu'; this._deadTimer = 0;
+    this.state = 'menu'; this._deadTimer = 0; this.menuAt = performance.now();
     $('over').classList.add('hide'); $('pause').classList.add('hide'); $('menu').classList.remove('hide');
     $('hud').classList.remove('on');
     document.body.classList.remove('playing');

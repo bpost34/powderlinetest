@@ -216,11 +216,36 @@
     border:1px solid var(--line);border-radius:4px;padding:1px 5px}
   .lvl:hover{border-color:rgba(190,225,255,.55)}
   .lvl.sel{border-color:var(--accent);background:rgba(20,60,90,.55);box-shadow:0 0 18px rgba(95,226,255,.25)}
-  #toLevels{margin-top:16px;padding:9px 18px;border-radius:20px;border:1.5px solid rgba(190,225,255,.4);
-    background:rgba(10,22,38,.45);color:#eaf6ff;font:800 11px/1 inherit;font-family:inherit;letter-spacing:.16em;
+  #toLevels{margin-top:16px}
+  /* pause screen actions */
+  .pbtns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:22px}
+  .pbtns button,#toLevels{padding:11px 20px;border-radius:22px;border:1.5px solid rgba(190,225,255,.4);
+    background:rgba(10,22,38,.45);color:#eaf6ff;font:800 12px/1 inherit;font-family:inherit;letter-spacing:.16em;
     text-transform:uppercase;cursor:pointer;touch-action:manipulation}
-  #rotate{margin-top:16px;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--gold)}
-  @media (orientation:landscape){#rotate{display:none!important}}
+  .pbtns #pResume{border-color:var(--accent);color:var(--accent)}
+  /* small round in-game buttons: pause / restart / levels (touch) */
+  .tbtn.sbtn{width:38px;height:38px;font-size:15px;letter-spacing:0;top:max(12px,env(safe-area-inset-top));left:50%}
+  #tP.sbtn{font-size:10px;margin-left:46px}
+  #tR{margin-left:-84px}
+  #tM{margin-left:-130px}
+  /* ---- portrait phones (the expected way to hold it) ---- */
+  @media (orientation:portrait){
+    /* buttons stack down the right edge, under the score */
+    body.touch #tP.sbtn, body.touch #tR.sbtn, body.touch #tM.sbtn, body.touch.playing #muteBtn, body.touch.playing #atmosBtn{
+      left:auto;right:max(14px,env(safe-area-inset-right));margin-left:0}
+    body.touch #tP.sbtn{top:calc(max(12px,env(safe-area-inset-top)) + 106px)}
+    body.touch #tR.sbtn{top:calc(max(12px,env(safe-area-inset-top)) + 152px)}
+    body.touch #tM.sbtn{top:calc(max(12px,env(safe-area-inset-top)) + 198px)}
+    body.touch.playing #muteBtn{top:calc(max(12px,env(safe-area-inset-top)) + 244px)}
+    body.touch.playing #atmosBtn{top:calc(max(12px,env(safe-area-inset-top)) + 290px)}
+    body.touch #center{bottom:calc(max(20px,env(safe-area-inset-bottom)) + 250px)}
+    body.touch #lives{top:calc(max(12px,env(safe-area-inset-top)) + 14px)}
+    body.touch .corner.tl, body.touch .corner.tr{padding-top:max(16px,env(safe-area-inset-top))}
+    /* menu: level cards two-up */
+    #levels{display:grid;grid-template-columns:1fr 1fr;width:100%;max-width:372px;margin-left:auto;margin-right:auto}
+    .lvl{width:auto}
+    body.touch .keys.touch-only{font-size:12px;gap:6px 14px}
+  }
   @media (max-height:500px){
     .screen{padding:14px}
     h1{font-size:clamp(38px,9vh,70px)}
@@ -239,7 +264,6 @@
     body.touch .keys.touch-only{grid-template-columns:auto auto auto auto!important;gap:6px 14px}
     .eyebrow{margin-bottom:8px}
     #tiltBtn{margin-top:10px}
-    #rotate{margin-top:8px}
   }
 </style>
 </head>
@@ -312,7 +336,6 @@
   </div>
   <div class="go"><span class="kb-only">press 1–4 to pick a level · any other key to drop in</span><span class="touch-only">tap a level to drop in</span></div>
   <button id="tiltBtn" class="touch-only" type="button">Tilt steering: OFF</button>
-  <div id="rotate" class="touch-only">↻ turn your phone sideways for the best ride</div>
 </div>
 
 <div class="screen hide" id="over">
@@ -334,7 +357,8 @@
 <div class="screen hide" id="pause">
   <div class="eyebrow">paused</div>
   <h1 style="font-size:clamp(34px,7vw,70px)">CATCHING<br>YOUR BREATH</h1>
-  <div class="go"><span class="kb-only">press P to drop back in · Esc for levels</span><span class="touch-only">tap to drop back in</span></div>
+  <div class="go"><span class="kb-only">press P to drop back in · R to restart · Esc for levels</span><span class="touch-only">tap to drop back in</span></div>
+  <div class="pbtns"><button type="button" id="pResume">Resume</button><button type="button" id="pRestart">↺ Restart</button><button type="button" id="pMenu">☰ Levels</button></div>
 </div>
 
 <button id="atmosBtn" type="button" aria-label="Atmosphere" title="Atmosphere (N)">☀</button>
@@ -346,7 +370,9 @@
   <div class="tbtn" id="tT">tuck<small>front flip</small></div>
   <div class="tbtn" id="tB">brake<small>back flip</small></div>
   <div class="tbtn" id="tG">grab</div>
-  <div class="tbtn" id="tP">❚❚</div>
+  <div class="tbtn sbtn" id="tP" title="Pause">❚❚</div>
+  <div class="tbtn sbtn" id="tR" title="Restart">↺</div>
+  <div class="tbtn sbtn" id="tM" title="Levels">☰</div>
 </div>
 
 <div id="fatal"></div>
@@ -2340,7 +2366,7 @@ const Cam = {
   // board's nose — so carving and in-air spins don't swing the whole view
   heading: 0, snapNext: true,
   // mouse orbit (right/middle drag) + wheel zoom; springs back after release
-  orbitYaw: 0, orbitPitch: 0, zoom: 1, dragging: false, releaseT: 0,
+  orbitYaw: 0, orbitPitch: 0, zoom: 1, portraitZoom: 1, dragging: false, releaseT: 0,
 
   snap(P) { this.heading = P.yaw; this.orbitYaw = this.orbitPitch = 0; this.shake = 0; this.snapNext = true; },
   drag(dx, dy) {
@@ -2353,9 +2379,12 @@ const Cam = {
     // FOV opens up with speed — the classic sense-of-velocity trick
     this.fov = damp(this.fov, 1.02 + speedN * 0.26 + (P.airborne ? 0.04 : 0), 3.2, dt);
     this.aspect = GL.w / Math.max(1, GL.h);
-    // portrait screens: widen the vertical FOV so the horizontal view isn't a slit
+    // portrait screens: widen the vertical FOV so the horizontal view isn't a
+    // slit, but only so far — the camera moves in instead (see portraitZoom)
     let vfov = this.fov;
-    if (this.aspect < 1.25) vfov = Math.min(1.65, 2 * Math.atan(Math.tan(this.fov / 2) * 1.25 / this.aspect));
+    if (this.aspect < 1.25) vfov = Math.min(1.38, 2 * Math.atan(Math.tan(this.fov / 2) * 1.25 / this.aspect));
+    // tall phone screens: ride closer so the rider's orientation reads on big airs
+    this.portraitZoom = this.aspect < 1 ? lerp(0.62, 1, clamp((this.aspect - 0.45) / 0.55, 0, 1)) : 1;
     m4perspective(this.proj, vfov, this.aspect, this.near, this.far);
 
     // ---- heading: smoothed direction of travel ----
@@ -2381,7 +2410,7 @@ const Cam = {
     const yaw = this.heading + this.orbitYaw;
     const fx = Math.sin(yaw), fz = Math.cos(yaw);
     const lc = Level.cur.cam || {};
-    const dist = (9.0 + speedN * 3.5 + (P.airborne ? 1.5 : 0)) * this.zoom * (lc.dist || 1);
+    const dist = (9.0 + speedN * 3.5 + (P.airborne ? 1.5 : 0)) * this.zoom * (lc.dist || 1) * this.portraitZoom;
     const elev = clamp((lc.elev || 0.40) + this.orbitPitch, -0.12, 1.35);
     const ce = Math.cos(elev), se = Math.sin(elev);
     const fy = P.pos.y + 1.1;                               // focus: rider's chest
@@ -4477,14 +4506,21 @@ const Input = {
     if (screen) screen.addEventListener('pointerdown', (e) => {
       if (e.button !== 0) return;               // right/middle = camera, not "start"
       if (e.target && e.target.closest && e.target.closest('a')) return;
+      if (performance.now() - Game.menuAt < 450) return;   // the tap that opened the menu
       Audio.init(); Audio.resume();   // user gesture: safe to start audio here
       this.anyKey = true;
     });
     $('over').addEventListener('pointerdown', (e) => { if (e.button === 0 && Game.state === 'over') Game.restart(true); });
     // fallback: some touch stacks deliver only a synthesized click for a quick tap
-    $('menu').addEventListener('click', () => { if (Game.state === 'menu') { Audio.init(); Audio.resume(); this.anyKey = true; } });
+    $('menu').addEventListener('click', () => { if (Game.state === 'menu' && performance.now() - Game.menuAt >= 450) { Audio.init(); Audio.resume(); this.anyKey = true; } });
     $('over').addEventListener('click', () => { if (Game.state === 'over') Game.restart(true); });
     $('pause').addEventListener('pointerdown', (e) => { if (e.button === 0) Game.togglePause(); });
+    // pause-screen buttons (stopPropagation so the screen's own tap-to-resume doesn't also fire)
+    for (const [id, fn] of [['pResume', () => Game.togglePause()], ['pRestart', () => Game.restart(true)], ['pMenu', () => Game.toMenu()]]) {
+      const b = $(id);
+      b.addEventListener('pointerdown', (e) => e.stopPropagation());
+      b.addEventListener('click', (e) => { e.stopPropagation(); fn(); b.blur(); });
+    }
 
     this.initTouch();
     for (const b of document.querySelectorAll('.lvl')) {
@@ -4539,7 +4575,10 @@ const Input = {
       el.addEventListener('lostpointercapture', off);
     };
     hold('tJ', 'jump'); hold('tT', 'tuck'); hold('tB', 'brake'); hold('tG', 'Indy');
-    $('tP').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); Game.togglePause(); });
+    const tap = (id, fn) => $(id).addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); fn(); });
+    tap('tP', () => Game.togglePause());
+    tap('tR', () => { if (Game.state === 'play' || Game.state === 'pause') Game.restart(true); });
+    tap('tM', () => Game.toMenu());
 
     // joystick: x = analog steer, y = tuck (push up) / brake (pull down);
     // in the air the same up/down throws front / back flips
@@ -4623,7 +4662,7 @@ const Input = {
   },
 
   onPress(k) {
-    if (k === 'restart') { if (Game.state === 'play' || Game.state === 'over') Game.restart(true); }
+    if (k === 'restart') { if (Game.state === 'play' || Game.state === 'over' || Game.state === 'pause') Game.restart(true); }
     else if (k === 'pause') Game.togglePause();
     else if (k === 'mute') Game.toggleMute();
     else if (k === 'atmos') { if (Level.cur.zen) Atmos.cycle(); }
@@ -4668,6 +4707,7 @@ const Game = {
   flash: 0, desat: 0, hintTimer: 14,
   air: { t: 0, spin: 0, flip: 0, grab: null, grabT: 0 },
   lastZ: 0, startY: 0, t: 0, frames: 0, fps: 60, _fpsT: 0, _mt: 0,
+  menuAt: -1e9,                  // when the menu last opened (swallows that tap's trailing click)
   frameNo: 0,                    // monotonic; never reset (chunk cache ages on it)
 
   boot() {
@@ -4720,7 +4760,7 @@ const Game = {
   },
 
   toMenu() {
-    this.state = 'menu'; this._deadTimer = 0;
+    this.state = 'menu'; this._deadTimer = 0; this.menuAt = performance.now();
     $('over').classList.add('hide'); $('pause').classList.add('hide'); $('menu').classList.remove('hide');
     $('hud').classList.remove('on');
     document.body.classList.remove('playing');

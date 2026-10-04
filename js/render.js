@@ -17,7 +17,7 @@ const Cam = {
   // board's nose — so carving and in-air spins don't swing the whole view
   heading: 0, snapNext: true,
   // mouse orbit (right/middle drag) + wheel zoom; springs back after release
-  orbitYaw: 0, orbitPitch: 0, zoom: 1, dragging: false, releaseT: 0,
+  orbitYaw: 0, orbitPitch: 0, zoom: 1, portraitZoom: 1, dragging: false, releaseT: 0,
 
   snap(P) { this.heading = P.yaw; this.orbitYaw = this.orbitPitch = 0; this.shake = 0; this.snapNext = true; },
   drag(dx, dy) {
@@ -30,9 +30,12 @@ const Cam = {
     // FOV opens up with speed — the classic sense-of-velocity trick
     this.fov = damp(this.fov, 1.02 + speedN * 0.26 + (P.airborne ? 0.04 : 0), 3.2, dt);
     this.aspect = GL.w / Math.max(1, GL.h);
-    // portrait screens: widen the vertical FOV so the horizontal view isn't a slit
+    // portrait screens: widen the vertical FOV so the horizontal view isn't a
+    // slit, but only so far — the camera moves in instead (see portraitZoom)
     let vfov = this.fov;
-    if (this.aspect < 1.25) vfov = Math.min(1.65, 2 * Math.atan(Math.tan(this.fov / 2) * 1.25 / this.aspect));
+    if (this.aspect < 1.25) vfov = Math.min(1.38, 2 * Math.atan(Math.tan(this.fov / 2) * 1.25 / this.aspect));
+    // tall phone screens: ride closer so the rider's orientation reads on big airs
+    this.portraitZoom = this.aspect < 1 ? lerp(0.62, 1, clamp((this.aspect - 0.45) / 0.55, 0, 1)) : 1;
     m4perspective(this.proj, vfov, this.aspect, this.near, this.far);
 
     // ---- heading: smoothed direction of travel ----
@@ -58,7 +61,7 @@ const Cam = {
     const yaw = this.heading + this.orbitYaw;
     const fx = Math.sin(yaw), fz = Math.cos(yaw);
     const lc = Level.cur.cam || {};
-    const dist = (9.0 + speedN * 3.5 + (P.airborne ? 1.5 : 0)) * this.zoom * (lc.dist || 1);
+    const dist = (9.0 + speedN * 3.5 + (P.airborne ? 1.5 : 0)) * this.zoom * (lc.dist || 1) * this.portraitZoom;
     const elev = clamp((lc.elev || 0.40) + this.orbitPitch, -0.12, 1.35);
     const ce = Math.cos(elev), se = Math.sin(elev);
     const fy = P.pos.y + 1.1;                               // focus: rider's chest
