@@ -3567,6 +3567,7 @@ class Player {
     if (Level.cur.rails) this.checkGrind(fx);
     if (this.airborne) this.flipVis = this.flip;
     else this.flipVis = damp(this.flipVis, 0, 14, dt);
+    if (this.yawVis) this.yawVis = Math.abs(this.yawVis) < 1e-3 ? 0 : damp(this.yawVis, 0, 12, dt);
   }
 
   /* ---------------- on the snow ---------------- */
@@ -3726,21 +3727,18 @@ class Player {
     const n = this.nrm;
     normalAt(this.pos.x, this.pos.z, n);
     const vDown = this.vel.y;
-    const impact = clamp(-vDown / 12, 0.05, 2.4);
+    // impact = speed INTO the surface (along its normal), not raw vertical speed:
+    // touching down on a downslope that matches your arc is soft, flat-to-flat is not
+    const vN = this.vel.x * n.x + this.vel.y * n.y + this.vel.z * n.z;
+    const impact = clamp(-vN / 12, 0.05, 2.4);
     this.landing = impact;
     this.airborne = false;
     this.airTime = 0;
     this.pos.y = heightAt(this.pos.x, this.pos.z) + RIDE_H;
 
-    // a fall onto a slope becomes speed down that slope (pipe walls, landing
-    // ramps): horizontal speed gains |vy|·sin(slope) along the downhill direction
-    if (vDown < 0) {
-      const hn = Math.hypot(n.x, n.z);
-      if (hn > 1e-3) {
-        const gain = -vDown * hn * 0.9;                 // hn = sin(slope angle)
-        this.vel.x += n.x / hn * gain; this.vel.z += n.z / hn * gain;
-      }
-    }
+    // keep the velocity component ALONG the slope (the into-the-snow part is the
+    // impact). On pipe walls and landing ramps this turns the fall into speed.
+    if (vN < 0) { this.vel.x -= vN * n.x; this.vel.z -= vN * n.z; }
 
     // landing quality: is the board base aligned with the slope, and is the
     // board travelling along its own length? Riding backwards (switch) is a
@@ -3753,12 +3751,6 @@ class Player {
       missAngle = Math.acos(clamp(Math.abs(dot), -1, 1));
     }
     const switchLanding = dot < 0;
-    if (switchLanding) {
-      // rotate the board a further half turn so it faces its direction of
-      // travel; otherwise the rider would slide out tail-first
-      this.yaw = (this.yaw + Math.PI) % TAU;
-      this.updateBasis();
-    }
     const upDot = n.y * this.up.y + n.x * this.up.x + n.z * this.up.z;
     const baseError = Math.acos(clamp(upDot, -1, 1));
     const overLean = Math.abs(this.lean);
@@ -3766,20 +3758,30 @@ class Player {
     const flipResidual = Math.abs(angDelta(0, this.flip));
 
     const bad =
-      baseError > 0.72 ||                       // landing on the rail / sideways
-      missAngle > 1.05 ||                       // travelling the wrong way
-      (overLean > 0.72 && impact > 0.55) ||     // edge catch
-      impact > 1.75 ||                          // just fell in it
-      flipResidual > 0.85;                      // under/over-rotated the flip
+      baseError > 0.95 ||                       // landing on the rail / sideways
+      missAngle > 1.25 ||                       // travelling the wrong way (~72°)
+      (overLean > 0.85 && impact > 0.8) ||      // edge catch
+      impact > 2.0 ||                           // just fell in it
+      flipResidual > 1.05;                      // under/over-rotated the flip (~60°)
 
-    // scrub velocity into the direction of travel. The flat heading axes are
-    // recomputed AFTER any switch correction above, since yaw changed by 180°.
-    const keep = bad ? 0.30 : lerp(0.94, 0.70, clamp(impact, 0, 1));
-    const fX = Math.sin(this.yaw), fZ = Math.cos(this.yaw);
-    const fwdSpeed = Math.abs(this.vel.x * fX + this.vel.z * fZ);
+    const oldYaw = this.yaw;
+    if (!bad && travel > 1.5) {
+      // clean: the board settles onto the line you're travelling (switch landings
+      // just ride out forwards). Speed is kept; only hard or sloppy landings cost.
+      this.yaw = Math.atan2(this.vel.x, this.vel.z);
+      const keep = lerp(1.0, 0.86, clamp((impact - 0.35) / 1.0, 0, 1)) * lerp(1.0, 0.82, Math.pow(missAngle / 1.25, 2));
+      this.vel.x *= keep; this.vel.z *= keep;
+    } else {
+      if (switchLanding) this.yaw = (this.yaw + Math.PI) % TAU;
+      const keep = bad ? 0.30 : 0.95;
+      const fX = Math.sin(this.yaw), fZ = Math.cos(this.yaw);
+      const fwdSpeed = Math.abs(this.vel.x * fX + this.vel.z * fZ);
+      this.vel.x = fX * fwdSpeed * keep;
+      this.vel.z = fZ * fwdSpeed * keep;
+    }
+    this.yawVis = angDelta(this.yaw, oldYaw);   // render-only: ease the board round, no pop
+    this.updateBasis();
     this.landedSwitch = switchLanding;
-    this.vel.x = fX * fwdSpeed * keep;
-    this.vel.z = fZ * fwdSpeed * keep;
     this.vel.y = 0;
     this.flipVis = angDelta(0, this.flip);      // ease the last few degrees out visually
     this.flip = 0; this.flipRate = 0;
@@ -3802,15 +3804,22 @@ class Player {
       const rx = p.x - r.x0, rz = p.z - r.z0;
       const t = rx * r.ux + rz * r.uz;
       if (t < 0 || t > r.len - 0.5) continue;
-      if (Math.abs(rx * -r.uz + rz * r.ux) > 0.42) continue;       // sideways distance to the bar
+      const side = rx * -r.uz + rz * r.ux;                           // signed sideways distance to the bar
       const top = railTop(r, t);
+      // coming down just beside the rail: pull gently onto its line (a forgiving "magnet")
+      if (this.airborne && this.vel.y < 3 && Math.abs(side) < 1.2 && feet > top - 0.3 && feet < top + 2.5) {
+        const pull = Math.min(Math.abs(side), 4.5 / 60) * Math.sign(side);
+        this.pos.x += r.uz * pull; this.pos.z -= r.ux * pull;
+      }
+      if (Math.abs(side) > 0.6) continue;
       const ok = this.airborne
-        ? (this.vel.y <= 1.5 && feet > top - 0.5 && feet < top + 0.8)
+        ? (this.vel.y <= 3 && feet > top - 0.7 && feet < top + 1.2)
         : (feet > top - 0.25);                                        // rolled onto the flush entry
       if (!ok) continue;
-      if (this.airborne && Math.abs(angDelta(0, this.flip)) > 0.85) { this.crash(fx); return; }
+      if (this.airborne && Math.abs(angDelta(0, this.flip)) > 1.05) { this.crash(fx); return; }
       const along = this.vel.x * r.ux + this.vel.z * r.uz;
-      this.grind = { r, t, dir: along >= 0 ? 1 : -1, s: Math.max(3, Math.abs(along)), time: 0 };
+      // keep (most of) the approach speed even if you come in at an angle
+      this.grind = { r, t, dir: along >= 0 ? 1 : -1, s: Math.max(3, Math.hypot(this.vel.x, this.vel.z) * 0.92), time: 0 };
       this.airborne = false; this.airTime = 0; this.landedClean = true;
       this.flip = 0; this.flipRate = 0; this.grab = null; this.grabTime = 0;
       this.pos.y = top + RIDE_H;
@@ -3913,7 +3922,12 @@ class Player {
      ===================================================================== */
   buildPose() {
     this._mi = 0;
-    const up = this.up, dir = this.dir, right = this.right;
+    let up = this.up, dir = this.dir, right = this.right;
+    if (this.yawVis) {                 // landing settle: draw the board slightly behind its physics yaw
+      const c = Math.cos(this.yawVis), sn = Math.sin(this.yawVis);
+      dir = V3(dir.x * c - right.x * sn, dir.y * c - right.y * sn, dir.z * c - right.z * sn);
+      right = V3(right.x * c + this.dir.x * sn, right.y * c + this.dir.y * sn, right.z * c + this.dir.z * sn);
+    }
     m4axes(this.boardMat, dir, up, right, this.pos.x, this.pos.y - RIDE_H, this.pos.z);
     const BM = this.boardMat;
     const local = (x, y, z) => V3(
