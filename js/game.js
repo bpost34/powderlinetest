@@ -26,7 +26,7 @@ const Input = {
       KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right',
       KeyS: 'brake', ArrowDown: 'brake', KeyW: 'tuck', ArrowUp: 'tuck',
       Space: 'jump', KeyR: 'restart', KeyP: 'pause', KeyM: 'mute',
-      Backquote: 'debug', KeyJ: 'Indy', KeyK: 'method', KeyL: 'mutegrab', Semicolon: 'stale'
+      KeyN: 'atmos', Backquote: 'debug', KeyJ: 'Indy', KeyK: 'method', KeyL: 'mutegrab', Semicolon: 'stale'
     };
     window.addEventListener('keydown', (e) => {
       if (e.repeat) return;
@@ -42,7 +42,8 @@ const Input = {
         return;
       }
       if (e.code === 'Escape' && (Game.state === 'over' || Game.state === 'pause')) { Game.toMenu(); return; }
-      this.anyKey = true;
+      // N (atmosphere) and M (mute) are settings, not "drop in"
+      if (!(Game.state === 'menu' && (e.code === 'KeyN' || e.code === 'KeyM'))) this.anyKey = true;
       const k = keyMap[e.code];
       if (!k) return;
       if (!this.down[k]) {
@@ -104,6 +105,9 @@ const Input = {
     const lb = $('toLevels');
     lb.addEventListener('pointerdown', (e) => e.stopPropagation());
     lb.addEventListener('click', (e) => { e.stopPropagation(); Game.toMenu(); });
+    const ab = $('atmosBtn');
+    ab.addEventListener('pointerdown', (e) => e.stopPropagation());
+    ab.addEventListener('click', (e) => { e.stopPropagation(); Atmos.cycle(); ab.blur(); });
     const mb = $('muteBtn');
     mb.addEventListener('pointerdown', (e) => e.stopPropagation());   // don't start a run from the menu
     mb.addEventListener('click', (e) => { e.stopPropagation(); Audio.init(); Audio.resume(); Game.toggleMute(); mb.blur(); });
@@ -222,6 +226,7 @@ const Input = {
     if (k === 'restart') { if (Game.state === 'play' || Game.state === 'over') Game.restart(true); }
     else if (k === 'pause') Game.togglePause();
     else if (k === 'mute') Game.toggleMute();
+    else if (k === 'atmos') { if (Level.cur.zen) Atmos.cycle(); }
     else if (k === 'debug') $('debug').classList.toggle('on');
   },
 
@@ -268,6 +273,7 @@ const Game = {
     $('muteBtn').classList.toggle('muted', Audio.muted);
     this.buildLives();
     Sun.init();
+    Atmos.load();
     let lv = 'mountain';
     try { lv = localStorage.getItem('powderline.level') || 'mountain'; } catch (e) { }
     this.selectLevel(Level.defs[lv] ? lv : 'mountain', true);
@@ -298,6 +304,7 @@ const Game = {
       Cam.snap(this.P);
     }
     this.loadBest();
+    Atmos.refresh();
   },
 
   bestKey() { return Level.cur.id === 'mountain' ? 'powderline.best' : 'powderline.best.' + Level.cur.id; },
@@ -554,6 +561,7 @@ const Game = {
   render() {
     const P = this.P;
     P.buildPose();
+    Atmos.update(P);
     Sun.update(P.pos.x, P.pos.y, P.pos.z);
     Render.shadows(P);
     Render.scene(P, this.fx, this.state);

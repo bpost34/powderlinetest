@@ -5,6 +5,7 @@
 'use strict';
 
 const MAXP = 2600;
+const ONE3 = [1, 1, 1];
 
 class Particles {
   constructor() {
@@ -191,7 +192,8 @@ class Particles {
       const fade = Math.min(1, t * 2.6) * Math.min(1, (1 - t) * 8 + 0.25);
       const o = i * 8;
       d[o] = this.px[i]; d[o + 1] = this.py[i]; d[o + 2] = this.pz[i]; d[o + 3] = Math.max(0.02, this.size[i]);
-      d[o + 4] = this.r[i]; d[o + 5] = this.g[i]; d[o + 6] = this.b[i]; d[o + 7] = this.a[i] * fade;
+      const pt = Atmos.p.spray || ONE3;          // snow spray is unlit: dim it at night
+      d[o + 4] = this.r[i] * pt[0]; d[o + 5] = this.g[i] * pt[1]; d[o + 6] = this.b[i] * pt[2]; d[o + 7] = this.a[i] * fade;
     }
     const p = GL.prog.particle.use();
     gl.uniformMatrix4fv(p.uProj, false, Cam.proj);

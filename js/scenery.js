@@ -35,11 +35,11 @@ const Scenery = {
         }`, `
         precision highp float;
         in vec3 vN; in vec3 vC; in float vH; out vec4 fragColor;
-        uniform vec3 uSunDir, uSunColor, uHaze; uniform float uHazeAmt;
+        uniform vec3 uSunDir, uSunColor, uHaze, uAmbLo, uAmbHi; uniform float uHazeAmt;
         void main(){
           vec3 n = normalize(vN);
           float ndl = max(dot(n, uSunDir), 0.0);
-          vec3 amb = mix(vec3(0.34, 0.42, 0.58), vec3(0.62, 0.72, 0.90), n.y * 0.5 + 0.5);
+          vec3 amb = mix(uAmbLo, uAmbHi, n.y * 0.5 + 0.5);
           vec3 col = vC * (uSunColor * ndl * 0.85 + amb * 0.75);
           // aerial perspective: the base sinks into the haze, peaks stay crisp
           float haze = uHazeAmt * (1.0 - smoothstep(-80.0, 200.0, vH) * 0.5);
@@ -131,7 +131,7 @@ const Scenery = {
         // skidding sideways leaves a wider scrape than a clean carve
         const travel = Math.atan2(P.vel.x, P.vel.z);
         const skid = Math.abs(Math.sin(angDelta(travel, P.yaw)));
-        this.trail.push({ x: P.pos.x, z: P.pos.z, hw: 0.12 + skid * 0.6, seg: this.trailSeg });
+        this.trail.push({ x: P.pos.x, z: P.pos.z, hw: 0.12 + skid * 0.6 + (P.brakeVis || 0) * 0.65, seg: this.trailSeg });
         if (this.trail.length > this.TRAIL_MAX) this.trail.shift();
       }
     }
@@ -152,7 +152,9 @@ const Scenery = {
     gl.uniformMatrix4fv(p.uView, false, Cam.view);
     gl.uniform3f(p.uSunDir, Sun.dir.x, Sun.dir.y, Sun.dir.z);
     gl.uniform3f(p.uSunColor, Sun.color[0], Sun.color[1], Sun.color[2]);
-    gl.uniform3f(p.uHaze, 0.76, 0.84, 0.95);
+    gl.uniform3fv(p.uHaze, Atmos.p.haze);
+    gl.uniform3fv(p.uAmbLo, Atmos.p.mtnAmbLo);
+    gl.uniform3fv(p.uAmbHi, Atmos.p.mtnAmbHi);
     const M = _m4.c; m4ident(M);
     M[12] = Cam.pos.x; M[13] = Cam.pos.y - 40; M[14] = Cam.pos.z;
     gl.uniformMatrix4fv(p.uModel, false, M);
@@ -190,12 +192,12 @@ const Scenery = {
     gl.uniformMatrix4fv(p.uProj, false, Cam.proj);
     gl.uniformMatrix4fv(p.uView, false, Cam.view);
     gl.uniform3f(p.uCamPos, Cam.pos.x, Cam.pos.y, Cam.pos.z);
-    gl.uniform3f(p.uCol, 0.42, 0.53, 0.74);                  // cool blue groove shadow
+    gl.uniform3fv(p.uCol, Atmos.p.trail);                    // groove shadow (glows in neon)
     gl.bindVertexArray(this.trailVAO);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.trailBuf);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, d, 0, k);
     gl.disable(gl.CULL_FACE);
-    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, Atmos.p.trailAdd ? gl.ONE : gl.ONE_MINUS_SRC_ALPHA);
     gl.depthMask(false);
     gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(-2, -8);
     gl.drawArrays(gl.TRIANGLES, 0, verts);
@@ -215,7 +217,8 @@ const Scenery = {
       const y = ((f[o + 1] - cy) % W + W * 1.5) % W - B;
       const z = ((f[o + 2] - cz) % W + W * 1.5) % W - B;
       d[q] = cx + x; d[q + 1] = cy + y; d[q + 2] = cz + z; d[q + 3] = 0.045 + (i % 5) * 0.012;
-      d[q + 4] = 1; d[q + 5] = 1; d[q + 6] = 1; d[q + 7] = 0.85;
+      const fc = Atmos.p.flake;
+      d[q + 4] = fc[0]; d[q + 5] = fc[1]; d[q + 6] = fc[2]; d[q + 7] = fc[3];
     }
     const p = GL.prog.particle.use();
     const v = Cam.view;

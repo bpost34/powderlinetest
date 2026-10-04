@@ -132,6 +132,15 @@
   #muteBtn.muted .x{display:inline}#muteBtn.muted .waves{display:none}
   #muteBtn.muted{color:var(--bad);border-color:rgba(255,122,92,.5)}
   body.touch.playing #muteBtn{margin-left:92px}
+  /* zen atmosphere toggle (day / night / neon), beside the mute button */
+  #atmosBtn{position:fixed;top:max(12px,env(safe-area-inset-top));left:50%;margin-left:92px;width:38px;height:38px;
+    border-radius:50%;border:1.5px solid rgba(190,225,255,.35);background:rgba(10,22,38,.38);color:#ffe08a;
+    display:none;align-items:center;justify-content:center;padding:0;z-index:6;cursor:pointer;font-size:17px;line-height:1;
+    backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);touch-action:manipulation}
+  body.zen #atmosBtn{display:flex}
+  body.touch.playing #atmosBtn{margin-left:138px}
+  body:not(.playing) #atmosBtn{left:auto;right:calc(max(14px,env(safe-area-inset-right)) + 48px);margin-left:0}
+  body.night .label, body.night .unit{color:rgba(214,234,252,.75)}
 
   /* ---------- touch controls (phones / tablets) ---------- */
   .touch-only{display:none}
@@ -185,6 +194,8 @@
   #foot{display:none!important}
   /* on menus the top-centre is the title — park the mute button in the corner */
   body:not(.playing) #muteBtn{left:auto;right:max(14px,env(safe-area-inset-right));margin-left:0}
+  .zen-only{display:none}
+  body.zen .zen-only{display:inline}
   /* zen: nothing to chase */
   body.zen #lives, body.zen .corner.tr, body.zen #combo, body.zen #gateMark{display:none!important}
   /* level select */
@@ -259,6 +270,7 @@
     <span><i class="key">Space</i><span class="kdesc">hold · release to ollie</span></span>
     <span><i class="key">J K L ;</i><span class="kdesc">grab</span></span>
     <span><i class="key">P</i><span class="kdesc">pause</span></span>
+    <span class="zen-only"><i class="key">N</i><span class="kdesc">day · night · neon</span></span>
     <span><i class="key">Right/Middle drag</i><span class="kdesc">camera</span></span>
   </div>
   <div id="debug" class="num"></div>
@@ -289,7 +301,7 @@
     <button class="lvl" type="button" data-id="mountain"><i class="kb-only">1</i><b>Backcountry</b><span>Endless mountain · gates · kickers</span></button>
     <button class="lvl" type="button" data-id="pipe"><i class="kb-only">2</i><b>Half-pipe</b><span>Carve the walls · boost the lip</span></button>
     <button class="lvl" type="button" data-id="park"><i class="kb-only">3</i><b>Park</b><span>Tabletops · mini-pipe · rails</span></button>
-    <button class="lvl" type="button" data-id="zen"><i class="kb-only">4</i><b>Zen</b><span>Endless mountain · no gates, lives or score</span></button>
+    <button class="lvl" type="button" data-id="zen"><i class="kb-only">4</i><b>Zen</b><span>No gates, lives or score · day / night / neon</span></button>
   </div>
   <div class="go"><span class="kb-only">press 1–4 to pick a level · any other key to drop in</span><span class="touch-only">tap a level to drop in</span></div>
   <button id="tiltBtn" class="touch-only" type="button">Tilt steering: OFF</button>
@@ -318,6 +330,7 @@
   <div class="go"><span class="kb-only">press P to drop back in · Esc for levels</span><span class="touch-only">tap to drop back in</span></div>
 </div>
 
+<button id="atmosBtn" type="button" aria-label="Atmosphere" title="Atmosphere (N)">☀</button>
 <button id="muteBtn" type="button" aria-label="Mute" title="Mute (M)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" stroke="none"/><g class="waves"><path d="M16 9.5a3.5 3.5 0 0 1 0 5"/><path d="M18.5 7a7 7 0 0 1 0 10"/></g><g class="x"><path d="M16.5 9.5l5 5M21.5 9.5l-5 5"/></g></svg></button>
 
 <div id="touch">
@@ -332,16 +345,17 @@
 <div id="fatal"></div>
 <div id="foot">built from scratch — webgl2 · procedural terrain · edge-based carve physics</div>
 
-<script src="js/math.js?v=20261004g"></script>
-<script src="js/world.js?v=20261004g"></script>
-<script src="js/meshes.js?v=20261004g"></script>
-<script src="js/levels.js?v=20261004g"></script>
-<script src="js/gl.js?v=20261004g"></script>
-<script src="js/render.js?v=20261004g"></script>
-<script src="js/scenery.js?v=20261004g"></script>
-<script src="js/fx.js?v=20261004g"></script>
-<script src="js/audio.js?v=20261004g"></script>
-<script src="js/player.js?v=20261004g"></script>
-<script src="js/game.js?v=20261004g"></script>
+<script src="js/math.js?v=20261005b"></script>
+<script src="js/world.js?v=20261005b"></script>
+<script src="js/meshes.js?v=20261005b"></script>
+<script src="js/levels.js?v=20261005b"></script>
+<script src="js/gl.js?v=20261005b"></script>
+<script src="js/render.js?v=20261005b"></script>
+<script src="js/scenery.js?v=20261005b"></script>
+<script src="js/atmos.js?v=20261005b"></script>
+<script src="js/fx.js?v=20261005b"></script>
+<script src="js/audio.js?v=20261005b"></script>
+<script src="js/player.js?v=20261005b"></script>
+<script src="js/game.js?v=20261005b"></script>
 </body>
 </html>

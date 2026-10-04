@@ -222,6 +222,8 @@ const GL = {
     this.upload('particle', buildParticleQuad());
     this.upload('sky', buildSkyDome());
     this.upload('fstri', buildFsTri());
+    this.upload('lampPost', buildLampPost());
+    this.upload('lampHead', buildLampHead());
 
     this.instanceBuffer('props', 3000, 20);
     this.instanceBuffer('parts', 96, 20);
@@ -303,6 +305,10 @@ const LIGHTING_GLSL = `
   uniform float uFogDensity;
   uniform vec3 uFogColor;
   uniform float uSparkle;
+  // soft point lights (night lamps, rider glow): xyz = position, w = radius / rgb = colour
+  uniform vec4 uPL[8]; uniform vec4 uPLc[8]; uniform int uPLn;
+  // neon mode: grid traced on the snow
+  uniform float uNeon; uniform vec3 uNeonA, uNeonB;
 
   const float PI = 3.14159265;
 
@@ -370,6 +376,15 @@ const LIGHTING_GLSL = `
     vec3 amb = hemi(n) * (0.42 + 0.28 * n.y) * mix(1.0, 0.72, sh);
     // snow bounce light between slopes
     vec3 col = albedo * (sun + amb) + uSunColor * spec * sh * 0.55;
+    // soft pools of light from nearby lamps (smooth falloff to zero at the radius)
+    for(int i = 0; i < 8; i++){
+      if(i >= uPLn) break;
+      vec3 Lv = uPL[i].xyz - wp;
+      float d = length(Lv);
+      float a = clamp(1.0 - d / uPL[i].w, 0.0, 1.0);
+      a *= a;
+      col += albedo * uPLc[i].rgb * a * (0.25 + 0.75 * max(dot(n, Lv / max(d, 1e-3)), 0.0));
+    }
     return col;
   }
 
@@ -416,6 +431,13 @@ GL.buildShaders = function () {
       // groomed corduroy banding down the piste
       float cx = vWorld.x; // visual only
       col *= 1.0 + 0.022 * sin(cx * 1.1 + vWorld.z * 0.02);
+      if(uNeon > 0.0){
+        vec2 gp = vWorld.xz / 6.0;
+        vec2 gw = abs(fract(gp - 0.5) - 0.5) / max(fwidth(gp), vec2(1e-4));
+        float line = 1.0 - min(min(gw.x, gw.y), 1.0);
+        vec3 nc = mix(uNeonA, uNeonB, 0.5 + 0.5 * sin(vWorld.z * 0.012 + vWorld.x * 0.02));
+        col += nc * line * uNeon * exp(-dist * 0.006);
+      }
       // cool sheen where the snow turns away from the camera (grazing angles)
       float fres = pow(1.0 - clamp(dot(n, normalize(uCamPos - vWorld)), 0.0, 1.0), 4.0);
       col += vec3(0.55, 0.70, 1.0) * fres * 0.16;
@@ -446,6 +468,7 @@ GL.buildShaders = function () {
 
   /* ---------- instanced props ---------- */
   const INST_VS = V_HEAD + V_OUT + `
+    out float vEmis;
     in vec4 aIM0; in vec4 aIM1; in vec4 aIM2; in vec4 aIM3; in vec4 aTint;
     void main(){
       mat4 M = mat4(aIM0, aIM1, aIM2, aIM3);
@@ -453,17 +476,18 @@ GL.buildShaders = function () {
       vWorld = wp.xyz;
       vNormal = normalize(mat3(M) * aNormal);
       vColor = aColor * aTint.rgb;   // mesh colour (foliage/trunk/snow) × per-instance tint
+      vEmis = max(aTint.a - 1.0, 0.0);   // tint alpha above 1 = self-lit (lamp bulbs)
       gl_Position = uProj * uView * wp;
     }`;
 
   const INST_FS = LIGHTING_GLSL + `
-    in vec3 vNormal; in vec3 vColor; in vec3 vWorld;
+    in vec3 vNormal; in vec3 vColor; in vec3 vWorld; in float vEmis;
     out vec4 fragColor;
     void main(){
       vec3 n = normalize(vNormal);
       float dist = length(uCamPos - vWorld);
-      vec3 col = shade(vColor, n, vWorld, 1.0, 0.85, 0.0);
-      col = applyFog(col, vWorld, normalize(uCamPos - vWorld), dist);
+      vec3 col = shade(vColor, n, vWorld, 1.0, 0.85, 0.0) + vColor * vEmis;
+      col = applyFog(col, vWorld, normalize(uCamPos - vWorld), dist * (1.0 - min(vEmis, 1.0) * 0.6));
       fragColor = vec4(col, 1.0);
     }`;
 
@@ -503,6 +527,7 @@ GL.buildShaders = function () {
     in vec3 vDir; out vec4 fragColor;
     uniform vec3 uSunDir; uniform vec3 uSunColor; uniform float uTime;
     uniform vec3 uZenith; uniform vec3 uHorizon;
+    uniform float uStars, uCloudLum;
     float h12(vec2 p){ vec3 p3=fract(vec3(p.xyx)*0.1031); p3+=dot(p3,p3.yzx+33.33); return fract((p3.x+p3.y)*p3.z); }
     float vn(vec2 p){ vec2 i=floor(p),f=fract(p); vec2 u=f*f*(3.0-2.0*f);
       return mix(mix(h12(i),h12(i+vec2(1,0)),u.x), mix(h12(i+vec2(0,1)),h12(i+vec2(1,1)),u.x), u.y); }
@@ -523,9 +548,19 @@ GL.buildShaders = function () {
         float c2 = fbm(cp * 2.4 + vec2(-t * 1.6, t * 0.7));
         float cloud = smoothstep(0.48, 0.86, c * 0.75 + c2 * 0.35);
         cloud *= smoothstep(0.02, 0.30, d.y);
-        vec3 lit = mix(vec3(0.62,0.68,0.80), vec3(1.06,1.02,0.98), smoothstep(0.35,0.75,c));
+        vec3 lit = mix(vec3(0.62,0.68,0.80), vec3(1.06,1.02,0.98), smoothstep(0.35,0.75,c)) * uCloudLum;
         lit += uSunColor * pow(sd, 14.0) * 0.5;
-        sky = mix(sky, lit, cloud * 0.85);
+        sky = mix(sky, lit, cloud * mix(0.85, 0.55, uStars));
+      }
+      // stars (night): sparse twinkling points, hidden behind the cloud deck
+      if(uStars > 0.0 && d.y > 0.0){
+        vec2 sp = d.xz / (d.y + 0.35) * 70.0;
+        vec2 cell = floor(sp);
+        float h = h12(cell);
+        vec2 f = fract(sp) - vec2(h12(cell + 7.1), h12(cell + 3.3));
+        float st = smoothstep(0.986, 1.0, h) * smoothstep(0.16, 0.0, length(f));
+        st *= 0.6 + 0.4 * sin(uTime * 0.05 + h * 60.0);
+        sky += vec3(0.85, 0.9, 1.0) * st * uStars * smoothstep(0.0, 0.25, d.y) * 1.8;
       }
       fragColor = vec4(sky, 1.0);
     }`;

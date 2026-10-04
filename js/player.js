@@ -150,6 +150,9 @@ class Player {
     if (this.airborne) this.flipVis = this.flip;
     else this.flipVis = damp(this.flipVis, 0, 14, dt);
     if (this.yawVis) this.yawVis = Math.abs(this.yawVis) < 1e-3 ? 0 : damp(this.yawVis, 0, 12, dt);
+    // braking on the snow: blend into the heelside skid-stop pose (render-only)
+    const wantBrake = !this.airborne && !this.grind && this.crashTimer <= 0 ? clamp(this.braking, 0, 1) : 0;
+    this.brakeVis = damp(this.brakeVis || 0, wantBrake, 7, dt);
   }
 
   /* ---------------- on the snow ---------------- */
@@ -532,6 +535,18 @@ class Player {
       dir = V3(dir.x * c - right.x * sn, dir.y * c - right.y * sn, dir.z * c - right.z * sn);
       right = V3(right.x * c + this.dir.x * sn, right.y * c + this.dir.y * sn, right.z * c + this.dir.z * sn);
     }
+    const bv = this.brakeVis || 0;
+    if (bv > 0.01) {
+      // heelside skid stop: swing the board across the fall line (the rider ends up
+      // facing down the hill, back to the camera) and rock it onto the heel edge
+      const d = bv * Math.PI * 0.46, c = Math.cos(d), sn = Math.sin(d);
+      const nd = V3(dir.x * c - right.x * sn, dir.y * c - right.y * sn, dir.z * c - right.z * sn);
+      const nr = V3(right.x * c + dir.x * sn, right.y * c + dir.y * sn, right.z * c + dir.z * sn);
+      dir = nd; right = nr;
+      const t = bv * 0.42, ct = Math.cos(t), st = Math.sin(t);
+      up = V3.norm(V3(), V3(up.x * ct - right.x * st, up.y * ct - right.y * st, up.z * ct - right.z * st));
+      right = V3.norm(V3(), V3.cross(V3(), dir, up));
+    }
     m4axes(this.boardMat, dir, up, right, this.pos.x, this.pos.y - RIDE_H, this.pos.z);
     const BM = this.boardMat;
     const local = (x, y, z) => V3(
@@ -542,12 +557,12 @@ class Player {
     const nrm = (x, y, z) => V3.norm(V3(), V3(x, y, z));
     const lerpV = (a, b, k) => V3(lerp(a.x, b.x, k), lerp(a.y, b.y, k), lerp(a.z, b.z, k));
 
-    const t = GL.time, crash = this.crashTimer > 0, air = this.airborne, lean = this.lean * LEAN_VIS;
+    const t = GL.time, crash = this.crashTimer > 0, air = this.airborne, lean = this.lean * LEAN_VIS - bv * 0.85;   // braking: sit back onto the heels
     const grab = !crash && air && this.grab ? this.grab : null;
     const tuck = air ? Math.max(this.tuck, this.braking, Math.min(1, Math.abs(this.flipRate) / 2)) : this.tuck;
 
     // ---- posture ----
-    let crouch = lerp(1, 0.80, tuck) * (1 - clamp(this.load - 1, 0, 1.6) * 0.12);
+    let crouch = lerp(1, 0.80, tuck) * (1 - clamp(this.load - 1, 0, 1.6) * 0.12) * (1 - 0.12 * bv);
     if (air) crouch *= 0.92;
     if (grab) crouch = Math.min(crouch, 0.66);
     const bob = Math.sin(t * (4 + this.speed * 0.35)) * this.chop * 0.04;
@@ -567,7 +582,7 @@ class Player {
       Z = nrm(Z.x - Y.x * d, Z.y - Y.y * d, Z.z - Y.z * d);
       return [V3.cross(V3(), Y, Z), Y, Z];            // right-handed: Z = X × Y
     };
-    let open = 0.62 + (air ? clamp(this.spin * 0.08, -0.3, 0.3) : 0);
+    let open = (0.62 + (air ? clamp(this.spin * 0.08, -0.3, 0.3) : 0)) * (1 - 0.6 * bv);   // square up to the slope when stopping
     // toe-side turns (lean > 0) press the chest forward over the toes; heel-side turns
     // (lean < 0) sit back over the heels — otherwise the constant forward bend
     // cancels most of a heel-side lean and the rider looks like they lean out
@@ -632,7 +647,8 @@ class Player {
 
     // head looks down the hill toward the nose
     const headP = add(torsoP, TY, 0.70);
-    let HZ = nrm(dir.x * 0.75 + TZ.x * 0.5, dir.y * 0.75 + TZ.y * 0.5, dir.z * 0.75 + TZ.z * 0.5);
+    const fw = this.dir;               // look where we're going (the board may be skidding sideways)
+    let HZ = nrm(fw.x * 0.75 + TZ.x * 0.5, fw.y * 0.75 + TZ.y * 0.5, fw.z * 0.75 + TZ.z * 0.5);
     const hd = V3.dot(HZ, TY);
     HZ = nrm(HZ.x - TY.x * hd, HZ.y - TY.y * hd, HZ.z - TY.z * hd);
     const HX = V3.cross(V3(), TY, HZ);

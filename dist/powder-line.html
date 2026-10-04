@@ -132,6 +132,15 @@
   #muteBtn.muted .x{display:inline}#muteBtn.muted .waves{display:none}
   #muteBtn.muted{color:var(--bad);border-color:rgba(255,122,92,.5)}
   body.touch.playing #muteBtn{margin-left:92px}
+  /* zen atmosphere toggle (day / night / neon), beside the mute button */
+  #atmosBtn{position:fixed;top:max(12px,env(safe-area-inset-top));left:50%;margin-left:92px;width:38px;height:38px;
+    border-radius:50%;border:1.5px solid rgba(190,225,255,.35);background:rgba(10,22,38,.38);color:#ffe08a;
+    display:none;align-items:center;justify-content:center;padding:0;z-index:6;cursor:pointer;font-size:17px;line-height:1;
+    backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);touch-action:manipulation}
+  body.zen #atmosBtn{display:flex}
+  body.touch.playing #atmosBtn{margin-left:138px}
+  body:not(.playing) #atmosBtn{left:auto;right:calc(max(14px,env(safe-area-inset-right)) + 48px);margin-left:0}
+  body.night .label, body.night .unit{color:rgba(214,234,252,.75)}
 
   /* ---------- touch controls (phones / tablets) ---------- */
   .touch-only{display:none}
@@ -185,6 +194,8 @@
   #foot{display:none!important}
   /* on menus the top-centre is the title — park the mute button in the corner */
   body:not(.playing) #muteBtn{left:auto;right:max(14px,env(safe-area-inset-right));margin-left:0}
+  .zen-only{display:none}
+  body.zen .zen-only{display:inline}
   /* zen: nothing to chase */
   body.zen #lives, body.zen .corner.tr, body.zen #combo, body.zen #gateMark{display:none!important}
   /* level select */
@@ -259,6 +270,7 @@
     <span><i class="key">Space</i><span class="kdesc">hold · release to ollie</span></span>
     <span><i class="key">J K L ;</i><span class="kdesc">grab</span></span>
     <span><i class="key">P</i><span class="kdesc">pause</span></span>
+    <span class="zen-only"><i class="key">N</i><span class="kdesc">day · night · neon</span></span>
     <span><i class="key">Right/Middle drag</i><span class="kdesc">camera</span></span>
   </div>
   <div id="debug" class="num"></div>
@@ -289,7 +301,7 @@
     <button class="lvl" type="button" data-id="mountain"><i class="kb-only">1</i><b>Backcountry</b><span>Endless mountain · gates · kickers</span></button>
     <button class="lvl" type="button" data-id="pipe"><i class="kb-only">2</i><b>Half-pipe</b><span>Carve the walls · boost the lip</span></button>
     <button class="lvl" type="button" data-id="park"><i class="kb-only">3</i><b>Park</b><span>Tabletops · mini-pipe · rails</span></button>
-    <button class="lvl" type="button" data-id="zen"><i class="kb-only">4</i><b>Zen</b><span>Endless mountain · no gates, lives or score</span></button>
+    <button class="lvl" type="button" data-id="zen"><i class="kb-only">4</i><b>Zen</b><span>No gates, lives or score · day / night / neon</span></button>
   </div>
   <div class="go"><span class="kb-only">press 1–4 to pick a level · any other key to drop in</span><span class="touch-only">tap a level to drop in</span></div>
   <button id="tiltBtn" class="touch-only" type="button">Tilt steering: OFF</button>
@@ -318,6 +330,7 @@
   <div class="go"><span class="kb-only">press P to drop back in · Esc for levels</span><span class="touch-only">tap to drop back in</span></div>
 </div>
 
+<button id="atmosBtn" type="button" aria-label="Atmosphere" title="Atmosphere (N)">☀</button>
 <button id="muteBtn" type="button" aria-label="Mute" title="Mute (M)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" stroke="none"/><g class="waves"><path d="M16 9.5a3.5 3.5 0 0 1 0 5"/><path d="M18.5 7a7 7 0 0 1 0 10"/></g><g class="x"><path d="M16.5 9.5l5 5M21.5 9.5l-5 5"/></g></svg></button>
 
 <div id="touch">
@@ -1859,6 +1872,8 @@ const GL = {
     this.upload('particle', buildParticleQuad());
     this.upload('sky', buildSkyDome());
     this.upload('fstri', buildFsTri());
+    this.upload('lampPost', buildLampPost());
+    this.upload('lampHead', buildLampHead());
 
     this.instanceBuffer('props', 3000, 20);
     this.instanceBuffer('parts', 96, 20);
@@ -1940,6 +1955,10 @@ const LIGHTING_GLSL = `
   uniform float uFogDensity;
   uniform vec3 uFogColor;
   uniform float uSparkle;
+  // soft point lights (night lamps, rider glow): xyz = position, w = radius / rgb = colour
+  uniform vec4 uPL[8]; uniform vec4 uPLc[8]; uniform int uPLn;
+  // neon mode: grid traced on the snow
+  uniform float uNeon; uniform vec3 uNeonA, uNeonB;
 
   const float PI = 3.14159265;
 
@@ -2007,6 +2026,15 @@ const LIGHTING_GLSL = `
     vec3 amb = hemi(n) * (0.42 + 0.28 * n.y) * mix(1.0, 0.72, sh);
     // snow bounce light between slopes
     vec3 col = albedo * (sun + amb) + uSunColor * spec * sh * 0.55;
+    // soft pools of light from nearby lamps (smooth falloff to zero at the radius)
+    for(int i = 0; i < 8; i++){
+      if(i >= uPLn) break;
+      vec3 Lv = uPL[i].xyz - wp;
+      float d = length(Lv);
+      float a = clamp(1.0 - d / uPL[i].w, 0.0, 1.0);
+      a *= a;
+      col += albedo * uPLc[i].rgb * a * (0.25 + 0.75 * max(dot(n, Lv / max(d, 1e-3)), 0.0));
+    }
     return col;
   }
 
@@ -2053,6 +2081,13 @@ GL.buildShaders = function () {
       // groomed corduroy banding down the piste
       float cx = vWorld.x; // visual only
       col *= 1.0 + 0.022 * sin(cx * 1.1 + vWorld.z * 0.02);
+      if(uNeon > 0.0){
+        vec2 gp = vWorld.xz / 6.0;
+        vec2 gw = abs(fract(gp - 0.5) - 0.5) / max(fwidth(gp), vec2(1e-4));
+        float line = 1.0 - min(min(gw.x, gw.y), 1.0);
+        vec3 nc = mix(uNeonA, uNeonB, 0.5 + 0.5 * sin(vWorld.z * 0.012 + vWorld.x * 0.02));
+        col += nc * line * uNeon * exp(-dist * 0.006);
+      }
       // cool sheen where the snow turns away from the camera (grazing angles)
       float fres = pow(1.0 - clamp(dot(n, normalize(uCamPos - vWorld)), 0.0, 1.0), 4.0);
       col += vec3(0.55, 0.70, 1.0) * fres * 0.16;
@@ -2083,6 +2118,7 @@ GL.buildShaders = function () {
 
   /* ---------- instanced props ---------- */
   const INST_VS = V_HEAD + V_OUT + `
+    out float vEmis;
     in vec4 aIM0; in vec4 aIM1; in vec4 aIM2; in vec4 aIM3; in vec4 aTint;
     void main(){
       mat4 M = mat4(aIM0, aIM1, aIM2, aIM3);
@@ -2090,17 +2126,18 @@ GL.buildShaders = function () {
       vWorld = wp.xyz;
       vNormal = normalize(mat3(M) * aNormal);
       vColor = aColor * aTint.rgb;   // mesh colour (foliage/trunk/snow) × per-instance tint
+      vEmis = max(aTint.a - 1.0, 0.0);   // tint alpha above 1 = self-lit (lamp bulbs)
       gl_Position = uProj * uView * wp;
     }`;
 
   const INST_FS = LIGHTING_GLSL + `
-    in vec3 vNormal; in vec3 vColor; in vec3 vWorld;
+    in vec3 vNormal; in vec3 vColor; in vec3 vWorld; in float vEmis;
     out vec4 fragColor;
     void main(){
       vec3 n = normalize(vNormal);
       float dist = length(uCamPos - vWorld);
-      vec3 col = shade(vColor, n, vWorld, 1.0, 0.85, 0.0);
-      col = applyFog(col, vWorld, normalize(uCamPos - vWorld), dist);
+      vec3 col = shade(vColor, n, vWorld, 1.0, 0.85, 0.0) + vColor * vEmis;
+      col = applyFog(col, vWorld, normalize(uCamPos - vWorld), dist * (1.0 - min(vEmis, 1.0) * 0.6));
       fragColor = vec4(col, 1.0);
     }`;
 
@@ -2140,6 +2177,7 @@ GL.buildShaders = function () {
     in vec3 vDir; out vec4 fragColor;
     uniform vec3 uSunDir; uniform vec3 uSunColor; uniform float uTime;
     uniform vec3 uZenith; uniform vec3 uHorizon;
+    uniform float uStars, uCloudLum;
     float h12(vec2 p){ vec3 p3=fract(vec3(p.xyx)*0.1031); p3+=dot(p3,p3.yzx+33.33); return fract((p3.x+p3.y)*p3.z); }
     float vn(vec2 p){ vec2 i=floor(p),f=fract(p); vec2 u=f*f*(3.0-2.0*f);
       return mix(mix(h12(i),h12(i+vec2(1,0)),u.x), mix(h12(i+vec2(0,1)),h12(i+vec2(1,1)),u.x), u.y); }
@@ -2160,9 +2198,19 @@ GL.buildShaders = function () {
         float c2 = fbm(cp * 2.4 + vec2(-t * 1.6, t * 0.7));
         float cloud = smoothstep(0.48, 0.86, c * 0.75 + c2 * 0.35);
         cloud *= smoothstep(0.02, 0.30, d.y);
-        vec3 lit = mix(vec3(0.62,0.68,0.80), vec3(1.06,1.02,0.98), smoothstep(0.35,0.75,c));
+        vec3 lit = mix(vec3(0.62,0.68,0.80), vec3(1.06,1.02,0.98), smoothstep(0.35,0.75,c)) * uCloudLum;
         lit += uSunColor * pow(sd, 14.0) * 0.5;
-        sky = mix(sky, lit, cloud * 0.85);
+        sky = mix(sky, lit, cloud * mix(0.85, 0.55, uStars));
+      }
+      // stars (night): sparse twinkling points, hidden behind the cloud deck
+      if(uStars > 0.0 && d.y > 0.0){
+        vec2 sp = d.xz / (d.y + 0.35) * 70.0;
+        vec2 cell = floor(sp);
+        float h = h12(cell);
+        vec2 f = fract(sp) - vec2(h12(cell + 7.1), h12(cell + 3.3));
+        float st = smoothstep(0.986, 1.0, h) * smoothstep(0.16, 0.0, length(f));
+        st *= 0.6 + 0.4 * sin(uTime * 0.05 + h * 60.0);
+        sky += vec3(0.85, 0.9, 1.0) * st * uStars * smoothstep(0.0, 0.25, d.y) * 1.8;
       }
       fragColor = vec4(sky, 1.0);
     }`;
@@ -2407,6 +2455,7 @@ const Sun = {
     gl.uniform1f(p.uTime, GL.time);
     gl.uniformMatrix4fv(p.uLightVP, false, this.lightVP);
     gl.uniform3f(p.uCamPos, Cam.pos.x, Cam.pos.y, Cam.pos.z);
+    Atmos.setUniforms(p);                    // lamps / rider glow / neon grid
     gl.uniformMatrix4fv(p.uView, false, Cam.view);
     // every world program multiplies by uProj; without this the shadow and
     // lit passes would transform by a zero matrix and draw nothing.
@@ -2542,7 +2591,8 @@ const Render = {
     const gl = GL.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, GL.vao.scene.fb);
     gl.viewport(0, 0, GL.w, GL.h);
-    gl.clearColor(0.62, 0.74, 0.90, 1);
+    const ap = Atmos.p;
+    gl.clearColor(ap.clear[0], ap.clear[1], ap.clear[2], 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     // ---- sky ----
@@ -2556,8 +2606,10 @@ const Render = {
     gl.uniformMatrix4fv(sky.uView, false, Cam.view);
     gl.uniform3f(sky.uSunDir, Sun.dir.x, Sun.dir.y, Sun.dir.z);
     gl.uniform3f(sky.uSunColor, Sun.color[0], Sun.color[1], Sun.color[2]);
-    gl.uniform3f(sky.uZenith, 0.13, 0.32, 0.68);
-    gl.uniform3f(sky.uHorizon, 0.78, 0.86, 0.96);
+    gl.uniform3fv(sky.uZenith, ap.zenith);
+    gl.uniform3fv(sky.uHorizon, ap.horizon);
+    gl.uniform1f(sky.uStars, ap.stars);
+    gl.uniform1f(sky.uCloudLum, ap.cloudLum);
     gl.uniform1f(sky.uTime, GL.time * 60);
     const skyM = GL.mesh.sky;
     gl.bindVertexArray(skyM.vao);
@@ -2629,6 +2681,9 @@ const Render = {
 
     // ---- gates ----
     this.drawGates(ip, P);
+
+    // ---- night: lamp posts along the run ----
+    Atmos.drawLamps(ip, P);
 
     // ---- rider + board ----
     const lp = GL.prog.lit.use();
@@ -2761,7 +2816,7 @@ const Render = {
     const bp = GL.prog.bright.use();
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, GL.vao.scene.color);
     gl.uniform1i(bp.uTex, 0);
-    gl.uniform1f(bp.uThresh, 1.05);
+    gl.uniform1f(bp.uThresh, Atmos.p.bloomThresh);
     gl.bindVertexArray(tri.vao);
     for (let l = 3; l < 8; l++) { gl.disableVertexAttribArray(l); gl.vertexAttribDivisor(l, 0); }
     gl.drawElements(gl.TRIANGLES, tri.count, gl.UNSIGNED_INT, 0);
@@ -2791,7 +2846,7 @@ const Render = {
     gl.uniform1i(cp.uScene, 0);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, GL.vao.bloomA.color);
     gl.uniform1i(cp.uBloom, 1);
-    gl.uniform1f(cp.uExposure, 1.02);
+    gl.uniform1f(cp.uExposure, Atmos.p.exposure);
     gl.uniform1f(cp.uVignette, 0.85);
     gl.uniform1f(cp.uSpeed, speedN);
     gl.uniform1f(cp.uTime, GL.time);
@@ -2845,11 +2900,11 @@ const Scenery = {
         }`, `
         precision highp float;
         in vec3 vN; in vec3 vC; in float vH; out vec4 fragColor;
-        uniform vec3 uSunDir, uSunColor, uHaze; uniform float uHazeAmt;
+        uniform vec3 uSunDir, uSunColor, uHaze, uAmbLo, uAmbHi; uniform float uHazeAmt;
         void main(){
           vec3 n = normalize(vN);
           float ndl = max(dot(n, uSunDir), 0.0);
-          vec3 amb = mix(vec3(0.34, 0.42, 0.58), vec3(0.62, 0.72, 0.90), n.y * 0.5 + 0.5);
+          vec3 amb = mix(uAmbLo, uAmbHi, n.y * 0.5 + 0.5);
           vec3 col = vC * (uSunColor * ndl * 0.85 + amb * 0.75);
           // aerial perspective: the base sinks into the haze, peaks stay crisp
           float haze = uHazeAmt * (1.0 - smoothstep(-80.0, 200.0, vH) * 0.5);
@@ -2941,7 +2996,7 @@ const Scenery = {
         // skidding sideways leaves a wider scrape than a clean carve
         const travel = Math.atan2(P.vel.x, P.vel.z);
         const skid = Math.abs(Math.sin(angDelta(travel, P.yaw)));
-        this.trail.push({ x: P.pos.x, z: P.pos.z, hw: 0.12 + skid * 0.6, seg: this.trailSeg });
+        this.trail.push({ x: P.pos.x, z: P.pos.z, hw: 0.12 + skid * 0.6 + (P.brakeVis || 0) * 0.65, seg: this.trailSeg });
         if (this.trail.length > this.TRAIL_MAX) this.trail.shift();
       }
     }
@@ -2962,7 +3017,9 @@ const Scenery = {
     gl.uniformMatrix4fv(p.uView, false, Cam.view);
     gl.uniform3f(p.uSunDir, Sun.dir.x, Sun.dir.y, Sun.dir.z);
     gl.uniform3f(p.uSunColor, Sun.color[0], Sun.color[1], Sun.color[2]);
-    gl.uniform3f(p.uHaze, 0.76, 0.84, 0.95);
+    gl.uniform3fv(p.uHaze, Atmos.p.haze);
+    gl.uniform3fv(p.uAmbLo, Atmos.p.mtnAmbLo);
+    gl.uniform3fv(p.uAmbHi, Atmos.p.mtnAmbHi);
     const M = _m4.c; m4ident(M);
     M[12] = Cam.pos.x; M[13] = Cam.pos.y - 40; M[14] = Cam.pos.z;
     gl.uniformMatrix4fv(p.uModel, false, M);
@@ -3000,12 +3057,12 @@ const Scenery = {
     gl.uniformMatrix4fv(p.uProj, false, Cam.proj);
     gl.uniformMatrix4fv(p.uView, false, Cam.view);
     gl.uniform3f(p.uCamPos, Cam.pos.x, Cam.pos.y, Cam.pos.z);
-    gl.uniform3f(p.uCol, 0.42, 0.53, 0.74);                  // cool blue groove shadow
+    gl.uniform3fv(p.uCol, Atmos.p.trail);                    // groove shadow (glows in neon)
     gl.bindVertexArray(this.trailVAO);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.trailBuf);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, d, 0, k);
     gl.disable(gl.CULL_FACE);
-    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, Atmos.p.trailAdd ? gl.ONE : gl.ONE_MINUS_SRC_ALPHA);
     gl.depthMask(false);
     gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(-2, -8);
     gl.drawArrays(gl.TRIANGLES, 0, verts);
@@ -3025,7 +3082,8 @@ const Scenery = {
       const y = ((f[o + 1] - cy) % W + W * 1.5) % W - B;
       const z = ((f[o + 2] - cz) % W + W * 1.5) % W - B;
       d[q] = cx + x; d[q + 1] = cy + y; d[q + 2] = cz + z; d[q + 3] = 0.045 + (i % 5) * 0.012;
-      d[q + 4] = 1; d[q + 5] = 1; d[q + 6] = 1; d[q + 7] = 0.85;
+      const fc = Atmos.p.flake;
+      d[q + 4] = fc[0]; d[q + 5] = fc[1]; d[q + 6] = fc[2]; d[q + 7] = fc[3];
     }
     const p = GL.prog.particle.use();
     const v = Cam.view;
@@ -3048,6 +3106,175 @@ const Scenery = {
 };
 
 </script>
+<script>/* js/atmos.js */
+/* =====================================================================
+   atmos.js — time of day for Zen: Day, Night (moonlight, stars, warm lamps
+   along the run) and Neon (synthwave night: neon grid, neon lamps, glowing
+   tracks). Other levels always ride in daylight.
+   Each preset just retunes the existing lighting (sun/moon, sky, fog, haze,
+   exposure, bloom); lamps add soft point lights to the shared shader.
+   ===================================================================== */
+'use strict';
+
+const ATMOS_PRESETS = {
+  day: {
+    sunDir: [-0.42, 0.62, -0.55], sunColor: [1.30, 1.16, 0.94],
+    skyTint: [0.42, 0.55, 0.78], groundTint: [0.30, 0.35, 0.44],
+    fogColor: [0.72, 0.81, 0.93], fogDensity: 0.0026,
+    zenith: [0.13, 0.32, 0.68], horizon: [0.78, 0.86, 0.96], clear: [0.62, 0.74, 0.90],
+    haze: [0.76, 0.84, 0.95], mtnAmbLo: [0.34, 0.42, 0.58], mtnAmbHi: [0.62, 0.72, 0.90],
+    exposure: 1.02, bloomThresh: 1.05, stars: 0, cloudLum: 1, neon: 0,
+    trail: [0.42, 0.53, 0.74], trailAdd: false, flake: [1, 1, 1, 0.85], lamps: null, riderLight: null
+  },
+  night: {
+    sunDir: [0.30, 0.55, -0.62], sunColor: [0.30, 0.38, 0.62],        // the moon
+    skyTint: [0.07, 0.10, 0.19], groundTint: [0.05, 0.06, 0.10],
+    fogColor: [0.06, 0.085, 0.16], fogDensity: 0.0032,
+    zenith: [0.008, 0.016, 0.05], horizon: [0.07, 0.10, 0.19], clear: [0.065, 0.09, 0.175],
+    haze: [0.065, 0.09, 0.17], mtnAmbLo: [0.05, 0.06, 0.10], mtnAmbHi: [0.13, 0.16, 0.27],
+    exposure: 1.3, bloomThresh: 0.7, stars: 1, cloudLum: 0.10, neon: 0,
+    trail: [0.10, 0.14, 0.30], trailAdd: false, flake: [0.80, 0.86, 1.0, 0.55],
+    lamps: 'warm', riderLight: [0.30, 0.40, 0.65, 11], spray: [0.42, 0.48, 0.66]
+  },
+  neon: {
+    sunDir: [0.30, 0.55, -0.62], sunColor: [0.13, 0.10, 0.28],
+    skyTint: [0.07, 0.03, 0.14], groundTint: [0.03, 0.01, 0.05],
+    fogColor: [0.16, 0.04, 0.20], fogDensity: 0.0030,
+    zenith: [0.015, 0.0, 0.05], horizon: [0.22, 0.05, 0.27], clear: [0.17, 0.045, 0.21],
+    haze: [0.18, 0.05, 0.23], mtnAmbLo: [0.06, 0.02, 0.10], mtnAmbHi: [0.20, 0.08, 0.30],
+    exposure: 1.15, bloomThresh: 0.65, stars: 0.7, cloudLum: 0.12, neon: 1.0,
+    neonA: [0.10, 0.95, 1.0], neonB: [1.0, 0.20, 0.85],
+    trail: [0.25, 1.0, 1.0], trailAdd: true, flake: [0.85, 0.75, 1.0, 0.5],
+    lamps: 'neon', riderLight: [0.55, 0.16, 0.65, 9], spray: [0.62, 0.48, 0.85]
+  }
+};
+const ATMOS_ORDER = ['day', 'night', 'neon'];
+const NEON_LAMP_COLS = [[1.0, 0.18, 0.80], [0.15, 0.90, 1.0], [0.55, 1.0, 0.25], [0.65, 0.30, 1.0]];
+const LAMP_SPACING = 32;
+
+const Atmos = {
+  zenMode: 'day',      // the rider's choice for Zen (persisted)
+  mode: 'day',         // what's actually applied (always day outside Zen)
+  p: ATMOS_PRESETS.day,
+  lightPos: new Float32Array(32), lightCol: new Float32Array(32), lightN: 0,
+
+  load() {
+    try { const m = localStorage.getItem('powderline.atmos'); if (ATMOS_PRESETS[m]) this.zenMode = m; } catch (e) { }
+  },
+
+  /* apply the right preset for the current level */
+  refresh() {
+    this.mode = Level.cur.zen ? this.zenMode : 'day';
+    this.p = ATMOS_PRESETS[this.mode];
+    const p = this.p;
+    V3.norm(Sun.dir, V3(p.sunDir[0], p.sunDir[1], p.sunDir[2]));
+    Sun.color = p.sunColor.slice(); Sun.skyTint = p.skyTint.slice(); Sun.groundTint = p.groundTint.slice();
+    Sun.fogColor = p.fogColor.slice(); Sun.fogDensity = p.fogDensity;
+    document.body.classList.toggle('night', this.mode !== 'day');
+    const b = document.getElementById('atmosBtn');
+    if (b) { b.textContent = { day: '☀', night: '☾', neon: '✦' }[this.zenMode]; b.title = 'Atmosphere: ' + this.zenMode + ' (N)'; }
+    if (this.mode === 'day') this.lightN = 0;
+  },
+
+  cycle() {
+    this.zenMode = ATMOS_ORDER[(ATMOS_ORDER.indexOf(this.zenMode) + 1) % ATMOS_ORDER.length];
+    try { localStorage.setItem('powderline.atmos', this.zenMode); } catch (e) { }
+    this.refresh();
+  },
+
+  /* lamps: one every LAMP_SPACING metres, alternating sides at the edge of the run */
+  lampAt(k) {
+    const z = k * LAMP_SPACING + 12;
+    const side = k % 2 ? 1 : -1;
+    const x = centerX(z) + side * (PISTE_HALF * 0.82 + hash2(k, 5, 77) * 4);
+    const col = this.p.lamps === 'neon' ? NEON_LAMP_COLS[k % NEON_LAMP_COLS.length] : [1.0, 0.72, 0.42];
+    return { x, y: heightAt(x, z), z, col };
+  },
+
+  /* per frame: the nearest lamps (+ a soft glow around the rider) become point lights */
+  update(P) {
+    if (!this.p.lamps) { this.lightN = 0; return; }
+    const lights = [];
+    const k0 = Math.floor((P.pos.z - 12) / LAMP_SPACING);
+    for (let k = k0 - 3; k <= k0 + 4; k++) {
+      if (k < 1) continue;
+      const L = this.lampAt(k);
+      lights.push({ x: L.x, y: L.y + 3.6, z: L.z, r: 19, c: L.col, d: Math.hypot(L.x - P.pos.x, L.z - P.pos.z) });
+    }
+    lights.sort((a, b) => a.d - b.d);
+    const rl = this.p.riderLight;
+    let n = 0;
+    if (rl) {
+      this.lightPos.set([P.pos.x, P.pos.y + 2.6, P.pos.z, rl[3]], 0);
+      this.lightCol.set([rl[0], rl[1], rl[2], 1], 0);
+      n = 1;
+    }
+    for (const L of lights) {
+      if (n >= 8) break;
+      const s = this.p.lamps === 'neon' ? 1.6 : 1.25;
+      this.lightPos.set([L.x, L.y, L.z, L.r], n * 4);
+      this.lightCol.set([L.c[0] * s, L.c[1] * s, L.c[2] * s, 1], n * 4);
+      n++;
+    }
+    this.lightN = n;
+  },
+
+  setUniforms(prog) {
+    const gl = GL.gl, p = this.p;
+    if (prog.uPLn !== undefined) {
+      gl.uniform1i(prog.uPLn, this.lightN);
+      if (this.lightN) { gl.uniform4fv(prog.uPL, this.lightPos); gl.uniform4fv(prog.uPLc, this.lightCol); }
+    }
+    if (prog.uNeon !== undefined) {
+      gl.uniform1f(prog.uNeon, p.neon);
+      if (p.neon) { gl.uniform3fv(prog.uNeonA, p.neonA); gl.uniform3fv(prog.uNeonB, p.neonB); }
+    }
+  },
+
+  /* lamp posts + glowing heads (instanced, through the props program) */
+  drawLamps(ip, P) {
+    if (!this.p.lamps) return;
+    const gl = GL.gl, ib = GL.buf.parts, d = ib.data;
+    const k0 = Math.floor((Cam.pos.z - 12) / LAMP_SPACING);
+    const list = [];
+    for (let k = k0 - 2; k <= k0 + 9; k++) if (k >= 1) list.push(this.lampAt(k));
+    const draw = (mesh, glow) => {
+      let n = 0;
+      for (const L of list) {
+        if (n >= ib.max) break;
+        const o = n * 20;
+        for (let i = 0; i < 16; i++) d[o + i] = (i % 5 === 0) ? 1 : 0;
+        d[o + 12] = L.x; d[o + 13] = L.y - 0.2; d[o + 14] = L.z;
+        if (glow) { d[o + 16] = L.col[0]; d[o + 17] = L.col[1]; d[o + 18] = L.col[2]; d[o + 19] = 1 + glow; }
+        else { d[o + 16] = 1; d[o + 17] = 1; d[o + 18] = 1; d[o + 19] = 1; }
+        n++;
+      }
+      const m = GL.mesh[mesh];
+      gl.bindVertexArray(m.vao);
+      GL.bindInstancing(ip, 'parts', 3, 20);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, ib.data, 0, n * 20);
+      gl.drawElementsInstanced(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0, n);
+    };
+    draw('lampPost', 0);
+    draw('lampHead', this.p.lamps === 'neon' ? 3.2 : 2.6);
+  }
+};
+
+/* ---------------- lamp meshes ---------------- */
+function buildLampPost() {
+  const g = Geo(), DARK = [0.16, 0.17, 0.20];
+  geoCyl(g, 0, 0, 0, 0.09, 0.07, 3.4, DARK, 8, true, false);
+  geoBox(g, 0, 3.45, 0, 0.42, 0.08, 0.42, DARK);             // cap
+  geoBox(g, 0, 2.95, 0, 0.36, 0.06, 0.36, DARK);             // collar
+  return g;
+}
+function buildLampHead() {
+  const g = Geo(), W = [1, 1, 1];
+  geoBox(g, 0, 3.2, 0, 0.30, 0.44, 0.30, W);                 // the glowing lantern pane
+  return g;
+}
+
+</script>
 <script>/* js/fx.js */
 /* =====================================================================
    fx.js — GPU particles: edge spray, powder plumes, landing impacts,
@@ -3056,6 +3283,7 @@ const Scenery = {
 'use strict';
 
 const MAXP = 2600;
+const ONE3 = [1, 1, 1];
 
 class Particles {
   constructor() {
@@ -3242,7 +3470,8 @@ class Particles {
       const fade = Math.min(1, t * 2.6) * Math.min(1, (1 - t) * 8 + 0.25);
       const o = i * 8;
       d[o] = this.px[i]; d[o + 1] = this.py[i]; d[o + 2] = this.pz[i]; d[o + 3] = Math.max(0.02, this.size[i]);
-      d[o + 4] = this.r[i]; d[o + 5] = this.g[i]; d[o + 6] = this.b[i]; d[o + 7] = this.a[i] * fade;
+      const pt = Atmos.p.spray || ONE3;          // snow spray is unlit: dim it at night
+      d[o + 4] = this.r[i] * pt[0]; d[o + 5] = this.g[i] * pt[1]; d[o + 6] = this.b[i] * pt[2]; d[o + 7] = this.a[i] * fade;
     }
     const p = GL.prog.particle.use();
     gl.uniformMatrix4fv(p.uProj, false, Cam.proj);
@@ -3591,6 +3820,9 @@ class Player {
     if (this.airborne) this.flipVis = this.flip;
     else this.flipVis = damp(this.flipVis, 0, 14, dt);
     if (this.yawVis) this.yawVis = Math.abs(this.yawVis) < 1e-3 ? 0 : damp(this.yawVis, 0, 12, dt);
+    // braking on the snow: blend into the heelside skid-stop pose (render-only)
+    const wantBrake = !this.airborne && !this.grind && this.crashTimer <= 0 ? clamp(this.braking, 0, 1) : 0;
+    this.brakeVis = damp(this.brakeVis || 0, wantBrake, 7, dt);
   }
 
   /* ---------------- on the snow ---------------- */
@@ -3973,6 +4205,18 @@ class Player {
       dir = V3(dir.x * c - right.x * sn, dir.y * c - right.y * sn, dir.z * c - right.z * sn);
       right = V3(right.x * c + this.dir.x * sn, right.y * c + this.dir.y * sn, right.z * c + this.dir.z * sn);
     }
+    const bv = this.brakeVis || 0;
+    if (bv > 0.01) {
+      // heelside skid stop: swing the board across the fall line (the rider ends up
+      // facing down the hill, back to the camera) and rock it onto the heel edge
+      const d = bv * Math.PI * 0.46, c = Math.cos(d), sn = Math.sin(d);
+      const nd = V3(dir.x * c - right.x * sn, dir.y * c - right.y * sn, dir.z * c - right.z * sn);
+      const nr = V3(right.x * c + dir.x * sn, right.y * c + dir.y * sn, right.z * c + dir.z * sn);
+      dir = nd; right = nr;
+      const t = bv * 0.42, ct = Math.cos(t), st = Math.sin(t);
+      up = V3.norm(V3(), V3(up.x * ct - right.x * st, up.y * ct - right.y * st, up.z * ct - right.z * st));
+      right = V3.norm(V3(), V3.cross(V3(), dir, up));
+    }
     m4axes(this.boardMat, dir, up, right, this.pos.x, this.pos.y - RIDE_H, this.pos.z);
     const BM = this.boardMat;
     const local = (x, y, z) => V3(
@@ -3983,12 +4227,12 @@ class Player {
     const nrm = (x, y, z) => V3.norm(V3(), V3(x, y, z));
     const lerpV = (a, b, k) => V3(lerp(a.x, b.x, k), lerp(a.y, b.y, k), lerp(a.z, b.z, k));
 
-    const t = GL.time, crash = this.crashTimer > 0, air = this.airborne, lean = this.lean * LEAN_VIS;
+    const t = GL.time, crash = this.crashTimer > 0, air = this.airborne, lean = this.lean * LEAN_VIS - bv * 0.85;   // braking: sit back onto the heels
     const grab = !crash && air && this.grab ? this.grab : null;
     const tuck = air ? Math.max(this.tuck, this.braking, Math.min(1, Math.abs(this.flipRate) / 2)) : this.tuck;
 
     // ---- posture ----
-    let crouch = lerp(1, 0.80, tuck) * (1 - clamp(this.load - 1, 0, 1.6) * 0.12);
+    let crouch = lerp(1, 0.80, tuck) * (1 - clamp(this.load - 1, 0, 1.6) * 0.12) * (1 - 0.12 * bv);
     if (air) crouch *= 0.92;
     if (grab) crouch = Math.min(crouch, 0.66);
     const bob = Math.sin(t * (4 + this.speed * 0.35)) * this.chop * 0.04;
@@ -4008,7 +4252,7 @@ class Player {
       Z = nrm(Z.x - Y.x * d, Z.y - Y.y * d, Z.z - Y.z * d);
       return [V3.cross(V3(), Y, Z), Y, Z];            // right-handed: Z = X × Y
     };
-    let open = 0.62 + (air ? clamp(this.spin * 0.08, -0.3, 0.3) : 0);
+    let open = (0.62 + (air ? clamp(this.spin * 0.08, -0.3, 0.3) : 0)) * (1 - 0.6 * bv);   // square up to the slope when stopping
     // toe-side turns (lean > 0) press the chest forward over the toes; heel-side turns
     // (lean < 0) sit back over the heels — otherwise the constant forward bend
     // cancels most of a heel-side lean and the rider looks like they lean out
@@ -4073,7 +4317,8 @@ class Player {
 
     // head looks down the hill toward the nose
     const headP = add(torsoP, TY, 0.70);
-    let HZ = nrm(dir.x * 0.75 + TZ.x * 0.5, dir.y * 0.75 + TZ.y * 0.5, dir.z * 0.75 + TZ.z * 0.5);
+    const fw = this.dir;               // look where we're going (the board may be skidding sideways)
+    let HZ = nrm(fw.x * 0.75 + TZ.x * 0.5, fw.y * 0.75 + TZ.y * 0.5, fw.z * 0.75 + TZ.z * 0.5);
     const hd = V3.dot(HZ, TY);
     HZ = nrm(HZ.x - TY.x * hd, HZ.y - TY.y * hd, HZ.z - TY.z * hd);
     const HX = V3.cross(V3(), TY, HZ);
@@ -4160,7 +4405,7 @@ const Input = {
       KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right',
       KeyS: 'brake', ArrowDown: 'brake', KeyW: 'tuck', ArrowUp: 'tuck',
       Space: 'jump', KeyR: 'restart', KeyP: 'pause', KeyM: 'mute',
-      Backquote: 'debug', KeyJ: 'Indy', KeyK: 'method', KeyL: 'mutegrab', Semicolon: 'stale'
+      KeyN: 'atmos', Backquote: 'debug', KeyJ: 'Indy', KeyK: 'method', KeyL: 'mutegrab', Semicolon: 'stale'
     };
     window.addEventListener('keydown', (e) => {
       if (e.repeat) return;
@@ -4176,7 +4421,8 @@ const Input = {
         return;
       }
       if (e.code === 'Escape' && (Game.state === 'over' || Game.state === 'pause')) { Game.toMenu(); return; }
-      this.anyKey = true;
+      // N (atmosphere) and M (mute) are settings, not "drop in"
+      if (!(Game.state === 'menu' && (e.code === 'KeyN' || e.code === 'KeyM'))) this.anyKey = true;
       const k = keyMap[e.code];
       if (!k) return;
       if (!this.down[k]) {
@@ -4238,6 +4484,9 @@ const Input = {
     const lb = $('toLevels');
     lb.addEventListener('pointerdown', (e) => e.stopPropagation());
     lb.addEventListener('click', (e) => { e.stopPropagation(); Game.toMenu(); });
+    const ab = $('atmosBtn');
+    ab.addEventListener('pointerdown', (e) => e.stopPropagation());
+    ab.addEventListener('click', (e) => { e.stopPropagation(); Atmos.cycle(); ab.blur(); });
     const mb = $('muteBtn');
     mb.addEventListener('pointerdown', (e) => e.stopPropagation());   // don't start a run from the menu
     mb.addEventListener('click', (e) => { e.stopPropagation(); Audio.init(); Audio.resume(); Game.toggleMute(); mb.blur(); });
@@ -4356,6 +4605,7 @@ const Input = {
     if (k === 'restart') { if (Game.state === 'play' || Game.state === 'over') Game.restart(true); }
     else if (k === 'pause') Game.togglePause();
     else if (k === 'mute') Game.toggleMute();
+    else if (k === 'atmos') { if (Level.cur.zen) Atmos.cycle(); }
     else if (k === 'debug') $('debug').classList.toggle('on');
   },
 
@@ -4402,6 +4652,7 @@ const Game = {
     $('muteBtn').classList.toggle('muted', Audio.muted);
     this.buildLives();
     Sun.init();
+    Atmos.load();
     let lv = 'mountain';
     try { lv = localStorage.getItem('powderline.level') || 'mountain'; } catch (e) { }
     this.selectLevel(Level.defs[lv] ? lv : 'mountain', true);
@@ -4432,6 +4683,7 @@ const Game = {
       Cam.snap(this.P);
     }
     this.loadBest();
+    Atmos.refresh();
   },
 
   bestKey() { return Level.cur.id === 'mountain' ? 'powderline.best' : 'powderline.best.' + Level.cur.id; },
@@ -4688,6 +4940,7 @@ const Game = {
   render() {
     const P = this.P;
     P.buildPose();
+    Atmos.update(P);
     Sun.update(P.pos.x, P.pos.y, P.pos.z);
     Render.shadows(P);
     Render.scene(P, this.fx, this.state);

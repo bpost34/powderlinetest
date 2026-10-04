@@ -141,6 +141,7 @@ const Sun = {
     gl.uniform1f(p.uTime, GL.time);
     gl.uniformMatrix4fv(p.uLightVP, false, this.lightVP);
     gl.uniform3f(p.uCamPos, Cam.pos.x, Cam.pos.y, Cam.pos.z);
+    Atmos.setUniforms(p);                    // lamps / rider glow / neon grid
     gl.uniformMatrix4fv(p.uView, false, Cam.view);
     // every world program multiplies by uProj; without this the shadow and
     // lit passes would transform by a zero matrix and draw nothing.
@@ -276,7 +277,8 @@ const Render = {
     const gl = GL.gl;
     gl.bindFramebuffer(gl.FRAMEBUFFER, GL.vao.scene.fb);
     gl.viewport(0, 0, GL.w, GL.h);
-    gl.clearColor(0.62, 0.74, 0.90, 1);
+    const ap = Atmos.p;
+    gl.clearColor(ap.clear[0], ap.clear[1], ap.clear[2], 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
     // ---- sky ----
@@ -290,8 +292,10 @@ const Render = {
     gl.uniformMatrix4fv(sky.uView, false, Cam.view);
     gl.uniform3f(sky.uSunDir, Sun.dir.x, Sun.dir.y, Sun.dir.z);
     gl.uniform3f(sky.uSunColor, Sun.color[0], Sun.color[1], Sun.color[2]);
-    gl.uniform3f(sky.uZenith, 0.13, 0.32, 0.68);
-    gl.uniform3f(sky.uHorizon, 0.78, 0.86, 0.96);
+    gl.uniform3fv(sky.uZenith, ap.zenith);
+    gl.uniform3fv(sky.uHorizon, ap.horizon);
+    gl.uniform1f(sky.uStars, ap.stars);
+    gl.uniform1f(sky.uCloudLum, ap.cloudLum);
     gl.uniform1f(sky.uTime, GL.time * 60);
     const skyM = GL.mesh.sky;
     gl.bindVertexArray(skyM.vao);
@@ -363,6 +367,9 @@ const Render = {
 
     // ---- gates ----
     this.drawGates(ip, P);
+
+    // ---- night: lamp posts along the run ----
+    Atmos.drawLamps(ip, P);
 
     // ---- rider + board ----
     const lp = GL.prog.lit.use();
@@ -495,7 +502,7 @@ const Render = {
     const bp = GL.prog.bright.use();
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, GL.vao.scene.color);
     gl.uniform1i(bp.uTex, 0);
-    gl.uniform1f(bp.uThresh, 1.05);
+    gl.uniform1f(bp.uThresh, Atmos.p.bloomThresh);
     gl.bindVertexArray(tri.vao);
     for (let l = 3; l < 8; l++) { gl.disableVertexAttribArray(l); gl.vertexAttribDivisor(l, 0); }
     gl.drawElements(gl.TRIANGLES, tri.count, gl.UNSIGNED_INT, 0);
@@ -525,7 +532,7 @@ const Render = {
     gl.uniform1i(cp.uScene, 0);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, GL.vao.bloomA.color);
     gl.uniform1i(cp.uBloom, 1);
-    gl.uniform1f(cp.uExposure, 1.02);
+    gl.uniform1f(cp.uExposure, Atmos.p.exposure);
     gl.uniform1f(cp.uVignette, 0.85);
     gl.uniform1f(cp.uSpeed, speedN);
     gl.uniform1f(cp.uTime, GL.time);
