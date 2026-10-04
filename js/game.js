@@ -45,10 +45,17 @@ const Input = {
       this.anyKey = true;
       const k = keyMap[e.code];
       if (!k) return;
-      if (!this.down[k]) { if (k === 'jump') this.jumpEdge = true; this.onPress(k); }
+      if (!this.down[k]) {
+        if (k === 'jump') { this.jumpHeld = Game.state === 'play'; this.chargeT = 0; }   // a press that started a run never jumps
+        this.onPress(k);
+      }
       this.down[k] = true;
     });
-    window.addEventListener('keyup', (e) => { const k = keyMap[e.code]; if (k) this.down[k] = false; });
+    window.addEventListener('keyup', (e) => {
+      const k = keyMap[e.code]; if (!k) return;
+      if (k === 'jump') this.releaseJump();
+      this.down[k] = false;
+    });
     window.addEventListener('blur', () => { this.down = {}; Cam.dragging = false; });
 
     // camera: hold right or middle mouse button and drag to orbit; wheel zooms
@@ -126,10 +133,10 @@ const Input = {
       const on = (e) => {
         e.preventDefault(); e.stopPropagation();
         try { el.setPointerCapture(e.pointerId); } catch (_) { }
-        if (!this.down[k] && k === 'jump') this.jumpEdge = true;
+        if (!this.down[k] && k === 'jump') { this.jumpHeld = Game.state === 'play'; this.chargeT = 0; }
         this.down[k] = true; el.classList.add('held');
       };
-      const off = () => { this.down[k] = false; el.classList.remove('held'); };
+      const off = () => { if (k === 'jump') this.releaseJump(); this.down[k] = false; el.classList.remove('held'); };
       el.addEventListener('pointerdown', on);
       el.addEventListener('pointerup', off); el.addEventListener('pointercancel', off);
       el.addEventListener('lostpointercapture', off);
@@ -218,17 +225,27 @@ const Input = {
     else if (k === 'debug') $('debug').classList.toggle('on');
   },
 
+  /* Space / OLLIE released: jump with however long it was held */
+  jumpHeld: false, chargeT: 0, jumpRelease: false, releaseCharge: 0,
+  releaseJump() {
+    if (this.down.jump && this.jumpHeld && Game.state === 'play') { this.jumpRelease = true; this.releaseCharge = this.chargeT; }
+    this.jumpHeld = false;
+  },
+
   sample(dt) {
     let target = (this.down.right ? 1 : 0) - (this.down.left ? 1 : 0);
     if (this.touchSteer !== null) target = this.touchSteer;          // thumb on the pad wins
     else if (target === 0 && this.tiltOn && this.tiltSteer !== null) target = this.tiltSteer;
     this.steer = damp(this.steer, target, 11, dt);
     this.brake = !!this.down.brake;
-    this.tuck = !!this.down.tuck;
+    const loading = !!this.down.jump && this.jumpHeld;
+    if (loading) this.chargeT += dt;
+    this.tuck = !!this.down.tuck || loading;                         // holding Space = tuck
     this.grab = this.down.method ? 'method' : this.down.Indy ? 'Indy'
       : this.down.stale ? 'stale' : this.down.mutegrab ? 'mute' : null;
-    const j = this.jumpEdge; this.jumpEdge = false;
-    return { steer: this.steer, brake: this.brake, tuck: this.tuck, jump: j, grab: this.grab };
+    const j = this.jumpRelease; this.jumpRelease = false;
+    return { steer: this.steer, brake: this.brake, tuck: this.tuck, jump: j, charge: this.releaseCharge,
+             flipFwd: !!this.down.tuck, flipBack: !!this.down.brake, grab: this.grab };
   }
 };
 
@@ -324,7 +341,7 @@ const Game = {
     Audio.init(); Audio.resume();
     $('menu').classList.add('hide');
     this.restart(true);
-    Input.jumpEdge = false;           // the key that dropped us in is not an ollie
+    Input.jumpHeld = false; Input.jumpRelease = false;   // the key that dropped us in is not an ollie
     Audio.dropIn();
   },
 

@@ -108,7 +108,7 @@ class Player {
 
     if (this.jumpBuffer > 0) this.jumpBuffer -= dt;
     if (this.pumpCooldown > 0) this.pumpCooldown -= dt;
-    if (input.jump) this.jumpBuffer = 0.14;
+    if (input.jump) { this.jumpBuffer = 0.14; this.jumpCharge = input.charge !== undefined ? input.charge : 0.3; }
 
     this.updateBasis();
 
@@ -223,7 +223,7 @@ class Player {
         this.airborne = true; this.airTime = 0;
         this.vel.x = fX * vFwd + rX * vSide;
         this.vel.z = fZ * vFwd + rZ * vSide;
-        this.vel.y = (5.6 + clamp(sp * 0.10, 0, 2.2)) * (0.80 + this.load * 0.24);
+        this.vel.y = this.popSpeed(sp) * (0.80 + this.load * 0.24);
         this.jumpBuffer = 0; this.pumpCooldown = 0.26;
         this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false; this.autoYaw = null; this.airLabel = null;
         fx.puff(this.pos.x, this.groundY, this.pos.z, 0.7 + this.load * 0.3);
@@ -256,6 +256,7 @@ class Player {
       this.vel.z = fZ * vFwd + rZ * vSide;
       this.vel.y = Math.max(0, (hB - hC) / e) * sp;   // leave along the ramp we're coming off (the slope behind)
       this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false; this.autoYaw = null; this.airLabel = null;
+      this.coyote = 0.25;                            // a jump released just after leaving the lip still pops
       this.unload = 1;
       return;
     }
@@ -272,7 +273,24 @@ class Player {
   }
 
   /* ---------------- in the air ---------------- */
+  /* ollie pop: base on speed, scaled by how long Space/OLLIE was held (0.6 s = full load) */
+  popSpeed(sp) {
+    const charge = this.jumpCharge !== undefined ? this.jumpCharge : 0.3;
+    return (5.6 + clamp(sp * 0.10, 0, 2.2)) * lerp(0.8, 1.3, clamp(charge / 0.6, 0, 1));
+  }
+
   stepAir(dt, input, fx) {
+    // "coyote time": a bump or lip launched us a moment before the jump was
+    // released — still give the full ollie pop (plus some of the lip's own lift)
+    if (this.coyote > 0) {
+      this.coyote -= dt;
+      if (this.jumpBuffer > 0) {
+        this.vel.y = Math.max(0, this.vel.y) * 0.6 + this.popSpeed(this.speed);
+        this.coyote = 0; this.jumpBuffer = 0;
+        fx.puff(this.pos.x, this.groundY, this.pos.z, 0.8);
+        Audio.ollie();
+      }
+    }
     this.vel.y -= G * dt;
     // gentle air drag
     const k = 1 - 0.05 * dt;
@@ -291,8 +309,11 @@ class Player {
     // flips: W pitches forward = frontflip, S pulls back = backflip. Holding W/S
     // through the takeoff (tucking for speed) doesn't count — the key has to
     // be pressed fresh once airborne, so crest launches never flip you by accident.
-    if (!input.tuck && !input.brake) this.flipArmed = true;
-    const want = this.flipArmed ? (input.brake ? 1 : 0) - (input.tuck ? 1 : 0) : 0;   // + = nose up = backflip
+    // (flip keys are W/S only — holding Space to load an ollie must never flip you)
+    const fF = input.flipFwd !== undefined ? input.flipFwd : input.tuck;
+    const fB = input.flipBack !== undefined ? input.flipBack : input.brake;
+    if (!fF && !fB) this.flipArmed = true;
+    const want = this.flipArmed ? (fB ? 1 : 0) - (fF ? 1 : 0) : 0;   // + = nose up = backflip
     this.flipRate = damp(this.flipRate, want * 4.2, 9, dt);
     this.flip += this.flipRate * dt;
 
@@ -441,10 +462,11 @@ class Player {
       Game.onGrind(g.time, ang);
       this.grind = null;
       this.airborne = true; this.airTime = 0;
-      this.vel.y = this.jumpBuffer > 0 ? 5.2 : Math.max(1.2, this.vel.y);
+      const popped = this.jumpBuffer > 0;
+      this.vel.y = popped ? Math.max(5.2, this.popSpeed(g.s) * 0.9) : Math.max(1.2, this.vel.y);
       this.jumpBuffer = 0;
       this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false; this.autoYaw = null; this.airLabel = null;
-      if (!off) Audio.ollie();
+      if (!off) Audio.ollie(); else this.coyote = 0.25;
     }
     const half = BOARD_L * 0.5 * 0.86;
     V3.set(this.frontPos, this.pos.x + this.dir.x * half, this.pos.y, this.pos.z + this.dir.z * half);

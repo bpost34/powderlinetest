@@ -256,7 +256,7 @@
     <span><i class="key">A</i><i class="key">D</i><span class="kdesc">carve</span></span>
     <span><i class="key">S</i><span class="kdesc">brake · backflip</span></span>
     <span><i class="key">W</i><span class="kdesc">tuck · frontflip</span></span>
-    <span><i class="key">Space</i><span class="kdesc">ollie</span></span>
+    <span><i class="key">Space</i><span class="kdesc">hold · release to ollie</span></span>
     <span><i class="key">J K L ;</i><span class="kdesc">grab</span></span>
     <span><i class="key">P</i><span class="kdesc">pause</span></span>
     <span><i class="key">Right/Middle drag</i><span class="kdesc">camera</span></span>
@@ -272,15 +272,15 @@
   <div class="keys kb-only">
     <div><i class="key">A</i> <i class="key">D</i> / <i class="key">←</i> <i class="key">→</i></div><div>Carve &amp; steer (spin in air)</div>
     <div><i class="key">S</i> / <i class="key">↓</i></div><div>Skid brake · backflip in the air</div>
-    <div><i class="key">W</i> / <i class="key">↑</i></div><div>Tuck — go faster · front flip in the air</div>
-    <div><i class="key">Space</i></div><div>Ollie / pump the lip</div>
+    <div><i class="key">W</i> / <i class="key">↑</i></div><div>Tuck · front flip in the air</div>
+    <div><i class="key">Space</i></div><div>Hold to tuck &amp; load · release to ollie (or pump a dip)</div>
     <div><i class="key">J</i> <i class="key">K</i> <i class="key">L</i> <i class="key">;</i></div><div>Grabs (hold in air)</div>
     <div><i class="key">Right</i> / <i class="key">Middle</i> drag</div><div>Orbit camera · wheel to zoom</div>
     <div><i class="key">R</i> <i class="key">P</i> <i class="key">M</i> <i class="key">`</i></div><div>Restart · pause · mute · debug</div>
   </div>
   <div class="keys touch-only" style="grid-template-columns:auto auto">
     <div><i class="key">steer pad</i></div><div>Carve &amp; steer (spin in air)</div>
-    <div><i class="key">ollie</i></div><div>Jump / pump the lip</div>
+    <div><i class="key">ollie</i></div><div>Hold to tuck &amp; load · release to jump</div>
     <div><i class="key">tuck</i> <i class="key">brake</i></div><div>Speed / slow · front &amp; back flips in the air</div>
     <div><i class="key">grab</i></div><div>Hold in the air for style points</div>
     <div><i class="key">drag</i></div><div>Swipe open screen to look around</div>
@@ -322,7 +322,7 @@
 
 <div id="touch">
   <div id="steerPad"><span class="tlabel">steer</span><span class="arr" style="left:14px">◀</span><span class="arr" style="right:14px">▶</span><div id="steerKnob"></div></div>
-  <div class="tbtn" id="tJ">ollie</div>
+  <div class="tbtn" id="tJ">ollie<small>hold · release</small></div>
   <div class="tbtn" id="tT">tuck<small>front flip</small></div>
   <div class="tbtn" id="tB">brake<small>back flip</small></div>
   <div class="tbtn" id="tG">grab</div>
@@ -332,16 +332,16 @@
 <div id="fatal"></div>
 <div id="foot">built from scratch — webgl2 · procedural terrain · edge-based carve physics</div>
 
-<script src="js/math.js?v=20261004f"></script>
-<script src="js/world.js?v=20261004f"></script>
-<script src="js/meshes.js?v=20261004f"></script>
-<script src="js/levels.js?v=20261004f"></script>
-<script src="js/gl.js?v=20261004f"></script>
-<script src="js/render.js?v=20261004f"></script>
-<script src="js/scenery.js?v=20261004f"></script>
-<script src="js/fx.js?v=20261004f"></script>
-<script src="js/audio.js?v=20261004f"></script>
-<script src="js/player.js?v=20261004f"></script>
-<script src="js/game.js?v=20261004f"></script>
+<script src="js/math.js?v=20261004g"></script>
+<script src="js/world.js?v=20261004g"></script>
+<script src="js/meshes.js?v=20261004g"></script>
+<script src="js/levels.js?v=20261004g"></script>
+<script src="js/gl.js?v=20261004g"></script>
+<script src="js/render.js?v=20261004g"></script>
+<script src="js/scenery.js?v=20261004g"></script>
+<script src="js/fx.js?v=20261004g"></script>
+<script src="js/audio.js?v=20261004g"></script>
+<script src="js/player.js?v=20261004g"></script>
+<script src="js/game.js?v=20261004g"></script>
 </body>
 </html>

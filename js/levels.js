@@ -72,6 +72,7 @@ function pipeLipLaunch(P, cx, B, R, env) {
   P.pos.x = cx + out * (B + R - 0.5);
   P.spin = 0; P.flip = 0; P.flipRate = 0; P.flipArmed = false;
   P.lean = 0;                       // carve lean shouldn't turn into an accidental spin
+  P.coyote = 0.25;                  // releasing the jump right at the lip adds an ollie pop
   // turn the board during the air so it comes down facing back into the pipe
   // (mirror the heading across the pipe axis) — the classic frontside/backside air.
   // predicted travel on landing: back into the pipe (the fall turns into inward

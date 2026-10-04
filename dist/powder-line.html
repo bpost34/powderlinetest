@@ -256,7 +256,7 @@
     <span><i class="key">A</i><i class="key">D</i><span class="kdesc">carve</span></span>
     <span><i class="key">S</i><span class="kdesc">brake · backflip</span></span>
     <span><i class="key">W</i><span class="kdesc">tuck · frontflip</span></span>
-    <span><i class="key">Space</i><span class="kdesc">ollie</span></span>
+    <span><i class="key">Space</i><span class="kdesc">hold · release to ollie</span></span>
     <span><i class="key">J K L ;</i><span class="kdesc">grab</span></span>
     <span><i class="key">P</i><span class="kdesc">pause</span></span>
     <span><i class="key">Right/Middle drag</i><span class="kdesc">camera</span></span>
@@ -272,15 +272,15 @@
   <div class="keys kb-only">
     <div><i class="key">A</i> <i class="key">D</i> / <i class="key">←</i> <i class="key">→</i></div><div>Carve &amp; steer (spin in air)</div>
     <div><i class="key">S</i> / <i class="key">↓</i></div><div>Skid brake · backflip in the air</div>
-    <div><i class="key">W</i> / <i class="key">↑</i></div><div>Tuck — go faster · front flip in the air</div>
-    <div><i class="key">Space</i></div><div>Ollie / pump the lip</div>
+    <div><i class="key">W</i> / <i class="key">↑</i></div><div>Tuck · front flip in the air</div>
+    <div><i class="key">Space</i></div><div>Hold to tuck &amp; load · release to ollie (or pump a dip)</div>
     <div><i class="key">J</i> <i class="key">K</i> <i class="key">L</i> <i class="key">;</i></div><div>Grabs (hold in air)</div>
     <div><i class="key">Right</i> / <i class="key">Middle</i> drag</div><div>Orbit camera · wheel to zoom</div>
     <div><i class="key">R</i> <i class="key">P</i> <i class="key">M</i> <i class="key">`</i></div><div>Restart · pause · mute · debug</div>
   </div>
   <div class="keys touch-only" style="grid-template-columns:auto auto">
     <div><i class="key">steer pad</i></div><div>Carve &amp; steer (spin in air)</div>
-    <div><i class="key">ollie</i></div><div>Jump / pump the lip</div>
+    <div><i class="key">ollie</i></div><div>Hold to tuck &amp; load · release to jump</div>
     <div><i class="key">tuck</i> <i class="key">brake</i></div><div>Speed / slow · front &amp; back flips in the air</div>
     <div><i class="key">grab</i></div><div>Hold in the air for style points</div>
     <div><i class="key">drag</i></div><div>Swipe open screen to look around</div>
@@ -322,7 +322,7 @@
 
 <div id="touch">
   <div id="steerPad"><span class="tlabel">steer</span><span class="arr" style="left:14px">◀</span><span class="arr" style="right:14px">▶</span><div id="steerKnob"></div></div>
-  <div class="tbtn" id="tJ">ollie</div>
+  <div class="tbtn" id="tJ">ollie<small>hold · release</small></div>
   <div class="tbtn" id="tT">tuck<small>front flip</small></div>
   <div class="tbtn" id="tB">brake<small>back flip</small></div>
   <div class="tbtn" id="tG">grab</div>
@@ -1442,6 +1442,7 @@ function pipeLipLaunch(P, cx, B, R, env) {
   P.pos.x = cx + out * (B + R - 0.5);
   P.spin = 0; P.flip = 0; P.flipRate = 0; P.flipArmed = false;
   P.lean = 0;                       // carve lean shouldn't turn into an accidental spin
+  P.coyote = 0.25;                  // releasing the jump right at the lip adds an ollie pop
   // turn the board during the air so it comes down facing back into the pipe
   // (mirror the heading across the pipe axis) — the classic frontside/backside air.
   // predicted travel on landing: back into the pipe (the fall turns into inward
@@ -3548,7 +3549,7 @@ class Player {
 
     if (this.jumpBuffer > 0) this.jumpBuffer -= dt;
     if (this.pumpCooldown > 0) this.pumpCooldown -= dt;
-    if (input.jump) this.jumpBuffer = 0.14;
+    if (input.jump) { this.jumpBuffer = 0.14; this.jumpCharge = input.charge !== undefined ? input.charge : 0.3; }
 
     this.updateBasis();
 
@@ -3663,7 +3664,7 @@ class Player {
         this.airborne = true; this.airTime = 0;
         this.vel.x = fX * vFwd + rX * vSide;
         this.vel.z = fZ * vFwd + rZ * vSide;
-        this.vel.y = (5.6 + clamp(sp * 0.10, 0, 2.2)) * (0.80 + this.load * 0.24);
+        this.vel.y = this.popSpeed(sp) * (0.80 + this.load * 0.24);
         this.jumpBuffer = 0; this.pumpCooldown = 0.26;
         this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false; this.autoYaw = null; this.airLabel = null;
         fx.puff(this.pos.x, this.groundY, this.pos.z, 0.7 + this.load * 0.3);
@@ -3696,6 +3697,7 @@ class Player {
       this.vel.z = fZ * vFwd + rZ * vSide;
       this.vel.y = Math.max(0, (hB - hC) / e) * sp;   // leave along the ramp we're coming off (the slope behind)
       this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false; this.autoYaw = null; this.airLabel = null;
+      this.coyote = 0.25;                            // a jump released just after leaving the lip still pops
       this.unload = 1;
       return;
     }
@@ -3712,7 +3714,24 @@ class Player {
   }
 
   /* ---------------- in the air ---------------- */
+  /* ollie pop: base on speed, scaled by how long Space/OLLIE was held (0.6 s = full load) */
+  popSpeed(sp) {
+    const charge = this.jumpCharge !== undefined ? this.jumpCharge : 0.3;
+    return (5.6 + clamp(sp * 0.10, 0, 2.2)) * lerp(0.8, 1.3, clamp(charge / 0.6, 0, 1));
+  }
+
   stepAir(dt, input, fx) {
+    // "coyote time": a bump or lip launched us a moment before the jump was
+    // released — still give the full ollie pop (plus some of the lip's own lift)
+    if (this.coyote > 0) {
+      this.coyote -= dt;
+      if (this.jumpBuffer > 0) {
+        this.vel.y = Math.max(0, this.vel.y) * 0.6 + this.popSpeed(this.speed);
+        this.coyote = 0; this.jumpBuffer = 0;
+        fx.puff(this.pos.x, this.groundY, this.pos.z, 0.8);
+        Audio.ollie();
+      }
+    }
     this.vel.y -= G * dt;
     // gentle air drag
     const k = 1 - 0.05 * dt;
@@ -3731,8 +3750,11 @@ class Player {
     // flips: W pitches forward = frontflip, S pulls back = backflip. Holding W/S
     // through the takeoff (tucking for speed) doesn't count — the key has to
     // be pressed fresh once airborne, so crest launches never flip you by accident.
-    if (!input.tuck && !input.brake) this.flipArmed = true;
-    const want = this.flipArmed ? (input.brake ? 1 : 0) - (input.tuck ? 1 : 0) : 0;   // + = nose up = backflip
+    // (flip keys are W/S only — holding Space to load an ollie must never flip you)
+    const fF = input.flipFwd !== undefined ? input.flipFwd : input.tuck;
+    const fB = input.flipBack !== undefined ? input.flipBack : input.brake;
+    if (!fF && !fB) this.flipArmed = true;
+    const want = this.flipArmed ? (fB ? 1 : 0) - (fF ? 1 : 0) : 0;   // + = nose up = backflip
     this.flipRate = damp(this.flipRate, want * 4.2, 9, dt);
     this.flip += this.flipRate * dt;
 
@@ -3881,10 +3903,11 @@ class Player {
       Game.onGrind(g.time, ang);
       this.grind = null;
       this.airborne = true; this.airTime = 0;
-      this.vel.y = this.jumpBuffer > 0 ? 5.2 : Math.max(1.2, this.vel.y);
+      const popped = this.jumpBuffer > 0;
+      this.vel.y = popped ? Math.max(5.2, this.popSpeed(g.s) * 0.9) : Math.max(1.2, this.vel.y);
       this.jumpBuffer = 0;
       this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false; this.autoYaw = null; this.airLabel = null;
-      if (!off) Audio.ollie();
+      if (!off) Audio.ollie(); else this.coyote = 0.25;
     }
     const half = BOARD_L * 0.5 * 0.86;
     V3.set(this.frontPos, this.pos.x + this.dir.x * half, this.pos.y, this.pos.z + this.dir.z * half);
@@ -4156,10 +4179,17 @@ const Input = {
       this.anyKey = true;
       const k = keyMap[e.code];
       if (!k) return;
-      if (!this.down[k]) { if (k === 'jump') this.jumpEdge = true; this.onPress(k); }
+      if (!this.down[k]) {
+        if (k === 'jump') { this.jumpHeld = Game.state === 'play'; this.chargeT = 0; }   // a press that started a run never jumps
+        this.onPress(k);
+      }
       this.down[k] = true;
     });
-    window.addEventListener('keyup', (e) => { const k = keyMap[e.code]; if (k) this.down[k] = false; });
+    window.addEventListener('keyup', (e) => {
+      const k = keyMap[e.code]; if (!k) return;
+      if (k === 'jump') this.releaseJump();
+      this.down[k] = false;
+    });
     window.addEventListener('blur', () => { this.down = {}; Cam.dragging = false; });
 
     // camera: hold right or middle mouse button and drag to orbit; wheel zooms
@@ -4237,10 +4267,10 @@ const Input = {
       const on = (e) => {
         e.preventDefault(); e.stopPropagation();
         try { el.setPointerCapture(e.pointerId); } catch (_) { }
-        if (!this.down[k] && k === 'jump') this.jumpEdge = true;
+        if (!this.down[k] && k === 'jump') { this.jumpHeld = Game.state === 'play'; this.chargeT = 0; }
         this.down[k] = true; el.classList.add('held');
       };
-      const off = () => { this.down[k] = false; el.classList.remove('held'); };
+      const off = () => { if (k === 'jump') this.releaseJump(); this.down[k] = false; el.classList.remove('held'); };
       el.addEventListener('pointerdown', on);
       el.addEventListener('pointerup', off); el.addEventListener('pointercancel', off);
       el.addEventListener('lostpointercapture', off);
@@ -4329,17 +4359,27 @@ const Input = {
     else if (k === 'debug') $('debug').classList.toggle('on');
   },
 
+  /* Space / OLLIE released: jump with however long it was held */
+  jumpHeld: false, chargeT: 0, jumpRelease: false, releaseCharge: 0,
+  releaseJump() {
+    if (this.down.jump && this.jumpHeld && Game.state === 'play') { this.jumpRelease = true; this.releaseCharge = this.chargeT; }
+    this.jumpHeld = false;
+  },
+
   sample(dt) {
     let target = (this.down.right ? 1 : 0) - (this.down.left ? 1 : 0);
     if (this.touchSteer !== null) target = this.touchSteer;          // thumb on the pad wins
     else if (target === 0 && this.tiltOn && this.tiltSteer !== null) target = this.tiltSteer;
     this.steer = damp(this.steer, target, 11, dt);
     this.brake = !!this.down.brake;
-    this.tuck = !!this.down.tuck;
+    const loading = !!this.down.jump && this.jumpHeld;
+    if (loading) this.chargeT += dt;
+    this.tuck = !!this.down.tuck || loading;                         // holding Space = tuck
     this.grab = this.down.method ? 'method' : this.down.Indy ? 'Indy'
       : this.down.stale ? 'stale' : this.down.mutegrab ? 'mute' : null;
-    const j = this.jumpEdge; this.jumpEdge = false;
-    return { steer: this.steer, brake: this.brake, tuck: this.tuck, jump: j, grab: this.grab };
+    const j = this.jumpRelease; this.jumpRelease = false;
+    return { steer: this.steer, brake: this.brake, tuck: this.tuck, jump: j, charge: this.releaseCharge,
+             flipFwd: !!this.down.tuck, flipBack: !!this.down.brake, grab: this.grab };
   }
 };
 
@@ -4435,7 +4475,7 @@ const Game = {
     Audio.init(); Audio.resume();
     $('menu').classList.add('hide');
     this.restart(true);
-    Input.jumpEdge = false;           // the key that dropped us in is not an ollie
+    Input.jumpHeld = false; Input.jumpRelease = false;   // the key that dropped us in is not an ollie
     Audio.dropIn();
   },
 
