@@ -132,7 +132,8 @@ const Level = {
 Level.define({
   id: 'mountain', name: 'Backcountry', blurb: 'Endless mountain · gates · natural kickers',
   height: mtnHeightAt, centerX: mtnCenterX,
-  clearHalf: PISTE_HALF * 0.95, gates: true, finishZ: null, spawnZ: 0
+  clearHalf: PISTE_HALF * 0.95, gates: true, finishZ: null, spawnZ: 0,
+  absorbCrests: true      // rollers/kickers only send you airborne if you ollie
 });
 function heightAt(x, z) { return Level.cur.height(x, z); }
 function centerX(z) { return Level.cur.centerX(z); }

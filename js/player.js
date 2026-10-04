@@ -226,7 +226,7 @@ class Player {
         this.airborne = true; this.airTime = 0;
         this.vel.x = fX * vFwd + rX * vSide;
         this.vel.z = fZ * vFwd + rZ * vSide;
-        this.vel.y = this.popSpeed(sp) * (0.80 + this.load * 0.24);
+        this.vel.y = this.popSpeed(sp) * (0.80 + Math.max(this.load, 1) * 0.24);   // a crest never weakens the pop
         this.jumpBuffer = 0; this.pumpCooldown = 0.26;
         this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false; this.autoYaw = null; this.airLabel = null;
         fx.puff(this.pos.x, this.groundY, this.pos.z, 0.7 + this.load * 0.3);
@@ -253,7 +253,10 @@ class Player {
     if (vFwd < 0.35) vFwd = damp(vFwd, 0.35, 1.2, dt);
 
     // ---- the mountain can't hold us over a crest → airborne ----
-    if (centripetal < -G * 1.05) {
+    // On natural terrain the rider soaks up crests with the legs and stays
+    // planted; air only comes from an ollie (hold Space, release near the top).
+    // Built kickers (park tables) still throw you off their lips.
+    if (centripetal < -G * 1.05 && !Level.cur.absorbCrests) {
       this.airborne = true; this.airTime = 0;
       this.vel.x = fX * vFwd + rX * vSide;
       this.vel.z = fZ * vFwd + rZ * vSide;

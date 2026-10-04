@@ -94,7 +94,8 @@ function pipeLipLaunch(P, cx, B, R, env) {
 Level.define({
   id: 'zen', name: 'Zen', blurb: 'Endless mountain · no gates, lives or score',
   height: mtnHeightAt, centerX: mtnCenterX,
-  clearHalf: PISTE_HALF * 0.95, gates: false, zen: true, finishZ: null, spawnZ: 0
+  clearHalf: PISTE_HALF * 0.95, gates: false, zen: true, finishZ: null, spawnZ: 0,
+  absorbCrests: true
 });
 
 /* =====================================================================
