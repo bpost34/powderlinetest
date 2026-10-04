@@ -185,9 +185,11 @@
   #foot{display:none!important}
   /* on menus the top-centre is the title — park the mute button in the corner */
   body:not(.playing) #muteBtn{left:auto;right:max(14px,env(safe-area-inset-right));margin-left:0}
+  /* zen: nothing to chase */
+  body.zen #lives, body.zen .corner.tr, body.zen #combo, body.zen #gateMark{display:none!important}
   /* level select */
   #levels{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:26px}
-  .lvl{position:relative;width:186px;padding:12px 14px 12px;border-radius:12px;border:1.5px solid rgba(190,225,255,.28);
+  .lvl{position:relative;width:176px;padding:12px 14px 12px;border-radius:12px;border:1.5px solid rgba(190,225,255,.28);
     background:rgba(10,22,38,.45);color:#eaf6ff;font-family:inherit;text-align:left;cursor:pointer;
     transition:border-color .15s,background .15s,transform .15s;touch-action:manipulation}
   .lvl b{display:block;font-size:15px;font-weight:800;letter-spacing:.02em}
@@ -206,7 +208,7 @@
     h1{font-size:clamp(38px,9vh,70px)}
     .sub{display:none}
     #levels{margin-top:12px;gap:8px}
-    .lvl{width:168px;padding:8px 10px}
+    .lvl{width:150px;padding:8px 10px}
     .lvl span{font-size:10px}
     .keys{margin-top:14px;gap:5px 20px;font-size:11px}
     .go{margin-top:16px}
@@ -287,8 +289,9 @@
     <button class="lvl" type="button" data-id="mountain"><i class="kb-only">1</i><b>Backcountry</b><span>Endless mountain · gates · kickers</span></button>
     <button class="lvl" type="button" data-id="pipe"><i class="kb-only">2</i><b>Half-pipe</b><span>Carve the walls · boost the lip</span></button>
     <button class="lvl" type="button" data-id="park"><i class="kb-only">3</i><b>Park</b><span>Tabletops · mini-pipe · rails</span></button>
+    <button class="lvl" type="button" data-id="zen"><i class="kb-only">4</i><b>Zen</b><span>Endless mountain · no gates, lives or score</span></button>
   </div>
-  <div class="go"><span class="kb-only">press 1–3 to pick a level · any other key to drop in</span><span class="touch-only">tap a level to drop in</span></div>
+  <div class="go"><span class="kb-only">press 1–4 to pick a level · any other key to drop in</span><span class="touch-only">tap a level to drop in</span></div>
   <button id="tiltBtn" class="touch-only" type="button">Tilt steering: OFF</button>
   <div id="rotate" class="touch-only">↻ turn your phone sideways for the best ride</div>
 </div>
@@ -329,16 +332,16 @@
 <div id="fatal"></div>
 <div id="foot">built from scratch — webgl2 · procedural terrain · edge-based carve physics</div>
 
-<script src="js/math.js?v=20261004c"></script>
-<script src="js/world.js?v=20261004c"></script>
-<script src="js/meshes.js?v=20261004c"></script>
-<script src="js/levels.js?v=20261004c"></script>
-<script src="js/gl.js?v=20261004c"></script>
-<script src="js/render.js?v=20261004c"></script>
-<script src="js/scenery.js?v=20261004c"></script>
-<script src="js/fx.js?v=20261004c"></script>
-<script src="js/audio.js?v=20261004c"></script>
-<script src="js/player.js?v=20261004c"></script>
-<script src="js/game.js?v=20261004c"></script>
+<script src="js/math.js?v=20261004d"></script>
+<script src="js/world.js?v=20261004d"></script>
+<script src="js/meshes.js?v=20261004d"></script>
+<script src="js/levels.js?v=20261004d"></script>
+<script src="js/gl.js?v=20261004d"></script>
+<script src="js/render.js?v=20261004d"></script>
+<script src="js/scenery.js?v=20261004d"></script>
+<script src="js/fx.js?v=20261004d"></script>
+<script src="js/audio.js?v=20261004d"></script>
+<script src="js/player.js?v=20261004d"></script>
+<script src="js/game.js?v=20261004d"></script>
 </body>
 </html>

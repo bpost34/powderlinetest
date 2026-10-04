@@ -87,6 +87,16 @@ function pipeLipLaunch(P, cx, B, R, env) {
 }
 
 /* =====================================================================
+   ZEN — the endless backcountry with nothing to chase: no gates, no lives,
+   no score. Wipeouts just pick you back up.
+   ===================================================================== */
+Level.define({
+  id: 'zen', name: 'Zen', blurb: 'Endless mountain · no gates, lives or score',
+  height: mtnHeightAt, centerX: mtnCenterX,
+  clearHalf: PISTE_HALF * 0.95, gates: false, zen: true, finishZ: null, spawnZ: 0
+});
+
+/* =====================================================================
    HALF-PIPE
    ===================================================================== */
 const PIPE = { B: 5.0, R: 4.4, SLOPE: 0.30, START: -30, LEN: 430, DECK: 12 };

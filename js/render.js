@@ -390,7 +390,7 @@ const Render = {
   },
 
   drawPipes(ip) {
-    if (Level.cur.id !== 'mountain') return;      // the mountain's random feature walls only
+    if (Level.cur.height !== mtnHeightAt) return;  // the mountain's random feature walls only
     const gl = GL.gl;
     const ib = GL.buf.parts, d = ib.data;
     let n = 0;

@@ -34,7 +34,8 @@ const Input = {
       // Safari requires an AudioContext to be created/resumed inside the
       // user-gesture call stack — doing it from the rAF loop is blocked.
       Audio.init(); Audio.resume();
-      const LV = { Digit1: 'mountain', Digit2: 'pipe', Digit3: 'park', Numpad1: 'mountain', Numpad2: 'pipe', Numpad3: 'park' };
+      const LV = { Digit1: 'mountain', Digit2: 'pipe', Digit3: 'park', Digit4: 'zen',
+                   Numpad1: 'mountain', Numpad2: 'pipe', Numpad3: 'park', Numpad4: 'zen' };
       if (LV[e.code] && (Game.state === 'menu' || Game.state === 'over')) {
         Game.selectLevel(LV[e.code]);
         if (Game.state === 'over') Game.restart();
@@ -266,6 +267,7 @@ const Game = {
     Level.cur = def;
     try { localStorage.setItem('powderline.level', id); } catch (e) { }
     for (const b of document.querySelectorAll('.lvl')) b.classList.toggle('sel', b.dataset.id === id);
+    document.body.classList.toggle('zen', !!def.zen);
     if (changed) {
       const lod = def.lod || [40, 20, 10];
       for (let i = 0; i < LODS.length; i++) LODS[i].res = lod[i];
@@ -366,8 +368,9 @@ const Game = {
   onCrash() {
     this.combo = 1; this.comboTimer = 0;
     this.flash = 0.45; this.desat = 1;
-    this.setLives(Math.max(0, this.lives - 1));
     this.msg('WIPEOUT', 1200);
+    if (Level.cur.zen) return;                 // zen: brush it off and keep riding
+    this.setLives(Math.max(0, this.lives - 1));
     if (this.lives <= 0) this._deadTimer = 1.1;
   },
   recover() { this.desat = 0; },
@@ -430,7 +433,7 @@ const Game = {
   showTrick(name, pts) {
     const el = $('trick');
     $('trickName').textContent = name;
-    $('trickPts').textContent = '+' + pts.toLocaleString();
+    $('trickPts').textContent = Level.cur.zen ? '' : '+' + pts.toLocaleString();
     el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
   },
 

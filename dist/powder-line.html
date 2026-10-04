@@ -185,9 +185,11 @@
   #foot{display:none!important}
   /* on menus the top-centre is the title — park the mute button in the corner */
   body:not(.playing) #muteBtn{left:auto;right:max(14px,env(safe-area-inset-right));margin-left:0}
+  /* zen: nothing to chase */
+  body.zen #lives, body.zen .corner.tr, body.zen #combo, body.zen #gateMark{display:none!important}
   /* level select */
   #levels{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:26px}
-  .lvl{position:relative;width:186px;padding:12px 14px 12px;border-radius:12px;border:1.5px solid rgba(190,225,255,.28);
+  .lvl{position:relative;width:176px;padding:12px 14px 12px;border-radius:12px;border:1.5px solid rgba(190,225,255,.28);
     background:rgba(10,22,38,.45);color:#eaf6ff;font-family:inherit;text-align:left;cursor:pointer;
     transition:border-color .15s,background .15s,transform .15s;touch-action:manipulation}
   .lvl b{display:block;font-size:15px;font-weight:800;letter-spacing:.02em}
@@ -206,7 +208,7 @@
     h1{font-size:clamp(38px,9vh,70px)}
     .sub{display:none}
     #levels{margin-top:12px;gap:8px}
-    .lvl{width:168px;padding:8px 10px}
+    .lvl{width:150px;padding:8px 10px}
     .lvl span{font-size:10px}
     .keys{margin-top:14px;gap:5px 20px;font-size:11px}
     .go{margin-top:16px}
@@ -287,8 +289,9 @@
     <button class="lvl" type="button" data-id="mountain"><i class="kb-only">1</i><b>Backcountry</b><span>Endless mountain · gates · kickers</span></button>
     <button class="lvl" type="button" data-id="pipe"><i class="kb-only">2</i><b>Half-pipe</b><span>Carve the walls · boost the lip</span></button>
     <button class="lvl" type="button" data-id="park"><i class="kb-only">3</i><b>Park</b><span>Tabletops · mini-pipe · rails</span></button>
+    <button class="lvl" type="button" data-id="zen"><i class="kb-only">4</i><b>Zen</b><span>Endless mountain · no gates, lives or score</span></button>
   </div>
-  <div class="go"><span class="kb-only">press 1–3 to pick a level · any other key to drop in</span><span class="touch-only">tap a level to drop in</span></div>
+  <div class="go"><span class="kb-only">press 1–4 to pick a level · any other key to drop in</span><span class="touch-only">tap a level to drop in</span></div>
   <button id="tiltBtn" class="touch-only" type="button">Tilt steering: OFF</button>
   <div id="rotate" class="touch-only">↻ turn your phone sideways for the best ride</div>
 </div>
@@ -1443,6 +1446,16 @@ function pipeLipLaunch(P, cx, B, R, env) {
   P.airLabel = out > 0 ? 'Frontside Air' : 'Backside Air';
   return true;
 }
+
+/* =====================================================================
+   ZEN — the endless backcountry with nothing to chase: no gates, no lives,
+   no score. Wipeouts just pick you back up.
+   ===================================================================== */
+Level.define({
+  id: 'zen', name: 'Zen', blurb: 'Endless mountain · no gates, lives or score',
+  height: mtnHeightAt, centerX: mtnCenterX,
+  clearHalf: PISTE_HALF * 0.95, gates: false, zen: true, finishZ: null, spawnZ: 0
+});
 
 /* =====================================================================
    HALF-PIPE
@@ -2633,7 +2646,7 @@ const Render = {
   },
 
   drawPipes(ip) {
-    if (Level.cur.id !== 'mountain') return;      // the mountain's random feature walls only
+    if (Level.cur.height !== mtnHeightAt) return;  // the mountain's random feature walls only
     const gl = GL.gl;
     const ib = GL.buf.parts, d = ib.data;
     let n = 0;
@@ -4123,7 +4136,8 @@ const Input = {
       // Safari requires an AudioContext to be created/resumed inside the
       // user-gesture call stack — doing it from the rAF loop is blocked.
       Audio.init(); Audio.resume();
-      const LV = { Digit1: 'mountain', Digit2: 'pipe', Digit3: 'park', Numpad1: 'mountain', Numpad2: 'pipe', Numpad3: 'park' };
+      const LV = { Digit1: 'mountain', Digit2: 'pipe', Digit3: 'park', Digit4: 'zen',
+                   Numpad1: 'mountain', Numpad2: 'pipe', Numpad3: 'park', Numpad4: 'zen' };
       if (LV[e.code] && (Game.state === 'menu' || Game.state === 'over')) {
         Game.selectLevel(LV[e.code]);
         if (Game.state === 'over') Game.restart();
@@ -4355,6 +4369,7 @@ const Game = {
     Level.cur = def;
     try { localStorage.setItem('powderline.level', id); } catch (e) { }
     for (const b of document.querySelectorAll('.lvl')) b.classList.toggle('sel', b.dataset.id === id);
+    document.body.classList.toggle('zen', !!def.zen);
     if (changed) {
       const lod = def.lod || [40, 20, 10];
       for (let i = 0; i < LODS.length; i++) LODS[i].res = lod[i];
@@ -4455,8 +4470,9 @@ const Game = {
   onCrash() {
     this.combo = 1; this.comboTimer = 0;
     this.flash = 0.45; this.desat = 1;
-    this.setLives(Math.max(0, this.lives - 1));
     this.msg('WIPEOUT', 1200);
+    if (Level.cur.zen) return;                 // zen: brush it off and keep riding
+    this.setLives(Math.max(0, this.lives - 1));
     if (this.lives <= 0) this._deadTimer = 1.1;
   },
   recover() { this.desat = 0; },
@@ -4519,7 +4535,7 @@ const Game = {
   showTrick(name, pts) {
     const el = $('trick');
     $('trickName').textContent = name;
-    $('trickPts').textContent = '+' + pts.toLocaleString();
+    $('trickPts').textContent = Level.cur.zen ? '' : '+' + pts.toLocaleString();
     el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
   },
 
