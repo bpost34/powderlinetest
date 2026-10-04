@@ -38,7 +38,7 @@ function fbm(x, y, oct, s) {
 }
 
 /* The fall line: the mountain meanders, so you can never just hold straight. */
-function centerX(z) {
+function mtnCenterX(z) {
   return (z * 0.11) * Math.sin(z * 0.0032) +
          Math.sin(z * 0.0071) * 34 +
          Math.sin(z * 0.0019 + 1.7) * 58 +
@@ -57,7 +57,7 @@ function featureAt(segIndex) {
   if (segIndex < 2) { f = null; _featCache.set(segIndex, f); return f; }
   const kind = r1 < 0.44 ? 'kicker' : (r1 < 0.62 ? 'rollers' : (r1 < 0.74 ? 'pipe' : null));
   if (!kind) { f = null; _featCache.set(segIndex, f); return f; }
-  const cx = centerX(z0);
+  const cx = mtnCenterX(z0);
   f = {
     kind, z: z0 + r2 * 30, x: cx + (r3 - 0.5) * PISTE_HALF * 1.1,
     h: kind === 'kicker' ? 3.4 + r1 * 3.6 : 1.15,
@@ -90,8 +90,8 @@ function kickerBump(x, z, k) {
 }
 
 /* ---------------- the height function ---------------- */
-function heightAt(x, z) {
-  const cx = centerX(z);
+function mtnHeightAt(x, z) {
+  const cx = mtnCenterX(z);
   const d = Math.abs(x - cx);
   const rough = sstep(PISTE_HALF * 0.55, PISTE_HALF * 2.1, d);   // 0 = groomed
 
@@ -119,6 +119,23 @@ function heightAt(x, z) {
   }
   return y;
 }
+
+/* ---------------- levels ----------------
+   Every system (physics, chunks, props, camera, gates) reads the terrain through
+   heightAt / centerX, which dispatch to the current level. The mountain is the
+   original endless backcountry run; levels.js adds the half-pipe and the park. */
+const Level = {
+  defs: {},
+  cur: null,
+  define(def) { this.defs[def.id] = def; if (!this.cur) this.cur = def; },
+};
+Level.define({
+  id: 'mountain', name: 'Backcountry', blurb: 'Endless mountain · gates · natural kickers',
+  height: mtnHeightAt, centerX: mtnCenterX,
+  clearHalf: PISTE_HALF * 0.95, gates: true, finishZ: null, spawnZ: 0
+});
+function heightAt(x, z) { return Level.cur.height(x, z); }
+function centerX(z) { return Level.cur.centerX(z); }
 
 const _n = V3();
 function normalAt(x, z, out) {
@@ -154,11 +171,12 @@ class Chunk {
       const rz = hash2(this.ix * 13 + i, this.iz * 29 + 7, 202);
       const x = this.x0 + rx * CHUNK, z = this.z0 + rz * CHUNK;
       const cx = centerX(z), d = Math.abs(x - cx);
-      if (d < PISTE_HALF * 0.95 || d > WALL_START + 46) continue;
+      const clear = Level.cur.clearHalf;
+      if (d < clear || d > WALL_START + 46) continue;
       const y = heightAt(x, z);
       const nz = normalAt(x, z, { x: 0, y: 0, z: 0 });
       if (nz.y < 0.78) continue;
-      const dense = sstep(PISTE_HALF, PISTE_HALF + 12, d);
+      const dense = sstep(clear, clear + 12, d);
       if (hash2(i, this.ix + this.iz * 7, 303) > dense * 0.92) continue;
       const sc = 0.75 + hash2(i, 9, 404) * 0.85;
       t.push({ x, y, z, sc, rot: hash2(i, 5, 505) * TAU, sway: hash2(i, 7, 606) * TAU });
@@ -168,7 +186,7 @@ class Chunk {
       const rz = hash2(this.ix * 53 + i, this.iz * 61 + 13, 808);
       const x = this.x0 + rx * CHUNK, z = this.z0 + rz * CHUNK;
       const cx = centerX(z), d = Math.abs(x - cx);
-      if (d < PISTE_HALF * 1.15) continue;
+      if (d < Level.cur.clearHalf * 1.2) continue;
       b.push({ x, y: heightAt(x, z), z, sc: 1.1 + hash2(i, 3, 909) * 3.2, rot: hash2(i, 1, 111) * TAU });
     }
     this.props = { trees: t, rocks: b };
@@ -235,6 +253,13 @@ const World = {
   builtThisFrame: 0,
 
   key(ix, iz) { return ix * 100000 + iz; },
+
+  /* drop every chunk (CPU + GPU) — used when the level changes */
+  reset() {
+    this.chunks.clear(); this.visible.length = 0; this.dirty = true;
+    _featCache.clear();
+    if (typeof GL !== 'undefined' && GL.purgeChunks) GL.purgeChunks();
+  },
 
   get(ix, iz) {
     const k = this.key(ix, iz);
@@ -321,6 +346,7 @@ const Gates = {
   next: 0,
   reset() { this.list.length = 0; this.next = 0; },
   ensure(zAhead) {
+    if (!Level.cur.gates) return;
     while (this.next * GATE_SPACING < zAhead) {
       const i = this.next++;
       const z = i * GATE_SPACING + 90;

@@ -122,7 +122,7 @@ const Scenery = {
   /* ---------------- per-frame ---------------- */
   update(dt, P) {
     // tracks: drop a point every ~0.35 m while the board is on the snow
-    if (P.airborne || P.crashTimer > 0 || P.speed < 1) { this.trailBreak = true; }
+    if (P.airborne || P.grind || P.crashTimer > 0 || P.speed < 1) { this.trailBreak = true; }
     else {
       const last = this.trail[this.trail.length - 1];
       if (this.trailBreak || !last || Math.hypot(P.pos.x - last.x, P.pos.z - last.z) > 0.35) {

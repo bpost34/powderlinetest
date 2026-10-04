@@ -174,12 +174,40 @@
     text-transform:uppercase;touch-action:manipulation}
   #tiltBtn.on{border-color:var(--accent);color:var(--accent)}
   body.touch #tiltBtn{display:block}
+  /* shorter desktop windows: drop the blurb and tighten the start screen so the level cards fit */
+  @media (max-height: 880px){
+    #menu .sub{display:none}
+    #menu .eyebrow{margin-bottom:10px}
+    #menu .keys{margin-top:16px;gap:5px 24px}
+    #menu .go{margin-top:16px}
+    #menu h1{font-size:clamp(44px,10vh,104px)}
+  }
+  #foot{display:none!important}
+  /* on menus the top-centre is the title — park the mute button in the corner */
+  body:not(.playing) #muteBtn{left:auto;right:max(14px,env(safe-area-inset-right));margin-left:0}
+  /* level select */
+  #levels{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:26px}
+  .lvl{position:relative;width:186px;padding:12px 14px 12px;border-radius:12px;border:1.5px solid rgba(190,225,255,.28);
+    background:rgba(10,22,38,.45);color:#eaf6ff;font-family:inherit;text-align:left;cursor:pointer;
+    transition:border-color .15s,background .15s,transform .15s;touch-action:manipulation}
+  .lvl b{display:block;font-size:15px;font-weight:800;letter-spacing:.02em}
+  .lvl span{display:block;font-size:11px;color:var(--dim);margin-top:4px;line-height:1.35}
+  .lvl i{position:absolute;top:9px;right:11px;font-style:normal;font-size:10px;font-weight:800;color:var(--dim);
+    border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+  .lvl:hover{border-color:rgba(190,225,255,.55)}
+  .lvl.sel{border-color:var(--accent);background:rgba(20,60,90,.55);box-shadow:0 0 18px rgba(95,226,255,.25)}
+  #toLevels{margin-top:16px;padding:9px 18px;border-radius:20px;border:1.5px solid rgba(190,225,255,.4);
+    background:rgba(10,22,38,.45);color:#eaf6ff;font:800 11px/1 inherit;font-family:inherit;letter-spacing:.16em;
+    text-transform:uppercase;cursor:pointer;touch-action:manipulation}
   #rotate{margin-top:16px;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--gold)}
   @media (orientation:landscape){#rotate{display:none!important}}
   @media (max-height:500px){
     .screen{padding:14px}
     h1{font-size:clamp(38px,9vh,70px)}
-    .sub{margin-top:10px;font-size:12.5px}
+    .sub{display:none}
+    #levels{margin-top:12px;gap:8px}
+    .lvl{width:168px;padding:8px 10px}
+    .lvl span{font-size:10px}
     .keys{margin-top:14px;gap:5px 20px;font-size:11px}
     .go{margin-top:16px}
     .stats{margin:14px 0 4px;gap:8px 34px}
@@ -255,14 +283,19 @@
     <div><i class="key">grab</i></div><div>Hold in the air for style points</div>
     <div><i class="key">drag</i></div><div>Swipe open screen to look around</div>
   </div>
-  <div class="go"><span class="kb-only">press any key to drop in</span><span class="touch-only">tap to drop in</span></div>
+  <div id="levels">
+    <button class="lvl" type="button" data-id="mountain"><i class="kb-only">1</i><b>Backcountry</b><span>Endless mountain · gates · kickers</span></button>
+    <button class="lvl" type="button" data-id="pipe"><i class="kb-only">2</i><b>Half-pipe</b><span>Carve the walls · boost the lip</span></button>
+    <button class="lvl" type="button" data-id="park"><i class="kb-only">3</i><b>Park</b><span>Tabletops · mini-pipe · rails</span></button>
+  </div>
+  <div class="go"><span class="kb-only">press 1–3 to pick a level · any other key to drop in</span><span class="touch-only">tap a level to drop in</span></div>
   <button id="tiltBtn" class="touch-only" type="button">Tilt steering: OFF</button>
   <div id="rotate" class="touch-only">↻ turn your phone sideways for the best ride</div>
 </div>
 
 <div class="screen hide" id="over">
   <div class="eyebrow" id="overTitle">Run over</div>
-  <h1 style="font-size:clamp(40px,8vw,84px)">RUN DOWN</h1>
+  <h1 id="overHead" style="font-size:clamp(40px,8vw,84px)">RUN DOWN</h1>
   <div class="stats">
     <div><div class="label">Distance</div><b class="num" id="sDist">0 m</b></div>
     <div><div class="label">Score</div><b class="num" id="sScore">0</b></div>
@@ -272,13 +305,14 @@
     <div><div class="label">Clean landings</div><b class="num" id="sLands">0</b></div>
   </div>
   <div class="newbest" id="newbest" style="display:none">★ new personal best</div>
-  <div class="go"><span class="kb-only">press R to ride again</span><span class="touch-only">tap to ride again</span></div>
+  <div class="go"><span class="kb-only">press R to ride again · Esc for levels</span><span class="touch-only">tap to ride again</span></div>
+  <button id="toLevels" type="button">Choose level</button>
 </div>
 
 <div class="screen hide" id="pause">
   <div class="eyebrow">paused</div>
   <h1 style="font-size:clamp(34px,7vw,70px)">CATCHING<br>YOUR BREATH</h1>
-  <div class="go"><span class="kb-only">press P to drop back in</span><span class="touch-only">tap to drop back in</span></div>
+  <div class="go"><span class="kb-only">press P to drop back in · Esc for levels</span><span class="touch-only">tap to drop back in</span></div>
 </div>
 
 <button id="muteBtn" type="button" aria-label="Mute" title="Mute (M)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" stroke="none"/><g class="waves"><path d="M16 9.5a3.5 3.5 0 0 1 0 5"/><path d="M18.5 7a7 7 0 0 1 0 10"/></g><g class="x"><path d="M16.5 9.5l5 5M21.5 9.5l-5 5"/></g></svg></button>
@@ -295,15 +329,16 @@
 <div id="fatal"></div>
 <div id="foot">built from scratch — webgl2 · procedural terrain · edge-based carve physics</div>
 
-<script src="js/math.js?v=20261003f"></script>
-<script src="js/world.js?v=20261003f"></script>
-<script src="js/meshes.js?v=20261003f"></script>
-<script src="js/gl.js?v=20261003f"></script>
-<script src="js/render.js?v=20261003f"></script>
-<script src="js/scenery.js?v=20261003f"></script>
-<script src="js/fx.js?v=20261003f"></script>
-<script src="js/audio.js?v=20261003f"></script>
-<script src="js/player.js?v=20261003f"></script>
-<script src="js/game.js?v=20261003f"></script>
+<script src="js/math.js?v=20261004b"></script>
+<script src="js/world.js?v=20261004b"></script>
+<script src="js/meshes.js?v=20261004b"></script>
+<script src="js/levels.js?v=20261004b"></script>
+<script src="js/gl.js?v=20261004b"></script>
+<script src="js/render.js?v=20261004b"></script>
+<script src="js/scenery.js?v=20261004b"></script>
+<script src="js/fx.js?v=20261004b"></script>
+<script src="js/audio.js?v=20261004b"></script>
+<script src="js/player.js?v=20261004b"></script>
+<script src="js/game.js?v=20261004b"></script>
 </body>
 </html>

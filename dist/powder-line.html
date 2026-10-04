@@ -174,12 +174,40 @@
     text-transform:uppercase;touch-action:manipulation}
   #tiltBtn.on{border-color:var(--accent);color:var(--accent)}
   body.touch #tiltBtn{display:block}
+  /* shorter desktop windows: drop the blurb and tighten the start screen so the level cards fit */
+  @media (max-height: 880px){
+    #menu .sub{display:none}
+    #menu .eyebrow{margin-bottom:10px}
+    #menu .keys{margin-top:16px;gap:5px 24px}
+    #menu .go{margin-top:16px}
+    #menu h1{font-size:clamp(44px,10vh,104px)}
+  }
+  #foot{display:none!important}
+  /* on menus the top-centre is the title — park the mute button in the corner */
+  body:not(.playing) #muteBtn{left:auto;right:max(14px,env(safe-area-inset-right));margin-left:0}
+  /* level select */
+  #levels{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:26px}
+  .lvl{position:relative;width:186px;padding:12px 14px 12px;border-radius:12px;border:1.5px solid rgba(190,225,255,.28);
+    background:rgba(10,22,38,.45);color:#eaf6ff;font-family:inherit;text-align:left;cursor:pointer;
+    transition:border-color .15s,background .15s,transform .15s;touch-action:manipulation}
+  .lvl b{display:block;font-size:15px;font-weight:800;letter-spacing:.02em}
+  .lvl span{display:block;font-size:11px;color:var(--dim);margin-top:4px;line-height:1.35}
+  .lvl i{position:absolute;top:9px;right:11px;font-style:normal;font-size:10px;font-weight:800;color:var(--dim);
+    border:1px solid var(--line);border-radius:4px;padding:1px 5px}
+  .lvl:hover{border-color:rgba(190,225,255,.55)}
+  .lvl.sel{border-color:var(--accent);background:rgba(20,60,90,.55);box-shadow:0 0 18px rgba(95,226,255,.25)}
+  #toLevels{margin-top:16px;padding:9px 18px;border-radius:20px;border:1.5px solid rgba(190,225,255,.4);
+    background:rgba(10,22,38,.45);color:#eaf6ff;font:800 11px/1 inherit;font-family:inherit;letter-spacing:.16em;
+    text-transform:uppercase;cursor:pointer;touch-action:manipulation}
   #rotate{margin-top:16px;font-size:11px;letter-spacing:.2em;text-transform:uppercase;color:var(--gold)}
   @media (orientation:landscape){#rotate{display:none!important}}
   @media (max-height:500px){
     .screen{padding:14px}
     h1{font-size:clamp(38px,9vh,70px)}
-    .sub{margin-top:10px;font-size:12.5px}
+    .sub{display:none}
+    #levels{margin-top:12px;gap:8px}
+    .lvl{width:168px;padding:8px 10px}
+    .lvl span{font-size:10px}
     .keys{margin-top:14px;gap:5px 20px;font-size:11px}
     .go{margin-top:16px}
     .stats{margin:14px 0 4px;gap:8px 34px}
@@ -255,14 +283,19 @@
     <div><i class="key">grab</i></div><div>Hold in the air for style points</div>
     <div><i class="key">drag</i></div><div>Swipe open screen to look around</div>
   </div>
-  <div class="go"><span class="kb-only">press any key to drop in</span><span class="touch-only">tap to drop in</span></div>
+  <div id="levels">
+    <button class="lvl" type="button" data-id="mountain"><i class="kb-only">1</i><b>Backcountry</b><span>Endless mountain · gates · kickers</span></button>
+    <button class="lvl" type="button" data-id="pipe"><i class="kb-only">2</i><b>Half-pipe</b><span>Carve the walls · boost the lip</span></button>
+    <button class="lvl" type="button" data-id="park"><i class="kb-only">3</i><b>Park</b><span>Tabletops · mini-pipe · rails</span></button>
+  </div>
+  <div class="go"><span class="kb-only">press 1–3 to pick a level · any other key to drop in</span><span class="touch-only">tap a level to drop in</span></div>
   <button id="tiltBtn" class="touch-only" type="button">Tilt steering: OFF</button>
   <div id="rotate" class="touch-only">↻ turn your phone sideways for the best ride</div>
 </div>
 
 <div class="screen hide" id="over">
   <div class="eyebrow" id="overTitle">Run over</div>
-  <h1 style="font-size:clamp(40px,8vw,84px)">RUN DOWN</h1>
+  <h1 id="overHead" style="font-size:clamp(40px,8vw,84px)">RUN DOWN</h1>
   <div class="stats">
     <div><div class="label">Distance</div><b class="num" id="sDist">0 m</b></div>
     <div><div class="label">Score</div><b class="num" id="sScore">0</b></div>
@@ -272,13 +305,14 @@
     <div><div class="label">Clean landings</div><b class="num" id="sLands">0</b></div>
   </div>
   <div class="newbest" id="newbest" style="display:none">★ new personal best</div>
-  <div class="go"><span class="kb-only">press R to ride again</span><span class="touch-only">tap to ride again</span></div>
+  <div class="go"><span class="kb-only">press R to ride again · Esc for levels</span><span class="touch-only">tap to ride again</span></div>
+  <button id="toLevels" type="button">Choose level</button>
 </div>
 
 <div class="screen hide" id="pause">
   <div class="eyebrow">paused</div>
   <h1 style="font-size:clamp(34px,7vw,70px)">CATCHING<br>YOUR BREATH</h1>
-  <div class="go"><span class="kb-only">press P to drop back in</span><span class="touch-only">tap to drop back in</span></div>
+  <div class="go"><span class="kb-only">press P to drop back in · Esc for levels</span><span class="touch-only">tap to drop back in</span></div>
 </div>
 
 <button id="muteBtn" type="button" aria-label="Mute" title="Mute (M)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" stroke="none"/><g class="waves"><path d="M16 9.5a3.5 3.5 0 0 1 0 5"/><path d="M18.5 7a7 7 0 0 1 0 10"/></g><g class="x"><path d="M16.5 9.5l5 5M21.5 9.5l-5 5"/></g></svg></button>
@@ -541,7 +575,7 @@ function fbm(x, y, oct, s) {
 }
 
 /* The fall line: the mountain meanders, so you can never just hold straight. */
-function centerX(z) {
+function mtnCenterX(z) {
   return (z * 0.11) * Math.sin(z * 0.0032) +
          Math.sin(z * 0.0071) * 34 +
          Math.sin(z * 0.0019 + 1.7) * 58 +
@@ -560,7 +594,7 @@ function featureAt(segIndex) {
   if (segIndex < 2) { f = null; _featCache.set(segIndex, f); return f; }
   const kind = r1 < 0.44 ? 'kicker' : (r1 < 0.62 ? 'rollers' : (r1 < 0.74 ? 'pipe' : null));
   if (!kind) { f = null; _featCache.set(segIndex, f); return f; }
-  const cx = centerX(z0);
+  const cx = mtnCenterX(z0);
   f = {
     kind, z: z0 + r2 * 30, x: cx + (r3 - 0.5) * PISTE_HALF * 1.1,
     h: kind === 'kicker' ? 3.4 + r1 * 3.6 : 1.15,
@@ -593,8 +627,8 @@ function kickerBump(x, z, k) {
 }
 
 /* ---------------- the height function ---------------- */
-function heightAt(x, z) {
-  const cx = centerX(z);
+function mtnHeightAt(x, z) {
+  const cx = mtnCenterX(z);
   const d = Math.abs(x - cx);
   const rough = sstep(PISTE_HALF * 0.55, PISTE_HALF * 2.1, d);   // 0 = groomed
 
@@ -622,6 +656,23 @@ function heightAt(x, z) {
   }
   return y;
 }
+
+/* ---------------- levels ----------------
+   Every system (physics, chunks, props, camera, gates) reads the terrain through
+   heightAt / centerX, which dispatch to the current level. The mountain is the
+   original endless backcountry run; levels.js adds the half-pipe and the park. */
+const Level = {
+  defs: {},
+  cur: null,
+  define(def) { this.defs[def.id] = def; if (!this.cur) this.cur = def; },
+};
+Level.define({
+  id: 'mountain', name: 'Backcountry', blurb: 'Endless mountain · gates · natural kickers',
+  height: mtnHeightAt, centerX: mtnCenterX,
+  clearHalf: PISTE_HALF * 0.95, gates: true, finishZ: null, spawnZ: 0
+});
+function heightAt(x, z) { return Level.cur.height(x, z); }
+function centerX(z) { return Level.cur.centerX(z); }
 
 const _n = V3();
 function normalAt(x, z, out) {
@@ -657,11 +708,12 @@ class Chunk {
       const rz = hash2(this.ix * 13 + i, this.iz * 29 + 7, 202);
       const x = this.x0 + rx * CHUNK, z = this.z0 + rz * CHUNK;
       const cx = centerX(z), d = Math.abs(x - cx);
-      if (d < PISTE_HALF * 0.95 || d > WALL_START + 46) continue;
+      const clear = Level.cur.clearHalf;
+      if (d < clear || d > WALL_START + 46) continue;
       const y = heightAt(x, z);
       const nz = normalAt(x, z, { x: 0, y: 0, z: 0 });
       if (nz.y < 0.78) continue;
-      const dense = sstep(PISTE_HALF, PISTE_HALF + 12, d);
+      const dense = sstep(clear, clear + 12, d);
       if (hash2(i, this.ix + this.iz * 7, 303) > dense * 0.92) continue;
       const sc = 0.75 + hash2(i, 9, 404) * 0.85;
       t.push({ x, y, z, sc, rot: hash2(i, 5, 505) * TAU, sway: hash2(i, 7, 606) * TAU });
@@ -671,7 +723,7 @@ class Chunk {
       const rz = hash2(this.ix * 53 + i, this.iz * 61 + 13, 808);
       const x = this.x0 + rx * CHUNK, z = this.z0 + rz * CHUNK;
       const cx = centerX(z), d = Math.abs(x - cx);
-      if (d < PISTE_HALF * 1.15) continue;
+      if (d < Level.cur.clearHalf * 1.2) continue;
       b.push({ x, y: heightAt(x, z), z, sc: 1.1 + hash2(i, 3, 909) * 3.2, rot: hash2(i, 1, 111) * TAU });
     }
     this.props = { trees: t, rocks: b };
@@ -738,6 +790,13 @@ const World = {
   builtThisFrame: 0,
 
   key(ix, iz) { return ix * 100000 + iz; },
+
+  /* drop every chunk (CPU + GPU) — used when the level changes */
+  reset() {
+    this.chunks.clear(); this.visible.length = 0; this.dirty = true;
+    _featCache.clear();
+    if (typeof GL !== 'undefined' && GL.purgeChunks) GL.purgeChunks();
+  },
 
   get(ix, iz) {
     const k = this.key(ix, iz);
@@ -824,6 +883,7 @@ const Gates = {
   next: 0,
   reset() { this.list.length = 0; this.next = 0; },
   ensure(zAhead) {
+    if (!Level.cur.gates) return;
     while (this.next * GATE_SPACING < zAhead) {
       const i = this.next++;
       const z = i * GATE_SPACING + 90;
@@ -1295,6 +1355,262 @@ function buildFsTri() {
 }
 
 </script>
+<script>/* js/levels.js */
+/* =====================================================================
+   levels.js — the two built courses (the endless mountain lives in world.js).
+     • Half-pipe: a long straight competition pipe; carve up a wall with enough
+       speed and you launch out of the lip, then land back on the transition.
+     • Park: a groomed run with tabletops, rollers, a mini-pipe and rails to grind.
+   Each level supplies a height function, its own rules (lip launches, rails),
+   camera framing and a static decoration mesh (coping, rails, finish arch).
+   ===================================================================== */
+'use strict';
+
+/* ---------------- shared helpers ---------------- */
+
+/* a straight square beam from a→b (any direction), cross-section w × h */
+function geoBeam(g, a, b, w, h, col) {
+  let dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2];
+  const L = Math.hypot(dx, dy, dz) || 1; dx /= L; dy /= L; dz /= L;
+  // side = dir × up (horizontal), up' = side × dir
+  let sx = -dz, sy = 0, sz = dx; let sl = Math.hypot(sx, sz) || 1; sx /= sl; sz /= sl;
+  if (sl < 1e-6) { sx = 1; sz = 0; }
+  const ux = sy * dz - sz * dy, uy = sz * dx - sx * dz, uz = sx * dy - sy * dx;
+  const hw = w / 2, hh = h / 2;
+  const corner = (p, i, j) => [p[0] + sx * hw * i + ux * hh * j, p[1] + sy * hw * i + uy * hh * j, p[2] + sz * hw * i + uz * hh * j];
+  const A = [corner(a, -1, -1), corner(a, 1, -1), corner(a, 1, 1), corner(a, -1, 1)];
+  const B = [corner(b, -1, -1), corner(b, 1, -1), corner(b, 1, 1), corner(b, -1, 1)];
+  const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
+  const quad = (p, q, r, s) => {
+    // flat face, wound to face away from the beam's centre line
+    let e1 = [q[0] - p[0], q[1] - p[1], q[2] - p[2]], e2 = [r[0] - p[0], r[1] - p[1], r[2] - p[2]];
+    let nx = e1[1] * e2[2] - e1[2] * e2[1], ny = e1[2] * e2[0] - e1[0] * e2[2], nz = e1[0] * e2[1] - e1[1] * e2[0];
+    const cx = (p[0] + q[0] + r[0] + s[0]) / 4 - mid[0], cy = (p[1] + q[1] + r[1] + s[1]) / 4 - mid[1], cz = (p[2] + q[2] + r[2] + s[2]) / 4 - mid[2];
+    if (nx * cx + ny * cy + nz * cz < 0) { [q, s] = [s, q]; nx = -nx; ny = -ny; nz = -nz; }
+    const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
+    const i0 = geoVert(g, p[0], p[1], p[2], nx, ny, nz, ...col), i1 = geoVert(g, q[0], q[1], q[2], nx, ny, nz, ...col);
+    const i2 = geoVert(g, r[0], r[1], r[2], nx, ny, nz, ...col), i3 = geoVert(g, s[0], s[1], s[2], nx, ny, nz, ...col);
+    geoQuad(g, i0, i1, i2, i3);
+  };
+  for (let k = 0; k < 4; k++) { const k1 = (k + 1) % 4; quad(A[k], A[k1], B[k1], B[k]); }
+  quad(A[0], A[3], A[2], A[1]); quad(B[0], B[1], B[2], B[3]);
+}
+
+/* finish arch: two posts and a banner across the course at z */
+function geoFinishArch(g, z, halfW) {
+  const yL = heightAt(-halfW, z), yR = heightAt(halfW, z);
+  const RED = [0.92, 0.22, 0.18], WHITE = [0.95, 0.96, 0.98];
+  geoBeam(g, [-halfW, yL - 0.3, z], [-halfW, yL + 6.2, z], 0.35, 0.35, WHITE);
+  geoBeam(g, [halfW, yR - 0.3, z], [halfW, yR + 6.2, z], 0.35, 0.35, WHITE);
+  geoBeam(g, [-halfW, yL + 5.4, z], [halfW, yR + 5.4, z], 0.12, 1.5, RED);
+  for (let i = -3; i <= 3; i++) {                         // chequered strip under the banner
+    const x0 = (i / 3.5) * halfW, x1 = ((i + 1) / 3.5) * halfW;
+    geoBeam(g, [x0, lerp(yL, yR, (x0 / halfW + 1) / 2) + 4.5, z + 0.08], [Math.min(x1, halfW), lerp(yL, yR, (Math.min(x1, halfW) / halfW + 1) / 2) + 4.5, z + 0.08],
+      0.06, 0.3, i % 2 ? WHITE : [0.08, 0.08, 0.1]);
+  }
+}
+
+/* pipe cross-section: flat bottom B, quarter-circle transition R, deck beyond */
+function pipeWall(ax, B, R) {
+  if (ax <= B) return 0;
+  const d = Math.min(ax - B, R * 0.997);
+  return R - Math.sqrt(R * R - d * d);
+}
+
+/* launch out of a pipe lip: all outward speed turns into vertical speed (the top
+   of the wall is vertical), with a little drift back into the pipe */
+function pipeLipLaunch(P, cx, B, R, env) {
+  const rel = P.pos.x - cx, ax = Math.abs(rel), out = rel >= 0 ? 1 : -1;
+  if (env < 0.9 || ax < B + R - 0.45) return false;
+  const vOut = P.vel.x * out;
+  if (vOut < 1.0) return false;
+  P.airborne = true; P.airTime = 0;
+  P.vel.y = vOut + 0.6;
+  P.vel.x = -out * 0.9;
+  P.pos.x = cx + out * (B + R - 0.5);
+  P.spin = 0; P.flip = 0; P.flipRate = 0; P.flipArmed = false;
+  P.lean = 0;                       // carve lean shouldn't turn into an accidental spin
+  // turn the board during the air so it comes down facing back into the pipe
+  // (mirror the heading across the pipe axis) — the classic frontside/backside air.
+  // predicted travel on landing: back into the pipe (the fall turns into inward
+  // speed on the transition) while keeping the down-pipe speed. Riding out
+  // switch is legal, so aim for whichever of the two headings is closer.
+  const vin = 0.9 + 0.55 * P.vel.y;
+  const travel = Math.atan2(-out * vin, P.vel.z);
+  const dA = angDelta(P.yaw, travel), dB = angDelta(P.yaw, travel + Math.PI);
+  const d = Math.abs(dA) <= Math.abs(dB) ? dA : dB;
+  P.autoYaw = { target: P.yaw + d };
+  P.airLabel = out > 0 ? 'Frontside Air' : 'Backside Air';
+  return true;
+}
+
+/* =====================================================================
+   HALF-PIPE
+   ===================================================================== */
+const PIPE = { B: 5.0, R: 4.4, SLOPE: 0.30, START: -30, LEN: 430, DECK: 12 };
+function pipeEnv(z) { return sstep(PIPE.START - 25, PIPE.START + 5, z) * sstep(PIPE.LEN + 40, PIPE.LEN, z); }
+
+Level.define({
+  id: 'pipe', name: 'Half-pipe', blurb: 'Competition pipe · carve the walls · boost the lip',
+  clearHalf: 26, gates: false, finishZ: PIPE.LEN + 70, spawnZ: 4, airMin: 0.6,
+  spawnSpeed: 12.5, wallAssist: 0.8,
+  lod: [80, 40, 20],
+  cam: { lockHeading: true, dist: 1.25, elev: 0.58 },
+  centerX: () => 0,
+  height(x, z) {
+    const ax = Math.abs(x), env = pipeEnv(z);
+    const lipX = PIPE.B + PIPE.R;
+    let h = -z * PIPE.SLOPE;
+    if (ax < lipX) h += pipeWall(ax, PIPE.B, PIPE.R) * env;
+    else {
+      const e = ax - lipX;
+      h += PIPE.R * env + Math.min(e, PIPE.DECK) * 0.02;                    // flat deck
+      if (e > PIPE.DECK) h += Math.pow(e - PIPE.DECK, 1.3) * 0.35;           // outer banks
+    }
+    return h;
+  },
+  lip(P) { return pipeLipLaunch(P, 0, PIPE.B, PIPE.R, pipeEnv(P.pos.z)); },
+  decor() {
+    const g = Geo(), lipX = PIPE.B + PIPE.R, STEEL = [0.62, 0.66, 0.72], BLUE = [0.16, 0.42, 0.82];
+    // metal coping along both lips, in sloped segments that follow the deck
+    for (let z = PIPE.START + 8; z < PIPE.LEN; z += 10) {
+      for (const s of [-1, 1]) {
+        const x = s * (lipX + 0.08);
+        geoBeam(g, [x, heightAt(x + s * 0.4, z) + 0.06, z], [x, heightAt(x + s * 0.4, z + 10) + 0.06, z + 10], 0.16, 0.16, STEEL);
+      }
+    }
+    // judges' marker poles along the deck every 50 m
+    for (let z = 20; z < PIPE.LEN; z += 50) {
+      for (const s of [-1, 1]) {
+        const x = s * (lipX + 4), y = heightAt(x, z);
+        geoBeam(g, [x, y - 0.2, z], [x, y + 2.2, z], 0.12, 0.12, BLUE);
+        geoBeam(g, [x, y + 1.6, z], [x + s * 0.9, y + 1.6, z], 0.06, 0.6, BLUE);
+      }
+    }
+    geoFinishArch(g, this.finishZ, 12);
+    return g;
+  }
+});
+
+/* =====================================================================
+   PARK
+   ===================================================================== */
+const PARK = { SLOPE: 0.22, HALF: 26, LEN: 700 };
+const PARK_FEATURES = [
+  // tabletops: x, z (start of take-off), half-width, take-off length, top length, landing length, height
+  { k: 'table', x: -9, z: 40, w: 5, up: 6, top: 3, down: 8, h: 1.3 },
+  { k: 'table', x: 0, z: 100, w: 6, up: 7, top: 6, down: 10, h: 2.0 },
+  { k: 'table', x: -13, z: 160, w: 4, up: 6, top: 3, down: 8, h: 1.3 },
+  { k: 'table', x: 13, z: 160, w: 4, up: 6, top: 3, down: 8, h: 1.3 },
+  { k: 'rollers', z0: 215, z1: 262, amp: 0.9, wl: 11 },
+  { k: 'table', x: 0, z: 290, w: 7, up: 8, top: 9, down: 13, h: 2.8 },
+  { k: 'mini', z0: 345, z1: 425, B: 3.5, R: 3.6 },
+  { k: 'table', x: -8, z: 520, w: 5, up: 7, top: 5, down: 9, h: 1.8 },
+  { k: 'table', x: 0, z: 640, w: 7, up: 8, top: 10, down: 14, h: 3.0 },
+];
+const PARK_RAILS = [
+  // x0, z0 → x1, z1 ; height (m above the snow once past the ride-on entry)
+  { x0: 9, z0: 36, x1: 9, z1: 52, h: 0.5 },
+  { x0: 0, z0: 155, x1: 0, z1: 176, h: 0.55 },
+  { x0: -6, z0: 455, x1: -6, z1: 474, h: 0.5 },
+  { x0: 6, z0: 455, x1: 6, z1: 474, h: 0.5 },
+  { x0: 9, z0: 515, x1: 9, z1: 532, h: 0.5 },
+  { x0: 0, z0: 572, x1: 0, z1: 598, h: 0.6 },
+];
+for (const r of PARK_RAILS) {
+  const dx = r.x1 - r.x0, dz = r.z1 - r.z0;
+  r.len = Math.hypot(dx, dz); r.ux = dx / r.len; r.uz = dz / r.len;
+  r.zmin = Math.min(r.z0, r.z1); r.zmax = Math.max(r.z0, r.z1);
+}
+/* rail top height: flush with the snow at the start, rising to r.h over ~1.5 m
+   (a ride-on rail), so you can roll straight onto it or ollie on anywhere */
+function railTop(r, t) {
+  const x = r.x0 + r.ux * t, z = r.z0 + r.uz * t;
+  return heightAt(x, z) + Math.min(r.h, 0.05 + Math.max(0, t) * 0.33);
+}
+
+function miniEnv(f, z) { return sstep(f.z0, f.z0 + 8, z) * sstep(f.z1, f.z1 - 8, z); }
+
+Level.define({
+  id: 'park', name: 'Park', blurb: 'Tabletops · rollers · mini-pipe · rails to grind',
+  clearHalf: 30, gates: false, finishZ: PARK.LEN, spawnZ: 4, airMin: 0.7,
+  spawnSpeed: 9, wallAssist: 0.8,
+  lod: [80, 40, 20],
+  cam: { lockHeading: false, dist: 1.1, elev: 0.48 },
+  rails: PARK_RAILS,
+  centerX: () => 0,
+  height(x, z) {
+    const ax = Math.abs(x);
+    let h = -z * PARK.SLOPE;
+    if (ax > PARK.HALF) h += Math.pow(ax - PARK.HALF, 1.4) * 0.45;           // banks keep you on the run
+    for (const f of PARK_FEATURES) {
+      if (f.k === 'table') {
+        const u = z - f.z;
+        if (u < 0 || u > f.up + f.top + f.down) continue;
+        const m = sstep(f.w + 1.2, f.w, Math.abs(x - f.x));
+        if (m <= 0) continue;
+        let p;
+        if (u < f.up) p = f.h * Math.pow(u / f.up, 1.7);                     // concave take-off
+        else if (u < f.up + f.top) p = f.h;                                   // deck
+        else p = f.h * (1 - sstep(0, 1, (u - f.up - f.top) / f.down));      // landing
+        h += p * m;
+      } else if (f.k === 'rollers') {
+        if (z < f.z0 || z > f.z1) continue;
+        const s = Math.sin((z - f.z0) / f.wl * Math.PI);
+        h += f.amp * s * s * Math.min(1, (PARK.HALF + 2 - ax) / 4);
+      } else if (f.k === 'mini') {
+        const env = miniEnv(f, z);
+        if (env <= 0) continue;
+        const lip = f.B + f.R;
+        h += (ax < lip ? pipeWall(ax, f.B, f.R) : f.R) * env * (ax > PARK.HALF ? Math.max(0, 1 - (ax - PARK.HALF) / 3) : 1);
+      }
+    }
+    return h;
+  },
+  lip(P) {
+    for (const f of PARK_FEATURES) {
+      if (f.k !== 'mini' || P.pos.z < f.z0 || P.pos.z > f.z1) continue;
+      return pipeLipLaunch(P, 0, f.B, f.R, miniEnv(f, P.pos.z));
+    }
+    return false;
+  },
+  decor() {
+    const g = Geo(), RAIL = [1.0, 0.78, 0.12], POST = [0.20, 0.22, 0.27], ORANGE = [1.0, 0.45, 0.1], STEEL = [0.66, 0.70, 0.76];
+    for (const r of PARK_RAILS) {
+      // rail bar in short segments so it follows the snow and the ride-on ramp
+      const N = Math.ceil(r.len / 1.0);
+      for (let i = 0; i < N; i++) {
+        const t0 = i / N * r.len, t1 = (i + 1) / N * r.len;
+        geoBeam(g, [r.x0 + r.ux * t0, railTop(r, t0) - 0.03, r.z0 + r.uz * t0],
+                   [r.x0 + r.ux * t1, railTop(r, t1) - 0.04, r.z0 + r.uz * t1], 0.13, 0.09, RAIL);
+      }
+      for (let t = 2.5; t < r.len; t += 4) {                                 // support posts
+        const x = r.x0 + r.ux * t, z = r.z0 + r.uz * t;
+        geoBeam(g, [x, heightAt(x, z) - 0.2, z], [x, railTop(r, t) - 0.07, z], 0.07, 0.07, POST);
+      }
+    }
+    // orange marker sticks at each take-off lip so features read from afar
+    for (const f of PARK_FEATURES) {
+      if (f.k !== 'table') continue;
+      for (const s of [-1, 1]) {
+        const x = f.x + s * (f.w + 0.6), z = f.z + f.up, y = heightAt(x, z);
+        geoBeam(g, [x, y - 0.2, z], [x, y + 1.4, z], 0.08, 0.08, ORANGE);
+      }
+    }
+    // mini-pipe coping
+    for (const f of PARK_FEATURES) {
+      if (f.k !== 'mini') continue;
+      for (let z = f.z0 + 8; z < f.z1 - 8; z += 8) for (const s of [-1, 1]) {
+        const x = s * (f.B + f.R + 0.08);
+        geoBeam(g, [x, heightAt(x + s * 0.3, z) + 0.05, z], [x, heightAt(x + s * 0.3, z + 8) + 0.05, z + 8], 0.13, 0.13, STEEL);
+      }
+    }
+    geoFinishArch(g, this.finishZ, 20);
+    return g;
+  }
+});
+
+</script>
 <script>/* js/gl.js */
 /* =====================================================================
    gl.js — the renderer. Hand-written WebGL2: no three.js, no gl-matrix.
@@ -1557,6 +1873,16 @@ const GL = {
   maxDPR() { return this.quality < 1 ? 1.0 : 1.75; },
 
   /* chunk mesh → GPU, cached by chunk+lod identity */
+  /* free every cached terrain chunk (level switch) */
+  purgeChunks() {
+    const gl = this.gl;
+    for (const [k, m] of this.chunkVAO) {
+      gl.deleteVertexArray(m.vao); gl.deleteBuffer(m.vb); gl.deleteBuffer(m.ib);
+      delete this.mesh['_chunk' + k];
+    }
+    this.chunkVAO.clear();
+  },
+
   chunkMesh(chunk, lod) {
     if (lod < 0) return null;                 // nothing built for this chunk yet
     const key = chunk.ix + ':' + chunk.iz + ':' + lod;
@@ -1955,7 +2281,9 @@ const Cam = {
     // ---- heading: smoothed direction of travel ----
     const hs = Math.hypot(P.vel.x, P.vel.z);
     if (P.crashTimer <= 0) {
-      const target = hs > 1.5 ? Math.atan2(P.vel.x, P.vel.z) : P.yaw;
+      // pipe: keep looking down the pipe instead of whipping across it on every wall
+      const lock = Level.cur.cam && Level.cur.cam.lockHeading;
+      const target = lock ? 0 : (hs > 1.5 ? Math.atan2(P.vel.x, P.vel.z) : P.yaw);
       const rate = P.airborne ? 0.8 : (hs > 1.5 ? 2.4 : 1.0);
       this.heading += angDelta(this.heading, target) * (1 - Math.exp(-rate * dt));
     }
@@ -1972,8 +2300,9 @@ const Cam = {
     // ---- desired position: orbit the rider at (yaw, elevation, distance) ----
     const yaw = this.heading + this.orbitYaw;
     const fx = Math.sin(yaw), fz = Math.cos(yaw);
-    const dist = (9.0 + speedN * 3.5 + (P.airborne ? 1.5 : 0)) * this.zoom;
-    const elev = clamp(0.40 + this.orbitPitch, -0.12, 1.35);
+    const lc = Level.cur.cam || {};
+    const dist = (9.0 + speedN * 3.5 + (P.airborne ? 1.5 : 0)) * this.zoom * (lc.dist || 1);
+    const elev = clamp((lc.elev || 0.40) + this.orbitPitch, -0.12, 1.35);
     const ce = Math.cos(elev), se = Math.sin(elev);
     const fy = P.pos.y + 1.1;                               // focus: rider's chest
     const tx = P.pos.x - fx * dist * ce, tz = P.pos.z - fz * dist * ce;
@@ -2126,6 +2455,8 @@ const Render = {
       gl.bindVertexArray(m.vao);
       gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0);
     }
+    // level structures (rails, coping, finish arch)
+    if (GL.mesh._levelDecor) drawMesh(sp, '_levelDecor', IDENT);
     // rider + board cast shadows
     drawMesh(sp, 'board', P.boardMat);
     for (let i = 0; i < P.partCount; i++) {
@@ -2280,6 +2611,7 @@ const Render = {
     const lp = GL.prog.lit.use();
     Sun.setUniforms(lp);
     gl.uniform1f(lp.uSparkle, 0.0);
+    if (GL.mesh._levelDecor) drawMesh(lp, '_levelDecor', IDENT);
     drawMesh(lp, 'board', P.boardMat);
     for (let i = 0; i < P.partCount; i++) {
       const q = P.parts[i];
@@ -2301,6 +2633,7 @@ const Render = {
   },
 
   drawPipes(ip) {
+    if (Level.cur.id !== 'mountain') return;      // the mountain's random feature walls only
     const gl = GL.gl;
     const ib = GL.buf.parts, d = ib.data;
     let n = 0;
@@ -2576,7 +2909,7 @@ const Scenery = {
   /* ---------------- per-frame ---------------- */
   update(dt, P) {
     // tracks: drop a point every ~0.35 m while the board is on the snow
-    if (P.airborne || P.crashTimer > 0 || P.speed < 1) { this.trailBreak = true; }
+    if (P.airborne || P.grind || P.crashTimer > 0 || P.speed < 1) { this.trailBreak = true; }
     else {
       const last = this.trail[this.trail.length - 1];
       if (this.trailBreak || !last || Math.hypot(P.pos.x - last.x, P.pos.z - last.z) > 0.35) {
@@ -2738,7 +3071,7 @@ class Particles {
   /* carving spray: thrown off the engaged edge, opposite the turn */
   spray(P, dt) {
     const speed = P.speed;
-    if (P.airborne || speed < 3.2) return;
+    if (P.airborne || P.grind || speed < 3.2) return;
     const edge = Math.abs(P.lean);
     const rate = clamp(speed * (0.55 + edge * 2.6) * (P.braking ? 1.9 : 1.0), 0, 190);
     this.acc = (this.acc || 0) + rate * dt;
@@ -2768,7 +3101,7 @@ class Particles {
 
   /* deep powder: a continuous roost behind the rider at speed */
   powder(P, dt) {
-    if (P.airborne || P.speed < 12) return;
+    if (P.airborne || P.grind || P.speed < 12) return;
     this.accP = (this.accP || 0) + (P.speed - 10) * 0.9 * dt;
     while (this.accP >= 1) {
       this.accP -= 1;
@@ -3148,14 +3481,16 @@ class Player {
     this._mi = 0;
   }
 
-  reset(x, z) {
+  reset(x, z, speed) {
+    const v0 = speed || 6;
     this.pos.x = x;
     this.pos.z = z;
     this.pos.y = heightAt(x, z) + RIDE_H;
-    V3.set(this.vel, 0, 0, 6);
-    this.yaw = 0; this.lean = 0; this.speed = 6;
+    V3.set(this.vel, 0, 0, v0);
+    this.yaw = 0; this.lean = 0; this.speed = v0;
     this.airborne = false; this.airTime = 0; this.crashTimer = 0;
     this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipVis = 0; this.grab = null; this.tuck = 0; this.invuln = 1.2;
+    this.grind = null;
     this.updateBasis();
   }
 
@@ -3187,6 +3522,7 @@ class Player {
     this.landing = 0;
     if (this.invuln > 0) this.invuln -= dt;
     if (this.crashTimer > 0) { this.stepCrash(dt, fx); return; }
+    if (this.grind) { this.stepGrind(dt, input, fx); return; }
 
     if (this.jumpBuffer > 0) this.jumpBuffer -= dt;
     if (this.pumpCooldown > 0) this.pumpCooldown -= dt;
@@ -3195,7 +3531,13 @@ class Player {
     this.updateBasis();
 
     if (this.airborne) this.stepAir(dt, input, fx);
-    else this.stepGround(dt, input, fx);
+    else {
+      this.stepGround(dt, input, fx);
+      // level rules: e.g. carving up a pipe wall launches you out of the lip
+      if (!this.airborne && Level.cur.lip && Level.cur.lip(this)) {
+        Audio.ollie(); Cam.shake = Math.max(Cam.shake, 0.04);
+      }
+    }
 
     // integrate
     this.pos.x += this.vel.x * dt;
@@ -3222,6 +3564,7 @@ class Player {
     V3.set(this.backPos, this.pos.x - this.dir.x * half, this.pos.y, this.pos.z - this.dir.z * half);
 
     this.speed = Math.hypot(this.vel.x, this.vel.z);
+    if (Level.cur.rails) this.checkGrind(fx);
     if (this.airborne) this.flipVis = this.flip;
     else this.flipVis = damp(this.flipVis, 0, 14, dt);
   }
@@ -3240,6 +3583,11 @@ class Player {
     // velocity from them every frame discards cos²(slope) ≈ 11% of horizontal
     // speed per step — tens of m/s² of phantom braking. Physics stays in the
     // flat horizontal plane; the tilted basis exists for rendering only.
+    // sliding backwards (e.g. back down a pipe wall): swing the board round so
+    // the rider rides out nose-first instead of fighting the forward clamp below
+    if (this.vel.x * Math.sin(this.yaw) + this.vel.z * Math.cos(this.yaw) < -0.6) {
+      this.yaw += Math.PI; this.updateBasis();
+    }
     const fX = Math.sin(this.yaw), fZ = Math.cos(this.yaw);
     const rX = fZ, rZ = -fX;
 
@@ -3294,7 +3642,7 @@ class Player {
         this.vel.z = fZ * vFwd + rZ * vSide;
         this.vel.y = (5.6 + clamp(sp * 0.10, 0, 2.2)) * (0.80 + this.load * 0.24);
         this.jumpBuffer = 0; this.pumpCooldown = 0.26;
-        this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false;
+        this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false; this.autoYaw = null; this.airLabel = null;
         fx.puff(this.pos.x, this.groundY, this.pos.z, 0.7 + this.load * 0.3);
         Audio.ollie();
         Cam.shake = Math.max(Cam.shake, 0.05);
@@ -3306,7 +3654,9 @@ class Player {
     const dragCoef = lerp(0.0075, 0.0030, this.tuck) + this.braking * 0.02;
     const cd = dragCoef * sp * sp;
     const roll = 0.40 + this.braking * 3.4 + edge * 0.5 * (1 - smoothstep(0, 1, sp / 6));
-    vFwd += (gFwd * G * 0.94 - sign(vFwd) * (cd + roll)) * dt;
+    // levels with walls (pipes) make climbing a bit cheaper so airs are reachable
+    const climb = gFwd < 0 && Level.cur.wallAssist ? Level.cur.wallAssist : 1;
+    vFwd += (gFwd * G * 0.94 * climb - sign(vFwd) * (cd + roll)) * dt;
     vSide += gSide * G * 0.94 * dt;
 
     // ---- edge hold: kill side-slip, far harder when the edge is engaged ----
@@ -3321,8 +3671,8 @@ class Player {
       this.airborne = true; this.airTime = 0;
       this.vel.x = fX * vFwd + rX * vSide;
       this.vel.z = fZ * vFwd + rZ * vSide;
-      this.vel.y = ((hA - hB) / e) * sp;   // keep following the drop-off
-      this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false;
+      this.vel.y = Math.max(0, (hB - hC) / e) * sp;   // leave along the ramp we're coming off (the slope behind)
+      this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false; this.autoYaw = null; this.airLabel = null;
       this.unload = 1;
       return;
     }
@@ -3349,6 +3699,10 @@ class Player {
     const spinRate = clamp(-this.lean * 6.4, -6.4, 6.4);
     this.yaw += spinRate * dt;
     this.spin += spinRate * dt;
+    if (this.autoYaw) {                    // pipe air: ease the board round to face back in;
+      this.autoYaw.target += spinRate * dt; // the rider's own spins ride on top of it
+      this.yaw += angDelta(this.yaw, this.autoYaw.target) * (1 - Math.exp(-3.2 * dt));
+    }
     this.lean = damp(this.lean, input.steer * 0.92, 6, dt);
 
     // flips: W pitches forward = frontflip, S pulls back = backflip. Holding W/S
@@ -3368,6 +3722,7 @@ class Player {
 
   /* ---------------- touchdown ---------------- */
   land(fx) {
+    this.autoYaw = null;
     const n = this.nrm;
     normalAt(this.pos.x, this.pos.z, n);
     const vDown = this.vel.y;
@@ -3376,6 +3731,16 @@ class Player {
     this.airborne = false;
     this.airTime = 0;
     this.pos.y = heightAt(this.pos.x, this.pos.z) + RIDE_H;
+
+    // a fall onto a slope becomes speed down that slope (pipe walls, landing
+    // ramps): horizontal speed gains |vy|·sin(slope) along the downhill direction
+    if (vDown < 0) {
+      const hn = Math.hypot(n.x, n.z);
+      if (hn > 1e-3) {
+        const gain = -vDown * hn * 0.9;                 // hn = sin(slope angle)
+        this.vel.x += n.x / hn * gain; this.vel.z += n.z / hn * gain;
+      }
+    }
 
     // landing quality: is the board base aligned with the slope, and is the
     // board travelling along its own length? Riding backwards (switch) is a
@@ -3426,6 +3791,73 @@ class Player {
 
     if (bad) { this.crash(fx); this.landedClean = false; }
     else { this.landedClean = true; this.chop = 0.4; }
+  }
+
+  /* ---------------- rails ---------------- */
+  checkGrind(fx) {
+    if (this.grind || this.crashTimer > 0) return;
+    const p = this.pos, feet = p.y - RIDE_H;
+    for (const r of Level.cur.rails) {
+      if (p.z < r.zmin - 1 || p.z > r.zmax + 1) continue;
+      const rx = p.x - r.x0, rz = p.z - r.z0;
+      const t = rx * r.ux + rz * r.uz;
+      if (t < 0 || t > r.len - 0.5) continue;
+      if (Math.abs(rx * -r.uz + rz * r.ux) > 0.42) continue;       // sideways distance to the bar
+      const top = railTop(r, t);
+      const ok = this.airborne
+        ? (this.vel.y <= 1.5 && feet > top - 0.5 && feet < top + 0.8)
+        : (feet > top - 0.25);                                        // rolled onto the flush entry
+      if (!ok) continue;
+      if (this.airborne && Math.abs(angDelta(0, this.flip)) > 0.85) { this.crash(fx); return; }
+      const along = this.vel.x * r.ux + this.vel.z * r.uz;
+      this.grind = { r, t, dir: along >= 0 ? 1 : -1, s: Math.max(3, Math.abs(along)), time: 0 };
+      this.airborne = false; this.airTime = 0; this.landedClean = true;
+      this.flip = 0; this.flipRate = 0; this.grab = null; this.grabTime = 0;
+      this.pos.y = top + RIDE_H;
+      Audio.land(0.35); Cam.shake = Math.max(Cam.shake, 0.06);
+      return;
+    }
+  }
+
+  stepGrind(dt, input, fx) {
+    const g = this.grind, r = g.r;
+    g.time += dt;
+    const ahead = clamp(g.t + g.dir * 0.5, 0, r.len);
+    const slope = (railTop(r, ahead) - railTop(r, g.t)) / Math.max(0.05, Math.abs(ahead - g.t));
+    g.s = Math.max(1.5, g.s + (-slope * G * 0.9 - 0.5) * dt);    // gravity along the bar, light friction
+    g.t += g.dir * g.s * dt;
+    const tt = clamp(g.t, 0, r.len);
+    this.pos.x = r.x0 + r.ux * tt; this.pos.z = r.z0 + r.uz * tt;
+    this.pos.y = railTop(r, tt) + RIDE_H;
+    this.groundY = heightAt(this.pos.x, this.pos.z);
+    this.vel.x = r.ux * g.dir * g.s; this.vel.z = r.uz * g.dir * g.s; this.vel.y = slope * g.s;
+    this.speed = g.s;
+    this.lean = damp(this.lean, input.steer * 0.25, 6, dt);
+    this.tuck = damp(this.tuck, 0.4, 6, dt);
+    this.updateBasis();
+    if (this.jumpBuffer > 0) this.jumpBuffer -= dt;
+    if (input.jump) this.jumpBuffer = 0.14;
+    // metal sparks from the bar
+    if (Math.random() < 0.6) {
+      const a = rnd(TAU);
+      fx.spawn(this.pos.x, this.pos.y - RIDE_H + 0.02, this.pos.z, Math.cos(a) * rnd(0.5, 2), rnd(0.5, 2.5), Math.sin(a) * rnd(0.5, 2),
+        { life: rnd(0.15, 0.35), size: rnd(0.03, 0.07), col: [1.6, 1.0, 0.4], alpha: 1, grav: -9, drag: 0.5 });
+    }
+    const off = g.t < 0 || g.t > r.len;
+    if (off || this.jumpBuffer > 0) {
+      const railYaw = Math.atan2(r.ux * g.dir, r.uz * g.dir);
+      let ang = Math.abs(angDelta(railYaw, this.yaw)); if (ang > Math.PI / 2) ang = Math.PI - ang;
+      Game.onGrind(g.time, ang);
+      this.grind = null;
+      this.airborne = true; this.airTime = 0;
+      this.vel.y = this.jumpBuffer > 0 ? 5.2 : Math.max(1.2, this.vel.y);
+      this.jumpBuffer = 0;
+      this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false; this.autoYaw = null; this.airLabel = null;
+      if (!off) Audio.ollie();
+    }
+    const half = BOARD_L * 0.5 * 0.86;
+    V3.set(this.frontPos, this.pos.x + this.dir.x * half, this.pos.y, this.pos.z + this.dir.z * half);
+    V3.set(this.backPos, this.pos.x - this.dir.x * half, this.pos.y, this.pos.z - this.dir.z * half);
   }
 
   /* ---------------- wipeout ---------------- */
@@ -3677,6 +4109,13 @@ const Input = {
       // Safari requires an AudioContext to be created/resumed inside the
       // user-gesture call stack — doing it from the rAF loop is blocked.
       Audio.init(); Audio.resume();
+      const LV = { Digit1: 'mountain', Digit2: 'pipe', Digit3: 'park', Numpad1: 'mountain', Numpad2: 'pipe', Numpad3: 'park' };
+      if (LV[e.code] && (Game.state === 'menu' || Game.state === 'over')) {
+        Game.selectLevel(LV[e.code]);
+        if (Game.state === 'over') Game.restart();
+        return;
+      }
+      if (e.code === 'Escape' && (Game.state === 'over' || Game.state === 'pause')) { Game.toMenu(); return; }
       this.anyKey = true;
       const k = keyMap[e.code];
       if (!k) return;
@@ -3722,6 +4161,16 @@ const Input = {
     $('pause').addEventListener('pointerdown', (e) => { if (e.button === 0) Game.togglePause(); });
 
     this.initTouch();
+    for (const b of document.querySelectorAll('.lvl')) {
+      b.addEventListener('pointerdown', (e) => e.stopPropagation());
+      b.addEventListener('click', (e) => {
+        e.stopPropagation(); Audio.init(); Audio.resume();
+        Game.selectLevel(b.dataset.id); this.anyKey = true;          // tap a card = ride it
+      });
+    }
+    const lb = $('toLevels');
+    lb.addEventListener('pointerdown', (e) => e.stopPropagation());
+    lb.addEventListener('click', (e) => { e.stopPropagation(); Game.toMenu(); });
     const mb = $('muteBtn');
     mb.addEventListener('pointerdown', (e) => e.stopPropagation());   // don't start a run from the menu
     mb.addEventListener('click', (e) => { e.stopPropagation(); Audio.init(); Audio.resume(); Game.toggleMute(); mb.blur(); });
@@ -3872,20 +4321,66 @@ const Game = {
   boot() {
     this.P = new Player();
     this.fx = new Particles();
-    let saved = 0;
-    try { saved = +(localStorage.getItem('powderline.best') || 0); } catch (e) { saved = 0; }
     try { if (localStorage.getItem('powderline.muted') === '1') Audio.setMuted(true); } catch (e) { }
     $('muteBtn').classList.toggle('muted', Audio.muted);
-    this.best = isFinite(saved) ? saved : 0;
-    $('best').textContent = 'BEST ' + this.best.toLocaleString();
     this.buildLives();
     Sun.init();
-    this.P.reset(centerX(0), 0);
-    World.prewarm(this.P.pos.x, this.P.pos.z);
-    World.update(this.P.pos.x, this.P.pos.z);
+    let lv = 'mountain';
+    try { lv = localStorage.getItem('powderline.level') || 'mountain'; } catch (e) { }
+    this.selectLevel(Level.defs[lv] ? lv : 'mountain', true);
     this.startY = this.P.pos.y;
     this.lastZ = this.P.pos.z;
-    Cam.snap(this.P);
+  },
+
+  /* ---------------- levels ---------------- */
+  spawnZ() { return Level.cur.spawnZ || 0; },
+
+  selectLevel(id, force) {
+    const def = Level.defs[id]; if (!def) return;
+    const changed = force || Level.cur !== def;
+    Level.cur = def;
+    try { localStorage.setItem('powderline.level', id); } catch (e) { }
+    for (const b of document.querySelectorAll('.lvl')) b.classList.toggle('sel', b.dataset.id === id);
+    if (changed) {
+      const lod = def.lod || [40, 20, 10];
+      for (let i = 0; i < LODS.length; i++) LODS[i].res = lod[i];
+      World.reset(); Gates.reset(); Scenery.reset();
+      const old = GL.mesh._levelDecor;
+      if (old) { GL.gl.deleteVertexArray(old.vao); GL.gl.deleteBuffer(old.vb); GL.gl.deleteBuffer(old.ib); delete GL.mesh._levelDecor; }
+      if (def.decor) GL.upload('_levelDecor', def.decor());
+      this.P.reset(centerX(this.spawnZ()), this.spawnZ(), Level.cur.spawnSpeed);
+      World.prewarm(this.P.pos.x, this.P.pos.z);
+      World.update(this.P.pos.x, this.P.pos.z);
+      Cam.snap(this.P);
+    }
+    this.loadBest();
+  },
+
+  bestKey() { return Level.cur.id === 'mountain' ? 'powderline.best' : 'powderline.best.' + Level.cur.id; },
+  loadBest() {
+    let saved = 0;
+    try { saved = +(localStorage.getItem(this.bestKey()) || 0); } catch (e) { saved = 0; }
+    this.best = isFinite(saved) ? saved : 0;
+    $('best').textContent = 'BEST ' + this.best.toLocaleString();
+  },
+
+  toMenu() {
+    this.state = 'menu'; this._deadTimer = 0;
+    $('over').classList.add('hide'); $('pause').classList.add('hide'); $('menu').classList.remove('hide');
+    $('hud').classList.remove('on');
+    document.body.classList.remove('playing');
+    this.P.reset(centerX(this.spawnZ()), this.spawnZ(), Level.cur.spawnSpeed);
+    Cam.snap(this.P); Scenery.reset();
+  },
+
+  onGrind(t, ang) {
+    if (t < 0.25) return;
+    const pts = Math.round((60 + t * 240) * this.combo);
+    this.score += pts;
+    this.bestHit = Math.max(this.bestHit, pts);
+    this.combo = Math.min(this.combo + 1, 12); this.comboTimer = 5.5;
+    Audio.trick(1);
+    this.showTrick(ang > 0.9 ? 'Boardslide' : '50-50 Grind', pts);
   },
 
   buildLives() {
@@ -3914,7 +4409,7 @@ const Game = {
     this.setLives(3);
     Gates.reset();
     this.fx.clear();
-    this.P.reset(centerX(0), 0);
+    this.P.reset(centerX(this.spawnZ()), this.spawnZ(), Level.cur.spawnSpeed);
     this.startY = this.P.pos.y;
     this.lastZ = this.P.pos.z;
     // the menu drift may have streamed the near field far away from z=0
@@ -3953,8 +4448,10 @@ const Game = {
   recover() { this.desat = 0; },
   onPump() { this.score += 15 * this.combo; },
 
-  gameOver() {
+  gameOver(finished) {
     this.state = 'over';
+    $('overTitle').textContent = (finished ? 'Run complete · ' : 'Run over · ') + Level.cur.name;
+    $('overHead').textContent = finished ? 'NICE RUN' : 'RUN DOWN';
     document.body.classList.remove('playing');
     Audio.gameover();
     const s = Math.round(this.score);
@@ -3966,7 +4463,7 @@ const Game = {
     $('sLands').textContent = this.lands;
     if (s > this.best) {
       this.best = s;
-      try { localStorage.setItem('powderline.best', String(s)); } catch (e) { }
+      try { localStorage.setItem(this.bestKey(), String(s)); } catch (e) { }
       $('newbest').style.display = 'block';
     } else $('newbest').style.display = 'none';
     $('best').textContent = 'BEST ' + this.best.toLocaleString();
@@ -3980,12 +4477,12 @@ const Game = {
     const rot = Math.floor(Math.abs(a.spin) / Math.PI + 0.18);
     const flips = Math.floor(Math.abs(a.flip) / (Math.PI * 2) + 0.12);
     const heldGrab = a.grab && a.grabT > Math.max(0.25, a.t * 0.45);
-    if (rot < 1 && flips < 1 && a.t < 1.25) return;
+    if (rot < 1 && flips < 1 && a.t < (Level.cur.airMin || 1.25)) return;
 
     const names = ['180', '360', '540', '720', '900', '1080', '1260', '1440'];
     let name = rot > 0
       ? (a.spin > 0 ? 'Frontside ' : 'Backside ') + (names[clamp(rot - 1, 0, names.length - 1)] || (rot * 180))
-      : 'Big Air';
+      : (a.label || 'Big Air');
     if (flips > 0) {
       const flipName = (['', '', 'Double ', 'Triple '][flips] || flips + '× ') + (a.flip > 0 ? 'Backflip' : 'Frontflip');
       name = rot > 0 ? name + ' ' + flipName : flipName;
@@ -4070,7 +4567,7 @@ const Game = {
     const wasAir = P.airborne;
     if (wasAir) {
       this.air.t = P.airTime; this.air.spin = P.spin;
-      this.air.flip = P.flip; this.air.grab = P.grab;
+      this.air.flip = P.flip; this.air.grab = P.grab; this.air.label = P.airLabel;
       if (this.air.grab && P.grabTime > 0) this.air.grabT = P.grabTime;
     }
 
@@ -4089,6 +4586,10 @@ const Game = {
     }
 
     World.update(P.pos.x, P.pos.z);
+    // built courses end at a finish line
+    if (Level.cur.finishZ && P.pos.z > Level.cur.finishZ && !(this._deadTimer > 0)) {
+      this.score += 500; this.gameOver(true); return;
+    }
     Gates.ensure(P.pos.z + 400);
     Gates.trim(P.pos.z);
     this.checkGates();
@@ -4223,6 +4724,7 @@ const Game = {
         if (Input.anyKey) { Input.anyKey = false; Game.start(); }
         // idle: drift down the mountain so the menu has a live backdrop
         Game.P.pos.z += dt * 7;
+        if (Level.cur.finishZ && Game.P.pos.z > Level.cur.finishZ) Game.P.pos.z = Game.spawnZ();
         Game.P.pos.x = centerX(Game.P.pos.z);
         Game.P.pos.y = heightAt(Game.P.pos.x, Game.P.pos.z) + 0.2;
         Game.P.speed = 7; Game.P.updateBasis();

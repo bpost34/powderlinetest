@@ -38,7 +38,9 @@ const Cam = {
     // ---- heading: smoothed direction of travel ----
     const hs = Math.hypot(P.vel.x, P.vel.z);
     if (P.crashTimer <= 0) {
-      const target = hs > 1.5 ? Math.atan2(P.vel.x, P.vel.z) : P.yaw;
+      // pipe: keep looking down the pipe instead of whipping across it on every wall
+      const lock = Level.cur.cam && Level.cur.cam.lockHeading;
+      const target = lock ? 0 : (hs > 1.5 ? Math.atan2(P.vel.x, P.vel.z) : P.yaw);
       const rate = P.airborne ? 0.8 : (hs > 1.5 ? 2.4 : 1.0);
       this.heading += angDelta(this.heading, target) * (1 - Math.exp(-rate * dt));
     }
@@ -55,8 +57,9 @@ const Cam = {
     // ---- desired position: orbit the rider at (yaw, elevation, distance) ----
     const yaw = this.heading + this.orbitYaw;
     const fx = Math.sin(yaw), fz = Math.cos(yaw);
-    const dist = (9.0 + speedN * 3.5 + (P.airborne ? 1.5 : 0)) * this.zoom;
-    const elev = clamp(0.40 + this.orbitPitch, -0.12, 1.35);
+    const lc = Level.cur.cam || {};
+    const dist = (9.0 + speedN * 3.5 + (P.airborne ? 1.5 : 0)) * this.zoom * (lc.dist || 1);
+    const elev = clamp((lc.elev || 0.40) + this.orbitPitch, -0.12, 1.35);
     const ce = Math.cos(elev), se = Math.sin(elev);
     const fy = P.pos.y + 1.1;                               // focus: rider's chest
     const tx = P.pos.x - fx * dist * ce, tz = P.pos.z - fz * dist * ce;
@@ -209,6 +212,8 @@ const Render = {
       gl.bindVertexArray(m.vao);
       gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0);
     }
+    // level structures (rails, coping, finish arch)
+    if (GL.mesh._levelDecor) drawMesh(sp, '_levelDecor', IDENT);
     // rider + board cast shadows
     drawMesh(sp, 'board', P.boardMat);
     for (let i = 0; i < P.partCount; i++) {
@@ -363,6 +368,7 @@ const Render = {
     const lp = GL.prog.lit.use();
     Sun.setUniforms(lp);
     gl.uniform1f(lp.uSparkle, 0.0);
+    if (GL.mesh._levelDecor) drawMesh(lp, '_levelDecor', IDENT);
     drawMesh(lp, 'board', P.boardMat);
     for (let i = 0; i < P.partCount; i++) {
       const q = P.parts[i];
@@ -384,6 +390,7 @@ const Render = {
   },
 
   drawPipes(ip) {
+    if (Level.cur.id !== 'mountain') return;      // the mountain's random feature walls only
     const gl = GL.gl;
     const ib = GL.buf.parts, d = ib.data;
     let n = 0;

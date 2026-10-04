@@ -43,7 +43,7 @@ class Particles {
   /* carving spray: thrown off the engaged edge, opposite the turn */
   spray(P, dt) {
     const speed = P.speed;
-    if (P.airborne || speed < 3.2) return;
+    if (P.airborne || P.grind || speed < 3.2) return;
     const edge = Math.abs(P.lean);
     const rate = clamp(speed * (0.55 + edge * 2.6) * (P.braking ? 1.9 : 1.0), 0, 190);
     this.acc = (this.acc || 0) + rate * dt;
@@ -73,7 +73,7 @@ class Particles {
 
   /* deep powder: a continuous roost behind the rider at speed */
   powder(P, dt) {
-    if (P.airborne || P.speed < 12) return;
+    if (P.airborne || P.grind || P.speed < 12) return;
     this.accP = (this.accP || 0) + (P.speed - 10) * 0.9 * dt;
     while (this.accP >= 1) {
       this.accP -= 1;

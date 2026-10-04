@@ -63,14 +63,16 @@ class Player {
     this._mi = 0;
   }
 
-  reset(x, z) {
+  reset(x, z, speed) {
+    const v0 = speed || 6;
     this.pos.x = x;
     this.pos.z = z;
     this.pos.y = heightAt(x, z) + RIDE_H;
-    V3.set(this.vel, 0, 0, 6);
-    this.yaw = 0; this.lean = 0; this.speed = 6;
+    V3.set(this.vel, 0, 0, v0);
+    this.yaw = 0; this.lean = 0; this.speed = v0;
     this.airborne = false; this.airTime = 0; this.crashTimer = 0;
     this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipVis = 0; this.grab = null; this.tuck = 0; this.invuln = 1.2;
+    this.grind = null;
     this.updateBasis();
   }
 
@@ -102,6 +104,7 @@ class Player {
     this.landing = 0;
     if (this.invuln > 0) this.invuln -= dt;
     if (this.crashTimer > 0) { this.stepCrash(dt, fx); return; }
+    if (this.grind) { this.stepGrind(dt, input, fx); return; }
 
     if (this.jumpBuffer > 0) this.jumpBuffer -= dt;
     if (this.pumpCooldown > 0) this.pumpCooldown -= dt;
@@ -110,7 +113,13 @@ class Player {
     this.updateBasis();
 
     if (this.airborne) this.stepAir(dt, input, fx);
-    else this.stepGround(dt, input, fx);
+    else {
+      this.stepGround(dt, input, fx);
+      // level rules: e.g. carving up a pipe wall launches you out of the lip
+      if (!this.airborne && Level.cur.lip && Level.cur.lip(this)) {
+        Audio.ollie(); Cam.shake = Math.max(Cam.shake, 0.04);
+      }
+    }
 
     // integrate
     this.pos.x += this.vel.x * dt;
@@ -137,6 +146,7 @@ class Player {
     V3.set(this.backPos, this.pos.x - this.dir.x * half, this.pos.y, this.pos.z - this.dir.z * half);
 
     this.speed = Math.hypot(this.vel.x, this.vel.z);
+    if (Level.cur.rails) this.checkGrind(fx);
     if (this.airborne) this.flipVis = this.flip;
     else this.flipVis = damp(this.flipVis, 0, 14, dt);
   }
@@ -155,6 +165,11 @@ class Player {
     // velocity from them every frame discards cos²(slope) ≈ 11% of horizontal
     // speed per step — tens of m/s² of phantom braking. Physics stays in the
     // flat horizontal plane; the tilted basis exists for rendering only.
+    // sliding backwards (e.g. back down a pipe wall): swing the board round so
+    // the rider rides out nose-first instead of fighting the forward clamp below
+    if (this.vel.x * Math.sin(this.yaw) + this.vel.z * Math.cos(this.yaw) < -0.6) {
+      this.yaw += Math.PI; this.updateBasis();
+    }
     const fX = Math.sin(this.yaw), fZ = Math.cos(this.yaw);
     const rX = fZ, rZ = -fX;
 
@@ -209,7 +224,7 @@ class Player {
         this.vel.z = fZ * vFwd + rZ * vSide;
         this.vel.y = (5.6 + clamp(sp * 0.10, 0, 2.2)) * (0.80 + this.load * 0.24);
         this.jumpBuffer = 0; this.pumpCooldown = 0.26;
-        this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false;
+        this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false; this.autoYaw = null; this.airLabel = null;
         fx.puff(this.pos.x, this.groundY, this.pos.z, 0.7 + this.load * 0.3);
         Audio.ollie();
         Cam.shake = Math.max(Cam.shake, 0.05);
@@ -221,7 +236,9 @@ class Player {
     const dragCoef = lerp(0.0075, 0.0030, this.tuck) + this.braking * 0.02;
     const cd = dragCoef * sp * sp;
     const roll = 0.40 + this.braking * 3.4 + edge * 0.5 * (1 - smoothstep(0, 1, sp / 6));
-    vFwd += (gFwd * G * 0.94 - sign(vFwd) * (cd + roll)) * dt;
+    // levels with walls (pipes) make climbing a bit cheaper so airs are reachable
+    const climb = gFwd < 0 && Level.cur.wallAssist ? Level.cur.wallAssist : 1;
+    vFwd += (gFwd * G * 0.94 * climb - sign(vFwd) * (cd + roll)) * dt;
     vSide += gSide * G * 0.94 * dt;
 
     // ---- edge hold: kill side-slip, far harder when the edge is engaged ----
@@ -236,8 +253,8 @@ class Player {
       this.airborne = true; this.airTime = 0;
       this.vel.x = fX * vFwd + rX * vSide;
       this.vel.z = fZ * vFwd + rZ * vSide;
-      this.vel.y = ((hA - hB) / e) * sp;   // keep following the drop-off
-      this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false;
+      this.vel.y = Math.max(0, (hB - hC) / e) * sp;   // leave along the ramp we're coming off (the slope behind)
+      this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false; this.autoYaw = null; this.airLabel = null;
       this.unload = 1;
       return;
     }
@@ -264,6 +281,10 @@ class Player {
     const spinRate = clamp(-this.lean * 6.4, -6.4, 6.4);
     this.yaw += spinRate * dt;
     this.spin += spinRate * dt;
+    if (this.autoYaw) {                    // pipe air: ease the board round to face back in;
+      this.autoYaw.target += spinRate * dt; // the rider's own spins ride on top of it
+      this.yaw += angDelta(this.yaw, this.autoYaw.target) * (1 - Math.exp(-3.2 * dt));
+    }
     this.lean = damp(this.lean, input.steer * 0.92, 6, dt);
 
     // flips: W pitches forward = frontflip, S pulls back = backflip. Holding W/S
@@ -283,6 +304,7 @@ class Player {
 
   /* ---------------- touchdown ---------------- */
   land(fx) {
+    this.autoYaw = null;
     const n = this.nrm;
     normalAt(this.pos.x, this.pos.z, n);
     const vDown = this.vel.y;
@@ -291,6 +313,16 @@ class Player {
     this.airborne = false;
     this.airTime = 0;
     this.pos.y = heightAt(this.pos.x, this.pos.z) + RIDE_H;
+
+    // a fall onto a slope becomes speed down that slope (pipe walls, landing
+    // ramps): horizontal speed gains |vy|·sin(slope) along the downhill direction
+    if (vDown < 0) {
+      const hn = Math.hypot(n.x, n.z);
+      if (hn > 1e-3) {
+        const gain = -vDown * hn * 0.9;                 // hn = sin(slope angle)
+        this.vel.x += n.x / hn * gain; this.vel.z += n.z / hn * gain;
+      }
+    }
 
     // landing quality: is the board base aligned with the slope, and is the
     // board travelling along its own length? Riding backwards (switch) is a
@@ -341,6 +373,73 @@ class Player {
 
     if (bad) { this.crash(fx); this.landedClean = false; }
     else { this.landedClean = true; this.chop = 0.4; }
+  }
+
+  /* ---------------- rails ---------------- */
+  checkGrind(fx) {
+    if (this.grind || this.crashTimer > 0) return;
+    const p = this.pos, feet = p.y - RIDE_H;
+    for (const r of Level.cur.rails) {
+      if (p.z < r.zmin - 1 || p.z > r.zmax + 1) continue;
+      const rx = p.x - r.x0, rz = p.z - r.z0;
+      const t = rx * r.ux + rz * r.uz;
+      if (t < 0 || t > r.len - 0.5) continue;
+      if (Math.abs(rx * -r.uz + rz * r.ux) > 0.42) continue;       // sideways distance to the bar
+      const top = railTop(r, t);
+      const ok = this.airborne
+        ? (this.vel.y <= 1.5 && feet > top - 0.5 && feet < top + 0.8)
+        : (feet > top - 0.25);                                        // rolled onto the flush entry
+      if (!ok) continue;
+      if (this.airborne && Math.abs(angDelta(0, this.flip)) > 0.85) { this.crash(fx); return; }
+      const along = this.vel.x * r.ux + this.vel.z * r.uz;
+      this.grind = { r, t, dir: along >= 0 ? 1 : -1, s: Math.max(3, Math.abs(along)), time: 0 };
+      this.airborne = false; this.airTime = 0; this.landedClean = true;
+      this.flip = 0; this.flipRate = 0; this.grab = null; this.grabTime = 0;
+      this.pos.y = top + RIDE_H;
+      Audio.land(0.35); Cam.shake = Math.max(Cam.shake, 0.06);
+      return;
+    }
+  }
+
+  stepGrind(dt, input, fx) {
+    const g = this.grind, r = g.r;
+    g.time += dt;
+    const ahead = clamp(g.t + g.dir * 0.5, 0, r.len);
+    const slope = (railTop(r, ahead) - railTop(r, g.t)) / Math.max(0.05, Math.abs(ahead - g.t));
+    g.s = Math.max(1.5, g.s + (-slope * G * 0.9 - 0.5) * dt);    // gravity along the bar, light friction
+    g.t += g.dir * g.s * dt;
+    const tt = clamp(g.t, 0, r.len);
+    this.pos.x = r.x0 + r.ux * tt; this.pos.z = r.z0 + r.uz * tt;
+    this.pos.y = railTop(r, tt) + RIDE_H;
+    this.groundY = heightAt(this.pos.x, this.pos.z);
+    this.vel.x = r.ux * g.dir * g.s; this.vel.z = r.uz * g.dir * g.s; this.vel.y = slope * g.s;
+    this.speed = g.s;
+    this.lean = damp(this.lean, input.steer * 0.25, 6, dt);
+    this.tuck = damp(this.tuck, 0.4, 6, dt);
+    this.updateBasis();
+    if (this.jumpBuffer > 0) this.jumpBuffer -= dt;
+    if (input.jump) this.jumpBuffer = 0.14;
+    // metal sparks from the bar
+    if (Math.random() < 0.6) {
+      const a = rnd(TAU);
+      fx.spawn(this.pos.x, this.pos.y - RIDE_H + 0.02, this.pos.z, Math.cos(a) * rnd(0.5, 2), rnd(0.5, 2.5), Math.sin(a) * rnd(0.5, 2),
+        { life: rnd(0.15, 0.35), size: rnd(0.03, 0.07), col: [1.6, 1.0, 0.4], alpha: 1, grav: -9, drag: 0.5 });
+    }
+    const off = g.t < 0 || g.t > r.len;
+    if (off || this.jumpBuffer > 0) {
+      const railYaw = Math.atan2(r.ux * g.dir, r.uz * g.dir);
+      let ang = Math.abs(angDelta(railYaw, this.yaw)); if (ang > Math.PI / 2) ang = Math.PI - ang;
+      Game.onGrind(g.time, ang);
+      this.grind = null;
+      this.airborne = true; this.airTime = 0;
+      this.vel.y = this.jumpBuffer > 0 ? 5.2 : Math.max(1.2, this.vel.y);
+      this.jumpBuffer = 0;
+      this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false; this.autoYaw = null; this.airLabel = null;
+      if (!off) Audio.ollie();
+    }
+    const half = BOARD_L * 0.5 * 0.86;
+    V3.set(this.frontPos, this.pos.x + this.dir.x * half, this.pos.y, this.pos.z + this.dir.z * half);
+    V3.set(this.backPos, this.pos.x - this.dir.x * half, this.pos.y, this.pos.z - this.dir.z * half);
   }
 
   /* ---------------- wipeout ---------------- */

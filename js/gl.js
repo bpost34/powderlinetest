@@ -259,6 +259,16 @@ const GL = {
   maxDPR() { return this.quality < 1 ? 1.0 : 1.75; },
 
   /* chunk mesh → GPU, cached by chunk+lod identity */
+  /* free every cached terrain chunk (level switch) */
+  purgeChunks() {
+    const gl = this.gl;
+    for (const [k, m] of this.chunkVAO) {
+      gl.deleteVertexArray(m.vao); gl.deleteBuffer(m.vb); gl.deleteBuffer(m.ib);
+      delete this.mesh['_chunk' + k];
+    }
+    this.chunkVAO.clear();
+  },
+
   chunkMesh(chunk, lod) {
     if (lod < 0) return null;                 // nothing built for this chunk yet
     const key = chunk.ix + ':' + chunk.iz + ':' + lod;

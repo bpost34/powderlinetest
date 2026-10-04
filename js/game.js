@@ -34,6 +34,13 @@ const Input = {
       // Safari requires an AudioContext to be created/resumed inside the
       // user-gesture call stack — doing it from the rAF loop is blocked.
       Audio.init(); Audio.resume();
+      const LV = { Digit1: 'mountain', Digit2: 'pipe', Digit3: 'park', Numpad1: 'mountain', Numpad2: 'pipe', Numpad3: 'park' };
+      if (LV[e.code] && (Game.state === 'menu' || Game.state === 'over')) {
+        Game.selectLevel(LV[e.code]);
+        if (Game.state === 'over') Game.restart();
+        return;
+      }
+      if (e.code === 'Escape' && (Game.state === 'over' || Game.state === 'pause')) { Game.toMenu(); return; }
       this.anyKey = true;
       const k = keyMap[e.code];
       if (!k) return;
@@ -79,6 +86,16 @@ const Input = {
     $('pause').addEventListener('pointerdown', (e) => { if (e.button === 0) Game.togglePause(); });
 
     this.initTouch();
+    for (const b of document.querySelectorAll('.lvl')) {
+      b.addEventListener('pointerdown', (e) => e.stopPropagation());
+      b.addEventListener('click', (e) => {
+        e.stopPropagation(); Audio.init(); Audio.resume();
+        Game.selectLevel(b.dataset.id); this.anyKey = true;          // tap a card = ride it
+      });
+    }
+    const lb = $('toLevels');
+    lb.addEventListener('pointerdown', (e) => e.stopPropagation());
+    lb.addEventListener('click', (e) => { e.stopPropagation(); Game.toMenu(); });
     const mb = $('muteBtn');
     mb.addEventListener('pointerdown', (e) => e.stopPropagation());   // don't start a run from the menu
     mb.addEventListener('click', (e) => { e.stopPropagation(); Audio.init(); Audio.resume(); Game.toggleMute(); mb.blur(); });
@@ -229,20 +246,66 @@ const Game = {
   boot() {
     this.P = new Player();
     this.fx = new Particles();
-    let saved = 0;
-    try { saved = +(localStorage.getItem('powderline.best') || 0); } catch (e) { saved = 0; }
     try { if (localStorage.getItem('powderline.muted') === '1') Audio.setMuted(true); } catch (e) { }
     $('muteBtn').classList.toggle('muted', Audio.muted);
-    this.best = isFinite(saved) ? saved : 0;
-    $('best').textContent = 'BEST ' + this.best.toLocaleString();
     this.buildLives();
     Sun.init();
-    this.P.reset(centerX(0), 0);
-    World.prewarm(this.P.pos.x, this.P.pos.z);
-    World.update(this.P.pos.x, this.P.pos.z);
+    let lv = 'mountain';
+    try { lv = localStorage.getItem('powderline.level') || 'mountain'; } catch (e) { }
+    this.selectLevel(Level.defs[lv] ? lv : 'mountain', true);
     this.startY = this.P.pos.y;
     this.lastZ = this.P.pos.z;
-    Cam.snap(this.P);
+  },
+
+  /* ---------------- levels ---------------- */
+  spawnZ() { return Level.cur.spawnZ || 0; },
+
+  selectLevel(id, force) {
+    const def = Level.defs[id]; if (!def) return;
+    const changed = force || Level.cur !== def;
+    Level.cur = def;
+    try { localStorage.setItem('powderline.level', id); } catch (e) { }
+    for (const b of document.querySelectorAll('.lvl')) b.classList.toggle('sel', b.dataset.id === id);
+    if (changed) {
+      const lod = def.lod || [40, 20, 10];
+      for (let i = 0; i < LODS.length; i++) LODS[i].res = lod[i];
+      World.reset(); Gates.reset(); Scenery.reset();
+      const old = GL.mesh._levelDecor;
+      if (old) { GL.gl.deleteVertexArray(old.vao); GL.gl.deleteBuffer(old.vb); GL.gl.deleteBuffer(old.ib); delete GL.mesh._levelDecor; }
+      if (def.decor) GL.upload('_levelDecor', def.decor());
+      this.P.reset(centerX(this.spawnZ()), this.spawnZ(), Level.cur.spawnSpeed);
+      World.prewarm(this.P.pos.x, this.P.pos.z);
+      World.update(this.P.pos.x, this.P.pos.z);
+      Cam.snap(this.P);
+    }
+    this.loadBest();
+  },
+
+  bestKey() { return Level.cur.id === 'mountain' ? 'powderline.best' : 'powderline.best.' + Level.cur.id; },
+  loadBest() {
+    let saved = 0;
+    try { saved = +(localStorage.getItem(this.bestKey()) || 0); } catch (e) { saved = 0; }
+    this.best = isFinite(saved) ? saved : 0;
+    $('best').textContent = 'BEST ' + this.best.toLocaleString();
+  },
+
+  toMenu() {
+    this.state = 'menu'; this._deadTimer = 0;
+    $('over').classList.add('hide'); $('pause').classList.add('hide'); $('menu').classList.remove('hide');
+    $('hud').classList.remove('on');
+    document.body.classList.remove('playing');
+    this.P.reset(centerX(this.spawnZ()), this.spawnZ(), Level.cur.spawnSpeed);
+    Cam.snap(this.P); Scenery.reset();
+  },
+
+  onGrind(t, ang) {
+    if (t < 0.25) return;
+    const pts = Math.round((60 + t * 240) * this.combo);
+    this.score += pts;
+    this.bestHit = Math.max(this.bestHit, pts);
+    this.combo = Math.min(this.combo + 1, 12); this.comboTimer = 5.5;
+    Audio.trick(1);
+    this.showTrick(ang > 0.9 ? 'Boardslide' : '50-50 Grind', pts);
   },
 
   buildLives() {
@@ -271,7 +334,7 @@ const Game = {
     this.setLives(3);
     Gates.reset();
     this.fx.clear();
-    this.P.reset(centerX(0), 0);
+    this.P.reset(centerX(this.spawnZ()), this.spawnZ(), Level.cur.spawnSpeed);
     this.startY = this.P.pos.y;
     this.lastZ = this.P.pos.z;
     // the menu drift may have streamed the near field far away from z=0
@@ -310,8 +373,10 @@ const Game = {
   recover() { this.desat = 0; },
   onPump() { this.score += 15 * this.combo; },
 
-  gameOver() {
+  gameOver(finished) {
     this.state = 'over';
+    $('overTitle').textContent = (finished ? 'Run complete · ' : 'Run over · ') + Level.cur.name;
+    $('overHead').textContent = finished ? 'NICE RUN' : 'RUN DOWN';
     document.body.classList.remove('playing');
     Audio.gameover();
     const s = Math.round(this.score);
@@ -323,7 +388,7 @@ const Game = {
     $('sLands').textContent = this.lands;
     if (s > this.best) {
       this.best = s;
-      try { localStorage.setItem('powderline.best', String(s)); } catch (e) { }
+      try { localStorage.setItem(this.bestKey(), String(s)); } catch (e) { }
       $('newbest').style.display = 'block';
     } else $('newbest').style.display = 'none';
     $('best').textContent = 'BEST ' + this.best.toLocaleString();
@@ -337,12 +402,12 @@ const Game = {
     const rot = Math.floor(Math.abs(a.spin) / Math.PI + 0.18);
     const flips = Math.floor(Math.abs(a.flip) / (Math.PI * 2) + 0.12);
     const heldGrab = a.grab && a.grabT > Math.max(0.25, a.t * 0.45);
-    if (rot < 1 && flips < 1 && a.t < 1.25) return;
+    if (rot < 1 && flips < 1 && a.t < (Level.cur.airMin || 1.25)) return;
 
     const names = ['180', '360', '540', '720', '900', '1080', '1260', '1440'];
     let name = rot > 0
       ? (a.spin > 0 ? 'Frontside ' : 'Backside ') + (names[clamp(rot - 1, 0, names.length - 1)] || (rot * 180))
-      : 'Big Air';
+      : (a.label || 'Big Air');
     if (flips > 0) {
       const flipName = (['', '', 'Double ', 'Triple '][flips] || flips + '× ') + (a.flip > 0 ? 'Backflip' : 'Frontflip');
       name = rot > 0 ? name + ' ' + flipName : flipName;
@@ -427,7 +492,7 @@ const Game = {
     const wasAir = P.airborne;
     if (wasAir) {
       this.air.t = P.airTime; this.air.spin = P.spin;
-      this.air.flip = P.flip; this.air.grab = P.grab;
+      this.air.flip = P.flip; this.air.grab = P.grab; this.air.label = P.airLabel;
       if (this.air.grab && P.grabTime > 0) this.air.grabT = P.grabTime;
     }
 
@@ -446,6 +511,10 @@ const Game = {
     }
 
     World.update(P.pos.x, P.pos.z);
+    // built courses end at a finish line
+    if (Level.cur.finishZ && P.pos.z > Level.cur.finishZ && !(this._deadTimer > 0)) {
+      this.score += 500; this.gameOver(true); return;
+    }
     Gates.ensure(P.pos.z + 400);
     Gates.trim(P.pos.z);
     this.checkGates();
@@ -580,6 +649,7 @@ const Game = {
         if (Input.anyKey) { Input.anyKey = false; Game.start(); }
         // idle: drift down the mountain so the menu has a live backdrop
         Game.P.pos.z += dt * 7;
+        if (Level.cur.finishZ && Game.P.pos.z > Level.cur.finishZ) Game.P.pos.z = Game.spawnZ();
         Game.P.pos.x = centerX(Game.P.pos.z);
         Game.P.pos.y = heightAt(Game.P.pos.x, Game.P.pos.z) + 0.2;
         Game.P.speed = 7; Game.P.updateBasis();
