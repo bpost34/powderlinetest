@@ -1308,6 +1308,17 @@ const Game = {
       // vertical, like the stick: pushing up moves the needle up (tail: + bal = sinking back)
       const v = clamp(P.press.type === 'tail' ? -P.press.bal : P.press.bal, -1, 1);
       $('pressNeedle').style.top = (50 - v * 46) + '%';
+      // sit beside the rider on screen (right of the hips), clamped inside the view
+      const m = Cam.vp, x = P.pos.x, y = P.pos.y + 0.8, z = P.pos.z;
+      const cw = m[3] * x + m[7] * y + m[11] * z + m[15];
+      if (cw > 0.1) {
+        const W = innerWidth, H = innerHeight;
+        const sx = ((m[0] * x + m[4] * y + m[8] * z + m[12]) / cw * 0.5 + 0.5) * W;
+        const sy = (0.5 - (m[1] * x + m[5] * y + m[9] * z + m[13]) / cw * 0.5) * H;
+        const off = clamp(H * 0.06, 34, 70), w = pm.offsetWidth || 190;
+        const px = clamp(sx + off, 8, W - w - 8), py = clamp(sy, 60, H - 60);
+        pm.style.transform = 'translate(' + px.toFixed(0) + 'px,' + py.toFixed(0) + 'px) translateY(-50%)';
+      }
       pm.classList.toggle('warn', Math.abs(P.press.bal) > 0.65);
     }
     $('airtime').classList.toggle('on', P.airborne);

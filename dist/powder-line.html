@@ -52,9 +52,12 @@
   #airtime.on{opacity:1}
   /* butter / press balance meter: keep the needle in the middle */
   /* vertical like the stick's up/down: the needle follows your push */
-  #pressMeter{display:none;margin:8px auto 0;align-items:center;justify-content:center;gap:12px}
+  /* drawn right beside the rider (positioned each frame from the rider's screen position)
+     so the eyes stay on the rider and the line ahead */
+  #pressMeter{position:absolute;left:0;top:0;display:none;align-items:center;gap:10px;pointer-events:none;z-index:3;
+    padding:6px 10px 6px 8px;border-radius:10px;background:rgba(10,22,38,.45)}
   #pressMeter.on{display:flex}
-  #pressLabel{font-size:12px;font-weight:800;letter-spacing:.14em;color:var(--accent);text-align:right;line-height:1.5}
+  #pressLabel{font-size:12px;font-weight:800;letter-spacing:.14em;color:var(--accent);text-align:left;line-height:1.5;white-space:nowrap}
   #pressLabel::after{content:'▲▼ keep it centred';display:block;font-size:10px;font-weight:650;letter-spacing:.06em;color:var(--dim)}
   .pmBar{position:relative;width:10px;height:70px;border-radius:5px;background:linear-gradient(180deg,#ff5a4c,#f5c638 25%,#5fd35a 42% 58%,#f5c638 75%,#ff5a4c)}
   #pressNeedle{position:absolute;left:-5px;width:20px;height:4px;margin-top:-2px;border-radius:2px;background:#fff;box-shadow:0 0 6px #000}
@@ -461,9 +464,9 @@
   <div id="center">
     <div id="combo">×1 COMBO</div>
     <div id="airtime">0.00 s</div>
-    <div id="pressMeter"><div id="pressLabel">TAIL PRESS</div><div class="pmBar"><i id="pressNeedle"></i></div></div>
   </div>
   <div id="trick"><div id="trickName"></div><div id="trickPts"></div></div>
+  <div id="pressMeter"><div class="pmBar"><i id="pressNeedle"></i></div><div id="pressLabel">TAIL PRESS</div></div>
   <div id="gateMark"><div class="gm-label">GATE</div><div class="gm-dist num" id="gateDist">0 m</div><div class="gm-arrow"></div></div>
   <div id="msg"></div>
   <div id="hint" class="kb-only">
@@ -7795,6 +7798,17 @@ const Game = {
       // vertical, like the stick: pushing up moves the needle up (tail: + bal = sinking back)
       const v = clamp(P.press.type === 'tail' ? -P.press.bal : P.press.bal, -1, 1);
       $('pressNeedle').style.top = (50 - v * 46) + '%';
+      // sit beside the rider on screen (right of the hips), clamped inside the view
+      const m = Cam.vp, x = P.pos.x, y = P.pos.y + 0.8, z = P.pos.z;
+      const cw = m[3] * x + m[7] * y + m[11] * z + m[15];
+      if (cw > 0.1) {
+        const W = innerWidth, H = innerHeight;
+        const sx = ((m[0] * x + m[4] * y + m[8] * z + m[12]) / cw * 0.5 + 0.5) * W;
+        const sy = (0.5 - (m[1] * x + m[5] * y + m[9] * z + m[13]) / cw * 0.5) * H;
+        const off = clamp(H * 0.06, 34, 70), w = pm.offsetWidth || 190;
+        const px = clamp(sx + off, 8, W - w - 8), py = clamp(sy, 60, H - 60);
+        pm.style.transform = 'translate(' + px.toFixed(0) + 'px,' + py.toFixed(0) + 'px) translateY(-50%)';
+      }
       pm.classList.toggle('warn', Math.abs(P.press.bal) > 0.65);
     }
     $('airtime').classList.toggle('on', P.airborne);

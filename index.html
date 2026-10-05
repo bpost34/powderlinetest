@@ -52,9 +52,12 @@
   #airtime.on{opacity:1}
   /* butter / press balance meter: keep the needle in the middle */
   /* vertical like the stick's up/down: the needle follows your push */
-  #pressMeter{display:none;margin:8px auto 0;align-items:center;justify-content:center;gap:12px}
+  /* drawn right beside the rider (positioned each frame from the rider's screen position)
+     so the eyes stay on the rider and the line ahead */
+  #pressMeter{position:absolute;left:0;top:0;display:none;align-items:center;gap:10px;pointer-events:none;z-index:3;
+    padding:6px 10px 6px 8px;border-radius:10px;background:rgba(10,22,38,.45)}
   #pressMeter.on{display:flex}
-  #pressLabel{font-size:12px;font-weight:800;letter-spacing:.14em;color:var(--accent);text-align:right;line-height:1.5}
+  #pressLabel{font-size:12px;font-weight:800;letter-spacing:.14em;color:var(--accent);text-align:left;line-height:1.5;white-space:nowrap}
   #pressLabel::after{content:'▲▼ keep it centred';display:block;font-size:10px;font-weight:650;letter-spacing:.06em;color:var(--dim)}
   .pmBar{position:relative;width:10px;height:70px;border-radius:5px;background:linear-gradient(180deg,#ff5a4c,#f5c638 25%,#5fd35a 42% 58%,#f5c638 75%,#ff5a4c)}
   #pressNeedle{position:absolute;left:-5px;width:20px;height:4px;margin-top:-2px;border-radius:2px;background:#fff;box-shadow:0 0 6px #000}
@@ -461,9 +464,9 @@
   <div id="center">
     <div id="combo">×1 COMBO</div>
     <div id="airtime">0.00 s</div>
-    <div id="pressMeter"><div id="pressLabel">TAIL PRESS</div><div class="pmBar"><i id="pressNeedle"></i></div></div>
   </div>
   <div id="trick"><div id="trickName"></div><div id="trickPts"></div></div>
+  <div id="pressMeter"><div class="pmBar"><i id="pressNeedle"></i></div><div id="pressLabel">TAIL PRESS</div></div>
   <div id="gateMark"><div class="gm-label">GATE</div><div class="gm-dist num" id="gateDist">0 m</div><div class="gm-arrow"></div></div>
   <div id="msg"></div>
   <div id="hint" class="kb-only">
@@ -589,19 +592,19 @@
 
 <div id="fatal"></div>
 
-<script src="js/math.js?v=20261018f"></script>
-<script src="js/world.js?v=20261018f"></script>
-<script src="js/meshes.js?v=20261018f"></script>
-<script src="js/outfit.js?v=20261018f"></script>
-<script src="js/levels.js?v=20261018f"></script>
-<script src="js/gl.js?v=20261018f"></script>
-<script src="js/render.js?v=20261018f"></script>
-<script src="js/scenery.js?v=20261018f"></script>
-<script src="js/atmos.js?v=20261018f"></script>
-<script src="js/fx.js?v=20261018f"></script>
-<script src="js/audio.js?v=20261018f"></script>
-<script src="js/player.js?v=20261018f"></script>
-<script src="js/pad.js?v=20261018f"></script>
-<script src="js/game.js?v=20261018f"></script>
+<script src="js/math.js?v=20261018g"></script>
+<script src="js/world.js?v=20261018g"></script>
+<script src="js/meshes.js?v=20261018g"></script>
+<script src="js/outfit.js?v=20261018g"></script>
+<script src="js/levels.js?v=20261018g"></script>
+<script src="js/gl.js?v=20261018g"></script>
+<script src="js/render.js?v=20261018g"></script>
+<script src="js/scenery.js?v=20261018g"></script>
+<script src="js/atmos.js?v=20261018g"></script>
+<script src="js/fx.js?v=20261018g"></script>
+<script src="js/audio.js?v=20261018g"></script>
+<script src="js/player.js?v=20261018g"></script>
+<script src="js/pad.js?v=20261018g"></script>
+<script src="js/game.js?v=20261018g"></script>
 </body>
 </html>
