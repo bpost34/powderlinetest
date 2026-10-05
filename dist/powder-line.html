@@ -168,7 +168,18 @@
   /* ---- virtual Xbox controller: left stick (steer / tuck / brake) + A/B/X/Y diamond ---- */
   #touch{--gx:max(18px,env(safe-area-inset-right));--gl:max(18px,env(safe-area-inset-left));
     --gb:max(20px,env(safe-area-inset-bottom));--stick:min(150px,37vw);--dia:min(172px,44vw);--fb:calc(var(--dia) * .34)}
-  #abxy{position:absolute;right:var(--gx);bottom:var(--gb);width:var(--dia);height:var(--dia);pointer-events:none}
+  /* movable groups: each cluster sits in a box with a grip above it (hold, then drag) */
+  .tgroup{position:absolute;pointer-events:none;touch-action:none}
+  #gStick{left:var(--gl);bottom:var(--gb);width:var(--stick);height:var(--stick)}
+  #gAbxy{right:var(--gx);bottom:var(--gb);width:var(--dia);height:var(--dia)}
+  .tgrip{position:absolute;left:50%;top:-30px;width:44px;height:22px;margin-left:-22px;border-radius:11px;
+    background:rgba(14,16,22,.45);border:1px solid rgba(255,255,255,.18);pointer-events:auto;touch-action:none;
+    display:flex;align-items:center;justify-content:center;color:rgba(234,246,255,.7);font-size:12px;letter-spacing:1px;
+    transition:transform .12s,background .12s,border-color .12s}
+  .tgrip.armed{background:rgba(95,226,255,.35);border-color:var(--accent);transform:scale(1.15)}
+  .tgroup.moving{filter:drop-shadow(0 0 10px rgba(95,226,255,.75))}
+  .tgroup.moving .tgrip{background:rgba(95,226,255,.55);border-color:var(--accent)}
+  #abxy{position:absolute;inset:0;pointer-events:none}
   .xbtn{width:var(--fb);height:var(--fb);background:radial-gradient(circle at 50% 38%,rgba(48,52,62,.62),rgba(14,16,22,.62));
     border:1.5px solid rgba(255,255,255,.16);box-shadow:0 2px 8px rgba(0,0,0,.25)}
   .xbtn b{font-size:calc(var(--fb) * .40);line-height:1;font-weight:900;letter-spacing:0;color:var(--xc)}
@@ -179,7 +190,7 @@
   #xY{--xc:#f5c638;left:50%;top:0;margin-left:calc(var(--fb) / -2)}
   #xX{--xc:#4c9bff;left:0;top:50%;margin-top:calc(var(--fb) / -2)}
   #xB{--xc:#ff5a4c;right:0;top:50%;margin-top:calc(var(--fb) / -2)}
-  #steerPad{position:absolute;left:var(--gl);bottom:var(--gb);
+  #steerPad{position:absolute;left:0;top:0;
     width:var(--stick);height:var(--stick);border-radius:50%;border:1.5px solid rgba(255,255,255,.14);
     background:radial-gradient(circle,rgba(14,16,22,.30) 0 55%,rgba(14,16,22,.55) 100%);
     box-shadow:inset 0 2px 10px rgba(0,0,0,.35);pointer-events:auto;touch-action:none;backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
@@ -471,7 +482,7 @@
   <div class="eyebrow">paused</div>
   <h1 style="font-size:clamp(34px,7vw,70px)">CATCHING<br>YOUR BREATH</h1>
   <div class="go"><span class="kb-only">press P to drop back in · R to restart · Esc for levels</span><span class="touch-only">tap to drop back in</span></div>
-  <div class="pbtns"><button type="button" id="pResume">Resume</button><button type="button" id="pRestart">↺ Restart</button><button type="button" id="pMenu">☰ Levels</button></div>
+  <div class="pbtns"><button type="button" id="pResume">Resume</button><button type="button" id="pRestart">↺ Restart</button><button type="button" id="pMenu">☰ Levels</button><button type="button" id="pLayout" class="touch-only">⠿ Reset controls</button></div>
 </div>
 
 <div id="rider" class="hide" role="dialog" aria-label="Customize rider" tabindex="-1">
@@ -489,12 +500,16 @@
 <button id="muteBtn" type="button" aria-label="Mute" title="Mute (M)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" stroke="none"/><g class="waves"><path d="M16 9.5a3.5 3.5 0 0 1 0 5"/><path d="M18.5 7a7 7 0 0 1 0 10"/></g><g class="x"><path d="M16.5 9.5l5 5M21.5 9.5l-5 5"/></g></svg></button>
 
 <div id="touch">
+  <div class="tgroup" id="gStick"><div class="tgrip" title="Hold, then drag to move">⠿</div>
   <div id="steerPad"><span class="arr l">◀</span><span class="arr r">▶</span><span class="arr u">▲<small>tuck · front</small></span><span class="arr d"><small>brake · back</small>▼</span><div id="steerKnob"></div></div>
+  </div>
+  <div class="tgroup" id="gAbxy"><div class="tgrip" title="Hold, then drag to move">⠿</div>
   <div id="abxy">
     <div class="tbtn xbtn" id="xY"><b>Y</b><small>grab</small></div>
     <div class="tbtn xbtn" id="xX"><b>X</b><small>grab</small></div>
     <div class="tbtn xbtn" id="xB"><b>B</b><small>grab</small></div>
     <div class="tbtn xbtn" id="xA"><b>A</b><small>ollie</small></div>
+  </div>
   </div>
   <div class="tbtn sbtn" id="tP" title="Pause">❚❚</div>
   <div class="tbtn sbtn" id="tR" title="Restart">↺</div>
@@ -6233,6 +6248,8 @@ const Input = {
     pad.addEventListener('pointerup', release); pad.addEventListener('pointercancel', release);
     pad.addEventListener('lostpointercapture', release);
 
+    TouchLayout.init();
+
     // one-finger swipe on open screen orbits the camera (same spring-back as the mouse)
     const canvas = $('gl');
     let camId = null, lx = 0, ly = 0;
@@ -6322,6 +6339,85 @@ const Input = {
     const j = this.jumpRelease; this.jumpRelease = false;
     return { steer: this.steer, brake: this.brake, tuck: this.tuck, jump: j, charge: this.releaseCharge,
              flipFwd: Math.max(this.down.tuck ? 1 : 0, fwd), flipBack: Math.max(this.down.brake ? 1 : 0, back), grab: this.grab };
+  }
+};
+
+/* ---------------- movable touch controls ----------------
+   Each cluster (stick, A/B/X/Y) has a grip above it: press and hold ~0.3 s until
+   it lights up, then drag the cluster anywhere and let go. Positions are saved
+   per orientation as fractions of the screen (so they suit any phone size);
+   "Reset controls" on the pause screen restores the defaults. */
+const TouchLayout = {
+  KEY: 'powderline.touchLayout',
+  HOLD_MS: 300,
+  saved: {},
+  orient() { return innerWidth > innerHeight ? 'land' : 'port'; },
+
+  init() {
+    try { this.saved = JSON.parse(localStorage.getItem(this.KEY) || '{}') || {}; } catch (e) { this.saved = {}; }
+    for (const id of ['gStick', 'gAbxy']) this.bind($(id));
+    window.addEventListener('resize', () => this.apply());
+    const rb = $('pLayout');
+    rb.addEventListener('pointerdown', (e) => e.stopPropagation());
+    rb.addEventListener('click', (e) => { e.stopPropagation(); this.reset(); rb.blur(); });
+    this.apply();
+  },
+
+  /* place every group: saved centre (fractions of the screen) or the CSS default */
+  apply() {
+    if (!document.body.classList.contains('playing')) return;      // hidden: nothing to measure yet
+    const o = this.saved[this.orient()] || {};
+    for (const id of ['gStick', 'gAbxy']) {
+      const g = $(id), c = o[id];
+      if (!c) { g.style.left = g.style.top = g.style.right = g.style.bottom = ''; continue; }
+      this.place(g, c[0] * innerWidth, c[1] * innerHeight);
+    }
+  },
+
+  /* centre a group at (x, y), kept fully on screen (grip included) */
+  place(g, x, y) {
+    const w = g.offsetWidth, h = g.offsetHeight, pad = 8;
+    x = clamp(x, w / 2 + pad, innerWidth - w / 2 - pad);
+    y = clamp(y, h / 2 + 34, innerHeight - h / 2 - pad);
+    g.style.right = g.style.bottom = 'auto';
+    g.style.left = (x - w / 2) + 'px'; g.style.top = (y - h / 2) + 'px';
+    return [x, y];
+  },
+
+  bind(g) {
+    const grip = g.querySelector('.tgrip');
+    let id = null, timer = 0, moving = false, dx = 0, dy = 0, last = null;
+    const end = () => {
+      clearTimeout(timer);
+      if (moving && last) {
+        const o = this.saved[this.orient()] || (this.saved[this.orient()] = {});
+        o[g.id] = [last[0] / innerWidth, last[1] / innerHeight];
+        try { localStorage.setItem(this.KEY, JSON.stringify(this.saved)); } catch (e) { }
+      }
+      id = null; moving = false; last = null;
+      grip.classList.remove('armed'); g.classList.remove('moving');
+    };
+    grip.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      try { grip.setPointerCapture(e.pointerId); } catch (_) { }
+      id = e.pointerId;
+      const r = g.getBoundingClientRect();
+      dx = e.clientX - (r.left + r.width / 2); dy = e.clientY - (r.top + r.height / 2);
+      grip.classList.add('armed');
+      timer = setTimeout(() => { moving = true; g.classList.add('moving'); }, this.HOLD_MS);   // hold to unlock
+    });
+    grip.addEventListener('pointermove', (e) => {
+      if (e.pointerId !== id || !moving) return;
+      last = this.place(g, e.clientX - dx, e.clientY - dy);
+    });
+    grip.addEventListener('pointerup', end); grip.addEventListener('pointercancel', end);
+    grip.addEventListener('lostpointercapture', end);
+  },
+
+  reset() {
+    delete this.saved[this.orient()];
+    try { localStorage.setItem(this.KEY, JSON.stringify(this.saved)); } catch (e) { }
+    this.apply();
   }
 };
 
@@ -6516,6 +6612,7 @@ const Game = {
     $('hud').classList.add('on'); $('hint').classList.remove('gone');
     this.state = 'play';
     document.body.classList.add('playing');
+    TouchLayout.apply();                       // controls are visible now: sizes are measurable
     Audio.resume();
   },
 
@@ -6532,7 +6629,7 @@ const Game = {
 
   togglePause() {
     if (this.state === 'play') { this.state = 'pause'; $('pause').classList.remove('hide'); document.body.classList.remove('playing'); }
-    else if (this.state === 'pause') { this.state = 'play'; $('pause').classList.add('hide'); document.body.classList.add('playing'); Audio.resume(); }
+    else if (this.state === 'pause') { this.state = 'play'; $('pause').classList.add('hide'); document.body.classList.add('playing'); TouchLayout.apply(); Audio.resume(); }
   },
 
   /* ---------------- callbacks from player.js ---------------- */

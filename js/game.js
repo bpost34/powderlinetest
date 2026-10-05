@@ -203,6 +203,8 @@ const Input = {
     pad.addEventListener('pointerup', release); pad.addEventListener('pointercancel', release);
     pad.addEventListener('lostpointercapture', release);
 
+    TouchLayout.init();
+
     // one-finger swipe on open screen orbits the camera (same spring-back as the mouse)
     const canvas = $('gl');
     let camId = null, lx = 0, ly = 0;
@@ -292,6 +294,85 @@ const Input = {
     const j = this.jumpRelease; this.jumpRelease = false;
     return { steer: this.steer, brake: this.brake, tuck: this.tuck, jump: j, charge: this.releaseCharge,
              flipFwd: Math.max(this.down.tuck ? 1 : 0, fwd), flipBack: Math.max(this.down.brake ? 1 : 0, back), grab: this.grab };
+  }
+};
+
+/* ---------------- movable touch controls ----------------
+   Each cluster (stick, A/B/X/Y) has a grip above it: press and hold ~0.3 s until
+   it lights up, then drag the cluster anywhere and let go. Positions are saved
+   per orientation as fractions of the screen (so they suit any phone size);
+   "Reset controls" on the pause screen restores the defaults. */
+const TouchLayout = {
+  KEY: 'powderline.touchLayout',
+  HOLD_MS: 300,
+  saved: {},
+  orient() { return innerWidth > innerHeight ? 'land' : 'port'; },
+
+  init() {
+    try { this.saved = JSON.parse(localStorage.getItem(this.KEY) || '{}') || {}; } catch (e) { this.saved = {}; }
+    for (const id of ['gStick', 'gAbxy']) this.bind($(id));
+    window.addEventListener('resize', () => this.apply());
+    const rb = $('pLayout');
+    rb.addEventListener('pointerdown', (e) => e.stopPropagation());
+    rb.addEventListener('click', (e) => { e.stopPropagation(); this.reset(); rb.blur(); });
+    this.apply();
+  },
+
+  /* place every group: saved centre (fractions of the screen) or the CSS default */
+  apply() {
+    if (!document.body.classList.contains('playing')) return;      // hidden: nothing to measure yet
+    const o = this.saved[this.orient()] || {};
+    for (const id of ['gStick', 'gAbxy']) {
+      const g = $(id), c = o[id];
+      if (!c) { g.style.left = g.style.top = g.style.right = g.style.bottom = ''; continue; }
+      this.place(g, c[0] * innerWidth, c[1] * innerHeight);
+    }
+  },
+
+  /* centre a group at (x, y), kept fully on screen (grip included) */
+  place(g, x, y) {
+    const w = g.offsetWidth, h = g.offsetHeight, pad = 8;
+    x = clamp(x, w / 2 + pad, innerWidth - w / 2 - pad);
+    y = clamp(y, h / 2 + 34, innerHeight - h / 2 - pad);
+    g.style.right = g.style.bottom = 'auto';
+    g.style.left = (x - w / 2) + 'px'; g.style.top = (y - h / 2) + 'px';
+    return [x, y];
+  },
+
+  bind(g) {
+    const grip = g.querySelector('.tgrip');
+    let id = null, timer = 0, moving = false, dx = 0, dy = 0, last = null;
+    const end = () => {
+      clearTimeout(timer);
+      if (moving && last) {
+        const o = this.saved[this.orient()] || (this.saved[this.orient()] = {});
+        o[g.id] = [last[0] / innerWidth, last[1] / innerHeight];
+        try { localStorage.setItem(this.KEY, JSON.stringify(this.saved)); } catch (e) { }
+      }
+      id = null; moving = false; last = null;
+      grip.classList.remove('armed'); g.classList.remove('moving');
+    };
+    grip.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      try { grip.setPointerCapture(e.pointerId); } catch (_) { }
+      id = e.pointerId;
+      const r = g.getBoundingClientRect();
+      dx = e.clientX - (r.left + r.width / 2); dy = e.clientY - (r.top + r.height / 2);
+      grip.classList.add('armed');
+      timer = setTimeout(() => { moving = true; g.classList.add('moving'); }, this.HOLD_MS);   // hold to unlock
+    });
+    grip.addEventListener('pointermove', (e) => {
+      if (e.pointerId !== id || !moving) return;
+      last = this.place(g, e.clientX - dx, e.clientY - dy);
+    });
+    grip.addEventListener('pointerup', end); grip.addEventListener('pointercancel', end);
+    grip.addEventListener('lostpointercapture', end);
+  },
+
+  reset() {
+    delete this.saved[this.orient()];
+    try { localStorage.setItem(this.KEY, JSON.stringify(this.saved)); } catch (e) { }
+    this.apply();
   }
 };
 
@@ -486,6 +567,7 @@ const Game = {
     $('hud').classList.add('on'); $('hint').classList.remove('gone');
     this.state = 'play';
     document.body.classList.add('playing');
+    TouchLayout.apply();                       // controls are visible now: sizes are measurable
     Audio.resume();
   },
 
@@ -502,7 +584,7 @@ const Game = {
 
   togglePause() {
     if (this.state === 'play') { this.state = 'pause'; $('pause').classList.remove('hide'); document.body.classList.remove('playing'); }
-    else if (this.state === 'pause') { this.state = 'play'; $('pause').classList.add('hide'); document.body.classList.add('playing'); Audio.resume(); }
+    else if (this.state === 'pause') { this.state = 'play'; $('pause').classList.add('hide'); document.body.classList.add('playing'); TouchLayout.apply(); Audio.resume(); }
   },
 
   /* ---------------- callbacks from player.js ---------------- */
