@@ -82,7 +82,8 @@ const Input = {
       if (!(Game.state === 'menu' && (e.code === 'KeyN' || e.code === 'KeyM'))) this.anyKey = true;
       // flick mode: direction keys are flicks during a run
       if (Flick.on && Game.state === 'play') {
-        const FD = { ArrowUp: [0, -1], KeyW: [0, -1], ArrowDown: [0, 1], KeyS: [0, 1], ArrowLeft: [-1, 0], KeyA: [-1, 0], ArrowRight: [1, 0], KeyD: [1, 0] };
+        const FD = { ArrowUp: [0, -1], KeyW: [0, -1], ArrowDown: [0, 1], KeyS: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
+        if (Flick.steering === 'auto') { FD.KeyA = [-1, 0]; FD.KeyD = [1, 0]; }       // otherwise A / D steer
         if (FD[e.code]) { Flick.key(FD[e.code][0], FD[e.code][1]); return; }
       }
       const k = keyMap[e.code];
@@ -369,25 +370,40 @@ const Input = {
    Touch: flick anywhere on screen. Controller: flick the left stick. Keyboard: tap the
    arrows / WASD (two at once for a diagonal). Each trick auto-completes before touchdown;
    a flick with too little air left is ignored, so flick mode never crashes you. */
+const FLICK_STYLES = ['off', 'auto', 'assist', 'manual'];
+const FLICK_LABEL = { off: 'Classic', auto: 'Flick · autopilot', assist: 'Flick · assisted', manual: 'Flick · manual steer' };
 const Flick = {
   on: false,
+  steering: 'auto',    // auto: autopilot steers · assist: autopilot nudged by tilt/stick · manual: you steer
   pending: null,       // flick waiting for the next frame: {x, y}
   tap: false,          // tap waiting: ollie (snow) or grab (air)
   airGrab: false,
   _keyVec: null, _keyT: 0, _padArmed: true,
 
+  style() { return this.on ? this.steering : 'off'; },
   load() {
-    try { this.on = localStorage.getItem('powderline.flick') === '1'; } catch (e) { }
+    let v = 'off';
+    try { v = localStorage.getItem('powderline.flick') || 'off'; } catch (e) { }
+    if (v === '1') v = 'auto';                       // older saves
+    if (v === '0' || !FLICK_STYLES.includes(v)) v = 'off';
+    this.on = v !== 'off'; if (this.on) this.steering = v;
     this.sync();
   },
+  /* the menu button cycles Classic → autopilot → assisted → manual */
   toggle() {
-    this.on = !this.on;
-    try { localStorage.setItem('powderline.flick', this.on ? '1' : '0'); } catch (e) { }
+    const next = FLICK_STYLES[(FLICK_STYLES.indexOf(this.style()) + 1) % FLICK_STYLES.length];
+    this.on = next !== 'off'; if (this.on) this.steering = next;
+    try { localStorage.setItem('powderline.flick', next); } catch (e) { }
     this.sync();
   },
   sync() {
-    document.body.classList.toggle('flick', this.on);
-    const b = $('styleBtn'); if (b) { b.textContent = 'Controls style: ' + (this.on ? 'Flick' : 'Classic'); b.classList.toggle('on', this.on); }
+    const b = document.body.classList;
+    b.toggle('flick', this.on);
+    b.toggle('flickSteer', this.on && this.steering !== 'auto');      // touch: show the steering stick
+    const el = $('styleBtn'); if (el) { el.textContent = 'Controls: ' + FLICK_LABEL[this.style()]; el.classList.toggle('on', this.on); }
+    if (typeof Game !== 'undefined' && Game.P) Game.loadBest();      // Classic and Flick bests are separate
+    const h = $('flickHint');
+    if (h) h.textContent = (this.on && this.steering !== 'auto' ? 'steer: stick / tilt · ' : '') + 'tap ollie / grab · flick ↑↓ flip · ←→ spin (on snow: switch)';
   },
 
   /* snap a direction to 8-way (components 0 / ±1) */
@@ -436,17 +452,40 @@ const Flick = {
 
   /* rewrite this frame's input: autopilot steering + gestures */
   apply(inp, P) {
-    if (Pad.steer !== null || Pad.stickY) this.pad(Pad.steer || 0, Pad.stickY || 0);
-    inp.steer = P.airborne ? 0 : Autopilot.steer(P);
+    // controller flicks: left stick when the autopilot steers, right stick otherwise
+    if (this.steering === 'auto') { if (Pad.steer !== null || Pad.stickY) this.pad(Pad.steer || 0, Pad.stickY || 0); }
+    else if (Pad.rx || Pad.ry) this.pad(Pad.rx || 0, Pad.ry || 0); else this._padArmed = true;
+    // steering: inp.steer arrives as the rider's own (stick / tilt / keys)
+    const user = inp.steer || 0;
+    if (P.airborne) { inp.steer = 0; P.lean = 0; }          // flick mode: spins only come from flicks
+    else if (this.steering === 'auto') inp.steer = Autopilot.steer(P);
+    else if (this.steering === 'assist') inp.steer = clamp(Autopilot.steer(P) * 0.6 + user * 0.8, -1, 1);
+    else inp.steer = user;
     inp.tuck = 0; inp.flipFwd = 0; inp.flipBack = 0; inp.butter = false; inp.pump = false; inp.stomp = false;
-    inp.brake = !P.airborne && P.speed > 24 ? 0.5 : 0;           // keep the speed sane
+    inp.brake = 0;
+    // ---- easy speed + air: tuck to a cruising speed, pump every compression,
+    //      and pop an ollie off every launch (lips, ramps, rails, kicker tops) ----
+    const lv = Level.cur.id, cap = lv === 'pipe' ? 15.5 : lv === 'park' ? 19 : 23;   // m/s: pipe ~56 km/h, park ~68, mountain ~83
+    if (!P.airborne) {
+      this._popped = false;
+      inp.tuck = P.speed < cap ? 1 : 0;
+      if (P.speed > cap + 4) inp.brake = 0.5;
+      // pump compressions, but only up to the cruising speed (a pump on a big landing
+      // or a pipe transition can add 10+ m/s — uncapped it snowballs into 40 m airs)
+      if (P.load > 1.15 && P.speed < cap - 0.5) { inp.pump = true; inp.pumpMax = cap + 1 - P.speed; }
+      if ((lv === 'mountain' || lv === 'zen') && Autopilot.atKickerTop(P)) { inp.jump = true; inp.charge = 0.3; }
+    } else if (!this._popped && P.airTime < 0.08 && P.coyote > 0) {
+      // launch + a light ollie = noticeably more air (a full-charge pop on top of a lip launch is ~20 m)
+      this._popped = true;
+      if (lv !== 'pipe') { inp.jump = true; inp.charge = 0.12; }   // the pipe's height comes from the speed
+    }
     let f = this.pending; this.pending = null;
-    if (f && !P.airborne && f.y < 0 && !f.x) { inp.jump = true; inp.charge = 0.35; f = null; }   // flick up on snow = ollie
+    if (f && !P.airborne && f.y < 0 && !f.x) { inp.jump = true; inp.charge = 0.6; f = null; }    // flick up on snow = ollie
     if (f && !f.x && !f.y) f = null;
     inp.flick = f;
     if (this.tap) {
       this.tap = false;
-      if (P.airborne) this.airGrab = true; else { inp.jump = true; inp.charge = 0.35; }
+      if (P.airborne) this.airGrab = true; else { inp.jump = true; inp.charge = 0.6; }
     }
     if (!P.airborne) this.airGrab = false;
     if (this.airGrab) inp.grab = inp.grab || 'Indy';
@@ -455,7 +494,17 @@ const Flick = {
 
 /* the autopilot line: gates on the mountain, features in the park, wall to wall in the pipe */
 const Autopilot = {
-  side: 1,
+  side: 1, _lastKick: null,
+  /* on the mountain, ollie right at a natural kicker's top (rollers are absorbed otherwise) */
+  atKickerTop(P) {
+    const s0 = Math.floor((P.pos.z + 40) / SEG);
+    for (let i = 0; i < 3; i++) {
+      const k = featureAt(s0 + i - 1);
+      if (!k || k.kind !== 'kicker' || k === this._lastKick) continue;
+      if (P.pos.z > k.z - 1.6 && P.pos.z < k.z + 0.4 && Math.abs(P.pos.x - k.x) < k.rad * 0.7) { this._lastKick = k; return true; }
+    }
+    return false;
+  },
   steer(P) {
     const lv = Level.cur, z = P.pos.z;
     // aim at a target POINT (tx, tz): heading = straight at it, not a fixed look-ahead,
@@ -464,7 +513,7 @@ const Autopilot = {
     if (lv.id === 'pipe') {
       const lip = PIPE.B + PIPE.R;
       if (P.pos.x * this.side > lip - 1.6) this.side = -this.side;       // reached this wall: go for the other
-      tx = this.side * (lip + 2); tz = z + 7; maxOff = 1.3;
+      tx = this.side * (lip + 2); tz = z + 10; maxOff = 1.3;      // a shallower line up the wall: ~5 m airs, not the 7 m ceiling every hit
     } else if (lv.id === 'park') {
       tx = 0;
       for (const f of PARK_FEATURES) if (f.k === 'table' && f.z + f.up > z + 6 && f.z < z + 80) { tx = f.x; tz = Math.max(tz, f.z + f.up * 0.5); break; }
@@ -766,16 +815,18 @@ const Game = {
     Atmos.refresh();
   },
 
+  /* best scores are kept per level, per run length and per control mode (Classic vs Flick) */
   bestKey() {
-    const d = Level.cur;
-    if (d.lengths) return 'powderline.best.' + d.id + '.' + d.lengths[this.lenIdx(d.id)].key;   // per run length
-    return d.id === 'mountain' ? 'powderline.best' : 'powderline.best.' + d.id;
+    const d = Level.cur, fl = Flick.on ? '.flick' : '';
+    if (d.lengths) return 'powderline.best.' + d.id + '.' + d.lengths[this.lenIdx(d.id)].key + fl;
+    return (d.id === 'mountain' ? 'powderline.best' : 'powderline.best.' + d.id) + fl;
   },
+  modeTag() { return Flick.on ? 'FLICK' : 'CLASSIC'; },
   loadBest() {
     let saved = 0;
     try { saved = +(localStorage.getItem(this.bestKey()) || 0); } catch (e) { saved = 0; }
     this.best = isFinite(saved) ? saved : 0;
-    $('best').textContent = 'BEST ' + this.best.toLocaleString();
+    $('best').textContent = 'BEST ' + this.best.toLocaleString() + ' · ' + this.modeTag();
   },
 
   toMenu() {
@@ -901,7 +952,7 @@ const Game = {
   gameOver(finished) {
     this.state = 'over'; this.overAt = performance.now();
     const L = Level.cur.lengths ? ' · ' + Level.cur.lengths[this.lenIdx(Level.cur.id)].label : '';
-    $('overTitle').textContent = (finished ? 'Run complete · ' : 'Run over · ') + Level.cur.name + L;
+    $('overTitle').textContent = (finished ? 'Run complete · ' : 'Run over · ') + Level.cur.name + L + ' · ' + (Flick.on ? 'Flick' : 'Classic');
     $('overHead').textContent = finished ? 'NICE RUN' : 'RUN DOWN';
     document.body.classList.remove('playing');
     Audio.gameover();
@@ -915,9 +966,10 @@ const Game = {
     if (s > this.best) {
       this.best = s;
       try { localStorage.setItem(this.bestKey(), String(s)); } catch (e) { }
+      $('newbest').textContent = '★ new personal best · ' + (Flick.on ? 'Flick' : 'Classic');
       $('newbest').style.display = 'block';
     } else $('newbest').style.display = 'none';
-    $('best').textContent = 'BEST ' + this.best.toLocaleString();
+    $('best').textContent = 'BEST ' + this.best.toLocaleString() + ' · ' + this.modeTag();
     $('over').classList.remove('hide');
     $('hud').classList.remove('on');
   },

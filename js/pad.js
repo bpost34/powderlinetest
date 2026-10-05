@@ -117,7 +117,9 @@ const Pad = {
       if (edge(8)) Game.restart(true);
       if (Flick.on) { this.steer = lx || null; this.stickY = ly; }   // raw stick for flick detection
       // right stick orbits the camera (springs back like the mouse orbit)
-      if (rx || ry) { Cam.dragging = true; this._cam = true; Cam.drag(rx * dt * 700, ry * dt * 520); }
+      this.rx = rx; this.ry = ry;
+      const flickRight = Flick.on && Flick.steering !== 'auto';                // right stick flicks tricks there
+      if ((rx || ry) && !flickRight) { Cam.dragging = true; this._cam = true; Cam.drag(rx * dt * 700, ry * dt * 520); }
       else if (this._cam) { Cam.dragging = false; Cam.releaseT = 1.0; this._cam = false; }
     } else {
       if (this._jump || this._cam || this.steer !== null) this.release();

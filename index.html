@@ -319,6 +319,7 @@
   #styleBtn.on{border-color:var(--accent);color:var(--accent)}
   /* flick mode: no virtual pad (flick anywhere), a quiet reminder of the gestures */
   body.flick #gStick, body.flick #gAbxy, body.flick #hint{display:none!important}
+  body.flick.flickSteer #gStick{display:block!important}          /* assisted / manual: steer with the stick (or tilt) */
   #flickHint{position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translateX(-50%);display:none;
     padding:8px 14px;border-radius:18px;background:rgba(10,22,38,.42);color:rgba(234,246,255,.8);font-size:11px;
     font-weight:700;letter-spacing:.06em;max-width:calc(100vw - 32px);text-align:center;line-height:1.5;pointer-events:none;z-index:4}
@@ -561,19 +562,19 @@
 
 <div id="fatal"></div>
 
-<script src="js/math.js?v=20261014c"></script>
-<script src="js/world.js?v=20261014c"></script>
-<script src="js/meshes.js?v=20261014c"></script>
-<script src="js/outfit.js?v=20261014c"></script>
-<script src="js/levels.js?v=20261014c"></script>
-<script src="js/gl.js?v=20261014c"></script>
-<script src="js/render.js?v=20261014c"></script>
-<script src="js/scenery.js?v=20261014c"></script>
-<script src="js/atmos.js?v=20261014c"></script>
-<script src="js/fx.js?v=20261014c"></script>
-<script src="js/audio.js?v=20261014c"></script>
-<script src="js/player.js?v=20261014c"></script>
-<script src="js/pad.js?v=20261014c"></script>
-<script src="js/game.js?v=20261014c"></script>
+<script src="js/math.js?v=20261016b"></script>
+<script src="js/world.js?v=20261016b"></script>
+<script src="js/meshes.js?v=20261016b"></script>
+<script src="js/outfit.js?v=20261016b"></script>
+<script src="js/levels.js?v=20261016b"></script>
+<script src="js/gl.js?v=20261016b"></script>
+<script src="js/render.js?v=20261016b"></script>
+<script src="js/scenery.js?v=20261016b"></script>
+<script src="js/atmos.js?v=20261016b"></script>
+<script src="js/fx.js?v=20261016b"></script>
+<script src="js/audio.js?v=20261016b"></script>
+<script src="js/player.js?v=20261016b"></script>
+<script src="js/pad.js?v=20261016b"></script>
+<script src="js/game.js?v=20261016b"></script>
 </body>
 </html>

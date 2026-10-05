@@ -67,7 +67,10 @@ function pipeLipLaunch(P, cx, B, R, env) {
   const vOut = P.vel.x * out;
   if (vOut < 1.0) return false;
   P.airborne = true; P.airTime = 0;
-  P.vel.y = vOut + 0.6;
+  // amplitude: a strong run reaches ~4.5–6 m above the lip (Olympic finals 5–7 m; record 7.72 m)
+  const k = typeof Flick !== 'undefined' && Flick.on ? 1.0 : 1.2;                 // flick's autopilot carves hard: gentler lift keeps it ~5 m
+  P.vel.y = Math.min(vOut * k + 1.0, 11.8);        // ceiling ≈ 7 m: no airs past the real record
+  P.lipLaunch = true; P.spinCap = null;
   P.vel.x = -out * 0.9;
   P.pos.x = cx + out * (B + R - 0.5);
   P.spin = 0; P.flip = 0; P.flipRate = 0; P.flipArmed = false;

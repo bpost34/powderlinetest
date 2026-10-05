@@ -200,7 +200,8 @@ TESTS = r"""
   assert(stats.maxSpeed > 8, 'never got moving, top speed ' + stats.maxSpeed.toFixed(1));
   assert(stats.maxSpeed < 60, 'top speed absurd: ' + stats.maxSpeed.toFixed(1) + ' m/s');
   assert(stats.minSpeed < 40, 'speed never varied (no carving effect): min ' + stats.minSpeed.toFixed(1));
-  assert(stats.launches > 5, 'never went airborne in 90s (' + stats.ollies + ' jump inputs issued)');
+  // every deliberate ollie must leave the ground (a random crash can eat one)
+  assert(stats.launches >= Math.max(3, stats.ollies - 1), 'ollies did not launch: ' + stats.launches + ' launches from ' + stats.ollies + ' jump inputs');
   // Terrain following pins pos.y to the surface, so vertical acceleration is
   // v²·curvature of the noise field — large by construction at speed. Assert it
   // stays bounded (no runaway), not that it is small.

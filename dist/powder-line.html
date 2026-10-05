@@ -319,6 +319,7 @@
   #styleBtn.on{border-color:var(--accent);color:var(--accent)}
   /* flick mode: no virtual pad (flick anywhere), a quiet reminder of the gestures */
   body.flick #gStick, body.flick #gAbxy, body.flick #hint{display:none!important}
+  body.flick.flickSteer #gStick{display:block!important}          /* assisted / manual: steer with the stick (or tilt) */
   #flickHint{position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translateX(-50%);display:none;
     padding:8px 14px;border-radius:18px;background:rgba(10,22,38,.42);color:rgba(234,246,255,.8);font-size:11px;
     font-weight:700;letter-spacing:.06em;max-width:calc(100vw - 32px);text-align:center;line-height:1.5;pointer-events:none;z-index:4}
@@ -2417,7 +2418,10 @@ function pipeLipLaunch(P, cx, B, R, env) {
   const vOut = P.vel.x * out;
   if (vOut < 1.0) return false;
   P.airborne = true; P.airTime = 0;
-  P.vel.y = vOut + 0.6;
+  // amplitude: a strong run reaches ~4.5–6 m above the lip (Olympic finals 5–7 m; record 7.72 m)
+  const k = typeof Flick !== 'undefined' && Flick.on ? 1.0 : 1.2;                 // flick's autopilot carves hard: gentler lift keeps it ~5 m
+  P.vel.y = Math.min(vOut * k + 1.0, 11.8);        // ceiling ≈ 7 m: no airs past the real record
+  P.lipLaunch = true; P.spinCap = null;
   P.vel.x = -out * 0.9;
   P.pos.x = cx + out * (B + R - 0.5);
   P.spin = 0; P.flip = 0; P.flipRate = 0; P.flipArmed = false;
@@ -5274,7 +5278,9 @@ class Player {
      flip carried over, flips must be re-armed, and no leftover grace window */
   _takeoff() {
     if (this.press) { this.airborne = true; this.endPress(true); }   // pop out of a press: counts, spin carries on
-    this.airborne = true; this.airTime = 0; this.coyote = 0; this.stompAt = -1; this.flickRot = null;
+    this.airborne = true; this.airTime = 0; this.coyote = 0; this.stompAt = -1; this.flickRot = null; this.lipLaunch = false;
+    this.lean *= 0.5;           // carve lean carries into the air as pre-spin; halved since spins got ~2x faster
+    this.spinCap = null;        // set from the takeoff speed on the first air frame
     this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false;
     this.autoYaw = null; this.airLabel = null;
   }
@@ -5455,7 +5461,7 @@ class Player {
     if (this.pumpBuf > 0) {
       this.pumpBuf -= dt;
       if (this.pumpCooldown <= 0 && this.load > 1.08) {
-        vFwd += 1.2 + (this.load - 1) * 5.5;
+        vFwd += Math.min(1.2 + (this.load - 1) * 5.5, input.pumpMax === undefined ? Infinity : input.pumpMax);
         this.pumpCooldown = 0.3; this.pumpBuf = 0;
         fx.puff(this.pos.x, this.groundY, this.pos.z, 0.45);
         Audio.ollie();
@@ -5531,7 +5537,9 @@ class Player {
   /* ollie pop: base on speed, scaled by how long Space/OLLIE was held (0.6 s = full load) */
   popSpeed(sp) {
     const charge = this.jumpCharge !== undefined ? this.jumpCharge : 0.3;
-    return (5.6 + clamp(sp * 0.10, 0, 2.2)) * lerp(0.8, 1.3, clamp(charge / 0.6, 0, 1));
+    // flat-ground ollie ≈ 0.5 m (tap) … ~1.7 m (full load at speed): arcade-generous but in
+    // reach of a real pro ollie; big air comes from lips, ramps and kickers, not from pop
+    return (3.3 + clamp(sp * 0.05, 0, 1.1)) * lerp(0.85, 1.3, clamp(charge / 0.6, 0, 1));
   }
 
   stepAir(dt, input, fx) {
@@ -5541,7 +5549,10 @@ class Player {
     if (this.coyote > 0) {
       this.coyote -= dt;
       if (this.jumpBuffer > 0) {
-        this.vel.y = Math.max(0, this.vel.y) * 0.6 + this.popSpeed(this.speed);
+        // pipe lips: an ollie at the lip adds a little on top of the wall's own lift
+        // (keeps the best airs near the real ~7.7 m record instead of 15+ m)
+        this.vel.y = this.lipLaunch ? Math.min(this.vel.y + this.popSpeed(this.speed) * 0.3, 12.3)
+                                    : Math.max(0, this.vel.y) * 0.6 + this.popSpeed(this.speed);
         this.coyote = 0; this.jumpBuffer = 0;
         fx.puff(this.pos.x, this.groundY, this.pos.z, 0.8);
         Audio.ollie();
@@ -5553,7 +5564,12 @@ class Player {
     this.vel.x *= k; this.vel.z *= k;
 
     // in-air yaw from the board's remaining rotation (torque steer)
-    const spinRate = clamp(-this.lean * 6.4, -6.4, 6.4);
+    // up to ~710°/s: a full-amplitude pipe air (~1.9 s) fits a 1080, a big-air jump a 1440
+    // (real 1080s happen in ~1.2–1.9 s of air — PMC IMU study of competitive pipe riders).
+    // How fast you can spin depends on the takeoff: a flat ollie only has the pop for ~400°/s.
+    if (this.spinCap == null) this.spinCap = clamp(4 + Math.max(0, this.vel.y) * 0.85, 6.5, 12.4);   // first air frame
+    const cap = this.spinCap || 12.4;
+    const spinRate = clamp(-this.lean * 13.5, -cap, cap);
     this.yaw += spinRate * dt;
     this.spin += spinRate * dt;
     if (this.autoYaw) {                    // pipe air: ease the board round to face back in;
@@ -5590,7 +5606,7 @@ class Player {
     if ((fF < 0.1 && fB < 0.1) || input.grab) this.flipArmed = true;
     const want = this.flipArmed ? fB - fF : 0;                        // + = nose up = backflip
     if (!this.flickRot) {
-      this.flipRate = damp(this.flipRate, want * 4.2, 9, dt);
+      this.flipRate = damp(this.flipRate, want * 5.2, 9, dt);
       this.flip += this.flipRate * dt;
     }
 
@@ -5744,7 +5760,7 @@ class Player {
       this.grind = null;
       this._takeoff();
       const popped = this.jumpBuffer > 0;
-      this.vel.y = popped ? Math.max(5.2, this.popSpeed(g.s) * 0.9) : Math.max(1.2, this.vel.y);
+      this.vel.y = popped ? Math.max(3.6, this.popSpeed(g.s)) : Math.max(1.2, this.vel.y);
       this.jumpBuffer = 0;
       if (!off) Audio.ollie(); else this.coyote = 0.25;
     }
@@ -5760,12 +5776,18 @@ class Player {
     const h = Math.max(0, this.pos.y - RIDE_H - heightAt(this.pos.x, this.pos.z));
     const vy = this.vel.y, tLeft = (vy + Math.sqrt(vy * vy + 2 * G * h)) / G;    // flat-ground estimate
     const q = this.flickRot || { flip: 0, spin: 0, rf: 0, rs: 0 };
-    const busy = Math.max(Math.abs(q.flip) / Math.max(q.rf, 1e-3), Math.abs(q.spin) / Math.max(q.rs, 1e-3));
-    const avail = tLeft * 0.82 - busy;
+    const avail = tLeft * 0.82;
     if (avail < 0.42) { Game.onFlickTooLow(); return; }
-    const dur = Math.min(avail, 0.85);
-    if (Math.abs(f.y) > 0.38) { q.flip += f.y < 0 ? -TAU : TAU; q.rf = Math.abs(q.flip) / dur; }   // up = frontflip
-    if (Math.abs(f.x) > 0.38) { q.spin += f.x > 0 ? -TAU : TAU; q.rs = Math.abs(q.spin) / dur; }   // right = spin right
+    const nf = q.flip + (Math.abs(f.y) > 0.38 ? (f.y < 0 ? -TAU : TAU) : 0);   // up = frontflip
+    const ns = q.spin + (Math.abs(f.x) > 0.38 ? (f.x > 0 ? -TAU : TAU) : 0);   // right = spin right
+    // finish the whole queue within the air left (snappy: ~0.85 s per rotation at most),
+    // at no more than a real rider's rotation speed — flips ≤ ~315°/s, spins ≤ this
+    // takeoff's spinCap. A flick that can't make it is refused (TOO LOW).
+    const need = Math.max(Math.abs(nf) / 5.5, Math.abs(ns) / (this.spinCap || 12.4));   // fastest possible
+    if (need > avail) { Game.onFlickTooLow(); return; }
+    const dur = clamp(0.85 * Math.max(1, Math.max(Math.abs(nf), Math.abs(ns)) / TAU), need, avail);
+    const rf = Math.abs(nf) / dur, rs = Math.abs(ns) / dur;
+    q.flip = nf; q.spin = ns; q.rf = rf; q.rs = rs;
     this.flickRot = q;
   }
 
@@ -6258,7 +6280,9 @@ const Pad = {
       if (edge(8)) Game.restart(true);
       if (Flick.on) { this.steer = lx || null; this.stickY = ly; }   // raw stick for flick detection
       // right stick orbits the camera (springs back like the mouse orbit)
-      if (rx || ry) { Cam.dragging = true; this._cam = true; Cam.drag(rx * dt * 700, ry * dt * 520); }
+      this.rx = rx; this.ry = ry;
+      const flickRight = Flick.on && Flick.steering !== 'auto';                // right stick flicks tricks there
+      if ((rx || ry) && !flickRight) { Cam.dragging = true; this._cam = true; Cam.drag(rx * dt * 700, ry * dt * 520); }
       else if (this._cam) { Cam.dragging = false; Cam.releaseT = 1.0; this._cam = false; }
     } else {
       if (this._jump || this._cam || this.steer !== null) this.release();
@@ -6396,7 +6420,8 @@ const Input = {
       if (!(Game.state === 'menu' && (e.code === 'KeyN' || e.code === 'KeyM'))) this.anyKey = true;
       // flick mode: direction keys are flicks during a run
       if (Flick.on && Game.state === 'play') {
-        const FD = { ArrowUp: [0, -1], KeyW: [0, -1], ArrowDown: [0, 1], KeyS: [0, 1], ArrowLeft: [-1, 0], KeyA: [-1, 0], ArrowRight: [1, 0], KeyD: [1, 0] };
+        const FD = { ArrowUp: [0, -1], KeyW: [0, -1], ArrowDown: [0, 1], KeyS: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] };
+        if (Flick.steering === 'auto') { FD.KeyA = [-1, 0]; FD.KeyD = [1, 0]; }       // otherwise A / D steer
         if (FD[e.code]) { Flick.key(FD[e.code][0], FD[e.code][1]); return; }
       }
       const k = keyMap[e.code];
@@ -6683,25 +6708,40 @@ const Input = {
    Touch: flick anywhere on screen. Controller: flick the left stick. Keyboard: tap the
    arrows / WASD (two at once for a diagonal). Each trick auto-completes before touchdown;
    a flick with too little air left is ignored, so flick mode never crashes you. */
+const FLICK_STYLES = ['off', 'auto', 'assist', 'manual'];
+const FLICK_LABEL = { off: 'Classic', auto: 'Flick · autopilot', assist: 'Flick · assisted', manual: 'Flick · manual steer' };
 const Flick = {
   on: false,
+  steering: 'auto',    // auto: autopilot steers · assist: autopilot nudged by tilt/stick · manual: you steer
   pending: null,       // flick waiting for the next frame: {x, y}
   tap: false,          // tap waiting: ollie (snow) or grab (air)
   airGrab: false,
   _keyVec: null, _keyT: 0, _padArmed: true,
 
+  style() { return this.on ? this.steering : 'off'; },
   load() {
-    try { this.on = localStorage.getItem('powderline.flick') === '1'; } catch (e) { }
+    let v = 'off';
+    try { v = localStorage.getItem('powderline.flick') || 'off'; } catch (e) { }
+    if (v === '1') v = 'auto';                       // older saves
+    if (v === '0' || !FLICK_STYLES.includes(v)) v = 'off';
+    this.on = v !== 'off'; if (this.on) this.steering = v;
     this.sync();
   },
+  /* the menu button cycles Classic → autopilot → assisted → manual */
   toggle() {
-    this.on = !this.on;
-    try { localStorage.setItem('powderline.flick', this.on ? '1' : '0'); } catch (e) { }
+    const next = FLICK_STYLES[(FLICK_STYLES.indexOf(this.style()) + 1) % FLICK_STYLES.length];
+    this.on = next !== 'off'; if (this.on) this.steering = next;
+    try { localStorage.setItem('powderline.flick', next); } catch (e) { }
     this.sync();
   },
   sync() {
-    document.body.classList.toggle('flick', this.on);
-    const b = $('styleBtn'); if (b) { b.textContent = 'Controls style: ' + (this.on ? 'Flick' : 'Classic'); b.classList.toggle('on', this.on); }
+    const b = document.body.classList;
+    b.toggle('flick', this.on);
+    b.toggle('flickSteer', this.on && this.steering !== 'auto');      // touch: show the steering stick
+    const el = $('styleBtn'); if (el) { el.textContent = 'Controls: ' + FLICK_LABEL[this.style()]; el.classList.toggle('on', this.on); }
+    if (typeof Game !== 'undefined' && Game.P) Game.loadBest();      // Classic and Flick bests are separate
+    const h = $('flickHint');
+    if (h) h.textContent = (this.on && this.steering !== 'auto' ? 'steer: stick / tilt · ' : '') + 'tap ollie / grab · flick ↑↓ flip · ←→ spin (on snow: switch)';
   },
 
   /* snap a direction to 8-way (components 0 / ±1) */
@@ -6750,17 +6790,40 @@ const Flick = {
 
   /* rewrite this frame's input: autopilot steering + gestures */
   apply(inp, P) {
-    if (Pad.steer !== null || Pad.stickY) this.pad(Pad.steer || 0, Pad.stickY || 0);
-    inp.steer = P.airborne ? 0 : Autopilot.steer(P);
+    // controller flicks: left stick when the autopilot steers, right stick otherwise
+    if (this.steering === 'auto') { if (Pad.steer !== null || Pad.stickY) this.pad(Pad.steer || 0, Pad.stickY || 0); }
+    else if (Pad.rx || Pad.ry) this.pad(Pad.rx || 0, Pad.ry || 0); else this._padArmed = true;
+    // steering: inp.steer arrives as the rider's own (stick / tilt / keys)
+    const user = inp.steer || 0;
+    if (P.airborne) { inp.steer = 0; P.lean = 0; }          // flick mode: spins only come from flicks
+    else if (this.steering === 'auto') inp.steer = Autopilot.steer(P);
+    else if (this.steering === 'assist') inp.steer = clamp(Autopilot.steer(P) * 0.6 + user * 0.8, -1, 1);
+    else inp.steer = user;
     inp.tuck = 0; inp.flipFwd = 0; inp.flipBack = 0; inp.butter = false; inp.pump = false; inp.stomp = false;
-    inp.brake = !P.airborne && P.speed > 24 ? 0.5 : 0;           // keep the speed sane
+    inp.brake = 0;
+    // ---- easy speed + air: tuck to a cruising speed, pump every compression,
+    //      and pop an ollie off every launch (lips, ramps, rails, kicker tops) ----
+    const lv = Level.cur.id, cap = lv === 'pipe' ? 15.5 : lv === 'park' ? 19 : 23;   // m/s: pipe ~56 km/h, park ~68, mountain ~83
+    if (!P.airborne) {
+      this._popped = false;
+      inp.tuck = P.speed < cap ? 1 : 0;
+      if (P.speed > cap + 4) inp.brake = 0.5;
+      // pump compressions, but only up to the cruising speed (a pump on a big landing
+      // or a pipe transition can add 10+ m/s — uncapped it snowballs into 40 m airs)
+      if (P.load > 1.15 && P.speed < cap - 0.5) { inp.pump = true; inp.pumpMax = cap + 1 - P.speed; }
+      if ((lv === 'mountain' || lv === 'zen') && Autopilot.atKickerTop(P)) { inp.jump = true; inp.charge = 0.3; }
+    } else if (!this._popped && P.airTime < 0.08 && P.coyote > 0) {
+      // launch + a light ollie = noticeably more air (a full-charge pop on top of a lip launch is ~20 m)
+      this._popped = true;
+      if (lv !== 'pipe') { inp.jump = true; inp.charge = 0.12; }   // the pipe's height comes from the speed
+    }
     let f = this.pending; this.pending = null;
-    if (f && !P.airborne && f.y < 0 && !f.x) { inp.jump = true; inp.charge = 0.35; f = null; }   // flick up on snow = ollie
+    if (f && !P.airborne && f.y < 0 && !f.x) { inp.jump = true; inp.charge = 0.6; f = null; }    // flick up on snow = ollie
     if (f && !f.x && !f.y) f = null;
     inp.flick = f;
     if (this.tap) {
       this.tap = false;
-      if (P.airborne) this.airGrab = true; else { inp.jump = true; inp.charge = 0.35; }
+      if (P.airborne) this.airGrab = true; else { inp.jump = true; inp.charge = 0.6; }
     }
     if (!P.airborne) this.airGrab = false;
     if (this.airGrab) inp.grab = inp.grab || 'Indy';
@@ -6769,7 +6832,17 @@ const Flick = {
 
 /* the autopilot line: gates on the mountain, features in the park, wall to wall in the pipe */
 const Autopilot = {
-  side: 1,
+  side: 1, _lastKick: null,
+  /* on the mountain, ollie right at a natural kicker's top (rollers are absorbed otherwise) */
+  atKickerTop(P) {
+    const s0 = Math.floor((P.pos.z + 40) / SEG);
+    for (let i = 0; i < 3; i++) {
+      const k = featureAt(s0 + i - 1);
+      if (!k || k.kind !== 'kicker' || k === this._lastKick) continue;
+      if (P.pos.z > k.z - 1.6 && P.pos.z < k.z + 0.4 && Math.abs(P.pos.x - k.x) < k.rad * 0.7) { this._lastKick = k; return true; }
+    }
+    return false;
+  },
   steer(P) {
     const lv = Level.cur, z = P.pos.z;
     // aim at a target POINT (tx, tz): heading = straight at it, not a fixed look-ahead,
@@ -6778,7 +6851,7 @@ const Autopilot = {
     if (lv.id === 'pipe') {
       const lip = PIPE.B + PIPE.R;
       if (P.pos.x * this.side > lip - 1.6) this.side = -this.side;       // reached this wall: go for the other
-      tx = this.side * (lip + 2); tz = z + 7; maxOff = 1.3;
+      tx = this.side * (lip + 2); tz = z + 10; maxOff = 1.3;      // a shallower line up the wall: ~5 m airs, not the 7 m ceiling every hit
     } else if (lv.id === 'park') {
       tx = 0;
       for (const f of PARK_FEATURES) if (f.k === 'table' && f.z + f.up > z + 6 && f.z < z + 80) { tx = f.x; tz = Math.max(tz, f.z + f.up * 0.5); break; }
@@ -7080,16 +7153,18 @@ const Game = {
     Atmos.refresh();
   },
 
+  /* best scores are kept per level, per run length and per control mode (Classic vs Flick) */
   bestKey() {
-    const d = Level.cur;
-    if (d.lengths) return 'powderline.best.' + d.id + '.' + d.lengths[this.lenIdx(d.id)].key;   // per run length
-    return d.id === 'mountain' ? 'powderline.best' : 'powderline.best.' + d.id;
+    const d = Level.cur, fl = Flick.on ? '.flick' : '';
+    if (d.lengths) return 'powderline.best.' + d.id + '.' + d.lengths[this.lenIdx(d.id)].key + fl;
+    return (d.id === 'mountain' ? 'powderline.best' : 'powderline.best.' + d.id) + fl;
   },
+  modeTag() { return Flick.on ? 'FLICK' : 'CLASSIC'; },
   loadBest() {
     let saved = 0;
     try { saved = +(localStorage.getItem(this.bestKey()) || 0); } catch (e) { saved = 0; }
     this.best = isFinite(saved) ? saved : 0;
-    $('best').textContent = 'BEST ' + this.best.toLocaleString();
+    $('best').textContent = 'BEST ' + this.best.toLocaleString() + ' · ' + this.modeTag();
   },
 
   toMenu() {
@@ -7215,7 +7290,7 @@ const Game = {
   gameOver(finished) {
     this.state = 'over'; this.overAt = performance.now();
     const L = Level.cur.lengths ? ' · ' + Level.cur.lengths[this.lenIdx(Level.cur.id)].label : '';
-    $('overTitle').textContent = (finished ? 'Run complete · ' : 'Run over · ') + Level.cur.name + L;
+    $('overTitle').textContent = (finished ? 'Run complete · ' : 'Run over · ') + Level.cur.name + L + ' · ' + (Flick.on ? 'Flick' : 'Classic');
     $('overHead').textContent = finished ? 'NICE RUN' : 'RUN DOWN';
     document.body.classList.remove('playing');
     Audio.gameover();
@@ -7229,9 +7304,10 @@ const Game = {
     if (s > this.best) {
       this.best = s;
       try { localStorage.setItem(this.bestKey(), String(s)); } catch (e) { }
+      $('newbest').textContent = '★ new personal best · ' + (Flick.on ? 'Flick' : 'Classic');
       $('newbest').style.display = 'block';
     } else $('newbest').style.display = 'none';
-    $('best').textContent = 'BEST ' + this.best.toLocaleString();
+    $('best').textContent = 'BEST ' + this.best.toLocaleString() + ' · ' + this.modeTag();
     $('over').classList.remove('hide');
     $('hud').classList.remove('on');
   },

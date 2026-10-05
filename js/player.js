@@ -89,7 +89,9 @@ class Player {
      flip carried over, flips must be re-armed, and no leftover grace window */
   _takeoff() {
     if (this.press) { this.airborne = true; this.endPress(true); }   // pop out of a press: counts, spin carries on
-    this.airborne = true; this.airTime = 0; this.coyote = 0; this.stompAt = -1; this.flickRot = null;
+    this.airborne = true; this.airTime = 0; this.coyote = 0; this.stompAt = -1; this.flickRot = null; this.lipLaunch = false;
+    this.lean *= 0.5;           // carve lean carries into the air as pre-spin; halved since spins got ~2x faster
+    this.spinCap = null;        // set from the takeoff speed on the first air frame
     this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false;
     this.autoYaw = null; this.airLabel = null;
   }
@@ -270,7 +272,7 @@ class Player {
     if (this.pumpBuf > 0) {
       this.pumpBuf -= dt;
       if (this.pumpCooldown <= 0 && this.load > 1.08) {
-        vFwd += 1.2 + (this.load - 1) * 5.5;
+        vFwd += Math.min(1.2 + (this.load - 1) * 5.5, input.pumpMax === undefined ? Infinity : input.pumpMax);
         this.pumpCooldown = 0.3; this.pumpBuf = 0;
         fx.puff(this.pos.x, this.groundY, this.pos.z, 0.45);
         Audio.ollie();
@@ -346,7 +348,9 @@ class Player {
   /* ollie pop: base on speed, scaled by how long Space/OLLIE was held (0.6 s = full load) */
   popSpeed(sp) {
     const charge = this.jumpCharge !== undefined ? this.jumpCharge : 0.3;
-    return (5.6 + clamp(sp * 0.10, 0, 2.2)) * lerp(0.8, 1.3, clamp(charge / 0.6, 0, 1));
+    // flat-ground ollie ≈ 0.5 m (tap) … ~1.7 m (full load at speed): arcade-generous but in
+    // reach of a real pro ollie; big air comes from lips, ramps and kickers, not from pop
+    return (3.3 + clamp(sp * 0.05, 0, 1.1)) * lerp(0.85, 1.3, clamp(charge / 0.6, 0, 1));
   }
 
   stepAir(dt, input, fx) {
@@ -356,7 +360,10 @@ class Player {
     if (this.coyote > 0) {
       this.coyote -= dt;
       if (this.jumpBuffer > 0) {
-        this.vel.y = Math.max(0, this.vel.y) * 0.6 + this.popSpeed(this.speed);
+        // pipe lips: an ollie at the lip adds a little on top of the wall's own lift
+        // (keeps the best airs near the real ~7.7 m record instead of 15+ m)
+        this.vel.y = this.lipLaunch ? Math.min(this.vel.y + this.popSpeed(this.speed) * 0.3, 12.3)
+                                    : Math.max(0, this.vel.y) * 0.6 + this.popSpeed(this.speed);
         this.coyote = 0; this.jumpBuffer = 0;
         fx.puff(this.pos.x, this.groundY, this.pos.z, 0.8);
         Audio.ollie();
@@ -368,7 +375,12 @@ class Player {
     this.vel.x *= k; this.vel.z *= k;
 
     // in-air yaw from the board's remaining rotation (torque steer)
-    const spinRate = clamp(-this.lean * 6.4, -6.4, 6.4);
+    // up to ~710°/s: a full-amplitude pipe air (~1.9 s) fits a 1080, a big-air jump a 1440
+    // (real 1080s happen in ~1.2–1.9 s of air — PMC IMU study of competitive pipe riders).
+    // How fast you can spin depends on the takeoff: a flat ollie only has the pop for ~400°/s.
+    if (this.spinCap == null) this.spinCap = clamp(4 + Math.max(0, this.vel.y) * 0.85, 6.5, 12.4);   // first air frame
+    const cap = this.spinCap || 12.4;
+    const spinRate = clamp(-this.lean * 13.5, -cap, cap);
     this.yaw += spinRate * dt;
     this.spin += spinRate * dt;
     if (this.autoYaw) {                    // pipe air: ease the board round to face back in;
@@ -405,7 +417,7 @@ class Player {
     if ((fF < 0.1 && fB < 0.1) || input.grab) this.flipArmed = true;
     const want = this.flipArmed ? fB - fF : 0;                        // + = nose up = backflip
     if (!this.flickRot) {
-      this.flipRate = damp(this.flipRate, want * 4.2, 9, dt);
+      this.flipRate = damp(this.flipRate, want * 5.2, 9, dt);
       this.flip += this.flipRate * dt;
     }
 
@@ -559,7 +571,7 @@ class Player {
       this.grind = null;
       this._takeoff();
       const popped = this.jumpBuffer > 0;
-      this.vel.y = popped ? Math.max(5.2, this.popSpeed(g.s) * 0.9) : Math.max(1.2, this.vel.y);
+      this.vel.y = popped ? Math.max(3.6, this.popSpeed(g.s)) : Math.max(1.2, this.vel.y);
       this.jumpBuffer = 0;
       if (!off) Audio.ollie(); else this.coyote = 0.25;
     }
@@ -575,12 +587,18 @@ class Player {
     const h = Math.max(0, this.pos.y - RIDE_H - heightAt(this.pos.x, this.pos.z));
     const vy = this.vel.y, tLeft = (vy + Math.sqrt(vy * vy + 2 * G * h)) / G;    // flat-ground estimate
     const q = this.flickRot || { flip: 0, spin: 0, rf: 0, rs: 0 };
-    const busy = Math.max(Math.abs(q.flip) / Math.max(q.rf, 1e-3), Math.abs(q.spin) / Math.max(q.rs, 1e-3));
-    const avail = tLeft * 0.82 - busy;
+    const avail = tLeft * 0.82;
     if (avail < 0.42) { Game.onFlickTooLow(); return; }
-    const dur = Math.min(avail, 0.85);
-    if (Math.abs(f.y) > 0.38) { q.flip += f.y < 0 ? -TAU : TAU; q.rf = Math.abs(q.flip) / dur; }   // up = frontflip
-    if (Math.abs(f.x) > 0.38) { q.spin += f.x > 0 ? -TAU : TAU; q.rs = Math.abs(q.spin) / dur; }   // right = spin right
+    const nf = q.flip + (Math.abs(f.y) > 0.38 ? (f.y < 0 ? -TAU : TAU) : 0);   // up = frontflip
+    const ns = q.spin + (Math.abs(f.x) > 0.38 ? (f.x > 0 ? -TAU : TAU) : 0);   // right = spin right
+    // finish the whole queue within the air left (snappy: ~0.85 s per rotation at most),
+    // at no more than a real rider's rotation speed — flips ≤ ~315°/s, spins ≤ this
+    // takeoff's spinCap. A flick that can't make it is refused (TOO LOW).
+    const need = Math.max(Math.abs(nf) / 5.5, Math.abs(ns) / (this.spinCap || 12.4));   // fastest possible
+    if (need > avail) { Game.onFlickTooLow(); return; }
+    const dur = clamp(0.85 * Math.max(1, Math.max(Math.abs(nf), Math.abs(ns)) / TAU), need, avail);
+    const rf = Math.abs(nf) / dur, rs = Math.abs(ns) / dur;
+    q.flip = nf; q.spin = ns; q.rf = rf; q.rs = rs;
     this.flickRot = q;
   }
 
