@@ -219,7 +219,7 @@
   body.touch #speed{font-size:36px}
   body.touch #speedbar{width:120px}
   body.touch #center{bottom:140px}
-  #tiltBtn,#ctrlBtn{padding:10px 18px;border-radius:22px;border:1.5px solid rgba(190,225,255,.4);
+  #tiltBtn,#ctrlBtn,#styleBtn{padding:10px 18px;border-radius:22px;border:1.5px solid rgba(190,225,255,.4);
     background:rgba(10,22,38,.45);color:#eaf6ff;font:800 11px/1 inherit;font-family:inherit;letter-spacing:.16em;
     text-transform:uppercase;touch-action:manipulation}
   #tiltBtn.on{border-color:var(--accent);color:var(--accent)}
@@ -315,7 +315,14 @@
 
   /* ---------- rider customisation ---------- */
   #mbtns{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-items:center;margin-top:16px}
-  #mbtns #tiltBtn,#mbtns #ctrlBtn{margin:0;min-height:42px}
+  #mbtns #tiltBtn,#mbtns #ctrlBtn,#mbtns #styleBtn{margin:0;min-height:42px}
+  #styleBtn.on{border-color:var(--accent);color:var(--accent)}
+  /* flick mode: no virtual pad (flick anywhere), a quiet reminder of the gestures */
+  body.flick #gStick, body.flick #gAbxy, body.flick #hint{display:none!important}
+  #flickHint{position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translateX(-50%);display:none;
+    padding:8px 14px;border-radius:18px;background:rgba(10,22,38,.42);color:rgba(234,246,255,.8);font-size:11px;
+    font-weight:700;letter-spacing:.06em;max-width:calc(100vw - 32px);text-align:center;line-height:1.5;pointer-events:none;z-index:4}
+  body.flick.playing #flickHint{display:block}
   /* control-layout editor (from the menu): drag the clusters directly */
   #layoutBar{position:fixed;left:50%;top:max(14px,env(safe-area-inset-top));transform:translateX(-50%);z-index:8;
     display:none;align-items:center;gap:10px;padding:8px 8px 8px 16px;border-radius:24px;max-width:calc(100vw - 32px);
@@ -449,6 +456,7 @@
 </div>
 
 <div id="padToast"></div>
+<div id="flickHint">tap ollie / grab · flick ↑↓ flip · ←→ spin (on snow: switch)</div>
 <div id="layoutBar"><span>Drag to move · tap X / Y to swap</span><button type="button" id="lReset">Reset</button><button type="button" id="lDone">Done</button></div>
 <div class="screen" id="menu">
   <div class="eyebrow">WebGL2 · no engine · no assets</div>
@@ -493,6 +501,7 @@
     <button id="riderBtn" type="button"><span class="dots"><i></i><i></i></span>Rider<i class="key kb-only">C</i></button>
     <button id="tiltBtn" class="touch-only" type="button">Tilt steering: OFF</button>
     <button id="ctrlBtn" class="touch-only" type="button">⠿ Controls</button>
+    <button id="styleBtn" type="button">Controls style: Classic</button>
   </div>
 </div>
 
@@ -552,19 +561,19 @@
 
 <div id="fatal"></div>
 
-<script src="js/math.js?v=20261013a"></script>
-<script src="js/world.js?v=20261013a"></script>
-<script src="js/meshes.js?v=20261013a"></script>
-<script src="js/outfit.js?v=20261013a"></script>
-<script src="js/levels.js?v=20261013a"></script>
-<script src="js/gl.js?v=20261013a"></script>
-<script src="js/render.js?v=20261013a"></script>
-<script src="js/scenery.js?v=20261013a"></script>
-<script src="js/atmos.js?v=20261013a"></script>
-<script src="js/fx.js?v=20261013a"></script>
-<script src="js/audio.js?v=20261013a"></script>
-<script src="js/player.js?v=20261013a"></script>
-<script src="js/pad.js?v=20261013a"></script>
-<script src="js/game.js?v=20261013a"></script>
+<script src="js/math.js?v=20261014c"></script>
+<script src="js/world.js?v=20261014c"></script>
+<script src="js/meshes.js?v=20261014c"></script>
+<script src="js/outfit.js?v=20261014c"></script>
+<script src="js/levels.js?v=20261014c"></script>
+<script src="js/gl.js?v=20261014c"></script>
+<script src="js/render.js?v=20261014c"></script>
+<script src="js/scenery.js?v=20261014c"></script>
+<script src="js/atmos.js?v=20261014c"></script>
+<script src="js/fx.js?v=20261014c"></script>
+<script src="js/audio.js?v=20261014c"></script>
+<script src="js/player.js?v=20261014c"></script>
+<script src="js/pad.js?v=20261014c"></script>
+<script src="js/game.js?v=20261014c"></script>
 </body>
 </html>

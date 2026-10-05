@@ -43,6 +43,9 @@ class Player {
     this.press = null;        // butter / press: { type: 'nose'|'tail', t, bal, nz } while on the snow
     this.pressVis = 0;        // render-only board pitch for the press
     this.stompAt = -1;        // air time when stomp was pressed (-1 = not yet this air)
+    this.flickRot = null;     // flick mode: { flip, spin, rf, rs } rotation still to do this air
+    this.stance = 0;          // flick mode ground 180s: 0 = regular, PI = switch (render-only)
+    this.stanceVis = 0;
     this.spin = 0;            // accumulated in-air rotation (radians)
     this.flip = 0;            // accumulated in-air flip (radians, + = backflip / nose up)
     this.flipRate = 0;
@@ -78,6 +81,7 @@ class Player {
     // nothing from before the reset carries over (turn momentum, landing settle, skid pose, buffered jumps)
     this.turnRate = 0; this.yawVis = 0; this.brakeVis = 0; this.jumpBuffer = 0; this.coyote = 0;
     this.press = null; this.pressVis = 0; this.pumpBuf = 0; this.stompAt = -1;
+    this.flickRot = null; this.stance = 0; this.stanceVis = 0;
     this.updateBasis();
   }
 
@@ -85,7 +89,7 @@ class Player {
      flip carried over, flips must be re-armed, and no leftover grace window */
   _takeoff() {
     if (this.press) { this.airborne = true; this.endPress(true); }   // pop out of a press: counts, spin carries on
-    this.airborne = true; this.airTime = 0; this.coyote = 0; this.stompAt = -1;
+    this.airborne = true; this.airTime = 0; this.coyote = 0; this.stompAt = -1; this.flickRot = null;
     this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false;
     this.autoYaw = null; this.airLabel = null;
   }
@@ -229,6 +233,12 @@ class Player {
     const centripetal = sp * sp * curv;
     this.load = clamp(1 + centripetal / G, 0, 3.4);
 
+    // ---- flick mode on the snow: ←/→ spins the board 180 to switch stance ----
+    if (input.flick && Math.abs(input.flick.x) > 0.5 && Math.abs(input.flick.y) < 0.5) {
+      this.stance = this.stance ? 0 : Math.PI;
+      Game.onSwitch(this.stance !== 0);
+    }
+
     // ---- butter / press: hold the button on the snow; the stick (up/down) keeps the balance ----
     const sFwd = +input.flipFwd || 0, sBack = +input.flipBack || 0;
     if (!input.butter) this.pressLock = false;            // after a slip, let go before pressing again
@@ -367,6 +377,21 @@ class Player {
     }
     this.lean = damp(this.lean, input.steer * 0.92, 6, dt);
 
+    // ---- flick mode: a flick queues a whole rotation that finishes before touchdown ----
+    if (input.flick) this.queueFlick(input.flick);
+    if (this.flickRot) {
+      const q = this.flickRot;
+      const df = clamp(q.flip, -q.rf * dt, q.rf * dt), ds = clamp(q.spin, -q.rs * dt, q.rs * dt);
+      q.flip -= df; q.spin -= ds;
+      this.flip += df; this.flipRate = df / dt;
+      this.yaw += ds; this.spin += ds;
+      if (this.autoYaw) this.autoYaw.target += ds;
+      if (Math.abs(q.flip) < 1e-4 && Math.abs(q.spin) < 1e-4) {
+        this.flickRot = null; this.flipRate = 0;
+        this.flip = Math.round(this.flip / TAU) * TAU;        // land exactly upright
+      }
+    }
+
     // flips: W pitches forward = frontflip, S pulls back = backflip. Holding W/S
     // through the takeoff (tucking for speed) doesn't count — the key has to
     // be pressed fresh once airborne (or a grab held), so crest launches never
@@ -379,8 +404,10 @@ class Player {
     // the stick was already pushed through the takeoff
     if ((fF < 0.1 && fB < 0.1) || input.grab) this.flipArmed = true;
     const want = this.flipArmed ? fB - fF : 0;                        // + = nose up = backflip
-    this.flipRate = damp(this.flipRate, want * 4.2, 9, dt);
-    this.flip += this.flipRate * dt;
+    if (!this.flickRot) {
+      this.flipRate = damp(this.flipRate, want * 4.2, 9, dt);
+      this.flip += this.flipRate * dt;
+    }
 
     this.grab = input.grab || null;
     this.grabTime = this.grab ? this.grabTime + dt : 0;
@@ -542,6 +569,21 @@ class Player {
   }
 
   /* ---------------- wipeout ---------------- */
+  /* flick mode: queue a full flip (dy) and/or spin (dx) if there's air left to finish it.
+     The rotation rate is chosen so it completes before the predicted touchdown. */
+  queueFlick(f) {
+    const h = Math.max(0, this.pos.y - RIDE_H - heightAt(this.pos.x, this.pos.z));
+    const vy = this.vel.y, tLeft = (vy + Math.sqrt(vy * vy + 2 * G * h)) / G;    // flat-ground estimate
+    const q = this.flickRot || { flip: 0, spin: 0, rf: 0, rs: 0 };
+    const busy = Math.max(Math.abs(q.flip) / Math.max(q.rf, 1e-3), Math.abs(q.spin) / Math.max(q.rs, 1e-3));
+    const avail = tLeft * 0.82 - busy;
+    if (avail < 0.42) { Game.onFlickTooLow(); return; }
+    const dur = Math.min(avail, 0.85);
+    if (Math.abs(f.y) > 0.38) { q.flip += f.y < 0 ? -TAU : TAU; q.rf = Math.abs(q.flip) / dur; }   // up = frontflip
+    if (Math.abs(f.x) > 0.38) { q.spin += f.x > 0 ? -TAU : TAU; q.rs = Math.abs(q.spin) / dur; }   // right = spin right
+    this.flickRot = q;
+  }
+
   /* end a butter/press: clean (released, or popped off) or slipped (lost the balance) */
   endPress(clean) {
     const p = this.press; if (!p) return;
@@ -640,7 +682,7 @@ class Player {
     const nrm = (x, y, z) => V3.norm(V3(), V3(x, y, z));
     const lerpV = (a, b, k) => V3(lerp(a.x, b.x, k), lerp(a.y, b.y, k), lerp(a.z, b.z, k));
 
-    const t = GL.time, crash = this.crashTimer > 0, air = this.airborne, lean = this.lean * LEAN_VIS * (this.press ? 0.35 : 1) - bv * 0.85;   // braking: sit back onto the heels
+    const t = GL.time, crash = this.crashTimer > 0, air = this.airborne, lean = this.lean * LEAN_VIS * (this.press ? 0.35 : 1) * (this.stance ? -1 : 1) - bv * 0.85;   // switch: mirrored   // braking: sit back onto the heels
     const grab = !crash && air && this.grab ? this.grab : null;
     const tuck = air ? Math.max(this.tuck, this.braking, Math.min(1, Math.abs(this.flipRate) / 2)) : this.tuck;
 
@@ -776,6 +818,22 @@ class Player {
 
     // flips: rotate board + rider together about the board's toe–heel axis,
     // pivoting at the rider's centre of mass (+ = nose up = backflip)
+    // flick-mode stance: switch = board + rider turned 180° about the vertical (render-only)
+    this.stanceVis += angDelta(this.stanceVis, this.stance) * (1 - Math.exp(-14 / 60));
+    if (Math.abs(angDelta(0, this.stanceVis)) > 1e-3) {
+      const k = up, a = this.stanceVis, piv = this.pos;
+      const c = Math.cos(a), sn = Math.sin(a), ic = 1 - c, R = this._m();
+      R[0] = c + k.x * k.x * ic;       R[1] = k.y * k.x * ic + k.z * sn; R[2] = k.z * k.x * ic - k.y * sn; R[3] = 0;
+      R[4] = k.x * k.y * ic - k.z * sn; R[5] = c + k.y * k.y * ic;      R[6] = k.z * k.y * ic + k.x * sn; R[7] = 0;
+      R[8] = k.x * k.z * ic + k.y * sn; R[9] = k.y * k.z * ic - k.x * sn; R[10] = c + k.z * k.z * ic;    R[11] = 0;
+      R[12] = piv.x - (R[0] * piv.x + R[4] * piv.y + R[8] * piv.z);
+      R[13] = piv.y - (R[1] * piv.x + R[5] * piv.y + R[9] * piv.z);
+      R[14] = piv.z - (R[2] * piv.x + R[6] * piv.y + R[10] * piv.z);
+      R[15] = 1;
+      m4mul(this.boardMat, R, this.boardMat);
+      for (const q of out) m4mul(q.mat, R, q.mat);
+    }
+
     // butter / press: pitch board + rider up off the tail (or nose) contact point
     const pv = this.pressVis;
     if (Math.abs(pv) > 1e-3) {

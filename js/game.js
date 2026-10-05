@@ -80,6 +80,11 @@ const Input = {
       }
       // N (atmosphere) and M (mute) are settings, not "drop in"
       if (!(Game.state === 'menu' && (e.code === 'KeyN' || e.code === 'KeyM'))) this.anyKey = true;
+      // flick mode: direction keys are flicks during a run
+      if (Flick.on && Game.state === 'play') {
+        const FD = { ArrowUp: [0, -1], KeyW: [0, -1], ArrowDown: [0, 1], KeyS: [0, 1], ArrowLeft: [-1, 0], KeyA: [-1, 0], ArrowRight: [1, 0], KeyD: [1, 0] };
+        if (FD[e.code]) { Flick.key(FD[e.code][0], FD[e.code][1]); return; }
+      }
       const k = keyMap[e.code];
       if (!k) return;
       if (!this.down[k]) {
@@ -208,6 +213,10 @@ const Input = {
     // virtual Xbox pad: A ollie, X/B/Y grabs (as on a real controller); tuck/brake live on the stick
     hold('xA', 'jump'); hold('xB', 'grabB'); hold('xX', 'btnX'); hold('xY', 'btnY');
     Buttons.load();
+    Flick.load();
+    const sb = $('styleBtn');
+    for (const t of ['pointerdown', 'touchstart', 'mousedown']) sb.addEventListener(t, (e) => e.stopPropagation());
+    sb.addEventListener('click', (e) => { e.stopPropagation(); Flick.toggle(); sb.blur(); });
     const tap = (id, fn) => $(id).addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); fn(); });
     tap('tP', () => Game.togglePause());
     tap('tR', () => { if (Game.state === 'play' || Game.state === 'pause') Game.restart(true); });
@@ -246,8 +255,9 @@ const Input = {
     // one-finger swipe on open screen orbits the camera (same spring-back as the mouse)
     const canvas = $('gl');
     let camId = null, lx = 0, ly = 0;
+    Flick.bindPointer(canvas);
     canvas.addEventListener('pointerdown', (e) => {
-      if (e.pointerType !== 'touch' || camId !== null) return;
+      if (e.pointerType !== 'touch' || camId !== null || (Flick.on && Game.state === 'play')) return;   // flicks own the screen
       camId = e.pointerId; lx = e.clientX; ly = e.clientY; Cam.dragging = true;
     });
     window.addEventListener('pointermove', (e) => {
@@ -347,6 +357,130 @@ const Input = {
     return { steer: this.steer, brake: this.brake, tuck: this.tuck, jump: j, charge: this.releaseCharge,
              flipFwd: Math.max(this.down.tuck ? 1 : 0, fwd), flipBack: Math.max(this.down.brake ? 1 : 0, back), grab: this.grab,
              butter: held('butter'), pump, stomp };
+  }
+};
+
+/* ---------------- FLICK MODE (easy / accessibility control style) ----------------
+   The board carves on autopilot (gates, park features, pipe walls). The rider only:
+     tap / A / Space      ollie on the snow · grab in the air
+     flick ↑ / ↓          front / back flip      (in the air)
+     flick ← / →          360 spin               (in the air) · 180 to switch stance (on the snow)
+     flick diagonal       flip + spin together
+   Touch: flick anywhere on screen. Controller: flick the left stick. Keyboard: tap the
+   arrows / WASD (two at once for a diagonal). Each trick auto-completes before touchdown;
+   a flick with too little air left is ignored, so flick mode never crashes you. */
+const Flick = {
+  on: false,
+  pending: null,       // flick waiting for the next frame: {x, y}
+  tap: false,          // tap waiting: ollie (snow) or grab (air)
+  airGrab: false,
+  _keyVec: null, _keyT: 0, _padArmed: true,
+
+  load() {
+    try { this.on = localStorage.getItem('powderline.flick') === '1'; } catch (e) { }
+    this.sync();
+  },
+  toggle() {
+    this.on = !this.on;
+    try { localStorage.setItem('powderline.flick', this.on ? '1' : '0'); } catch (e) { }
+    this.sync();
+  },
+  sync() {
+    document.body.classList.toggle('flick', this.on);
+    const b = $('styleBtn'); if (b) { b.textContent = 'Controls style: ' + (this.on ? 'Flick' : 'Classic'); b.classList.toggle('on', this.on); }
+  },
+
+  /* snap a direction to 8-way (components 0 / ±1) */
+  fire(dx, dy) {
+    const m = Math.hypot(dx, dy) || 1, x = dx / m, y = dy / m;
+    this.pending = { x: Math.abs(x) > 0.38 ? Math.sign(x) : 0, y: Math.abs(y) > 0.38 ? Math.sign(y) : 0 };
+  },
+
+  /* keyboard: collect a second direction key within 70 ms for diagonals */
+  key(dx, dy) {
+    if (!this._keyVec) {
+      this._keyVec = { x: 0, y: 0 };
+      this._keyT = setTimeout(() => { const v = this._keyVec; this._keyVec = null; this.fire(v.x, v.y); }, 70);
+    }
+    this._keyVec.x += dx; this._keyVec.y += dy;
+  },
+
+  /* controller: a quick stick deflection from the centre is a flick */
+  pad(x, y) {
+    const m = Math.hypot(x || 0, y || 0);
+    if (m < 0.3) this._padArmed = true;
+    else if (m > 0.78 && this._padArmed) { this._padArmed = false; this.fire(x, y); }
+  },
+
+  /* touch / mouse gestures on the open screen */
+  bindPointer(canvas) {
+    let g = null;
+    canvas.addEventListener('pointerdown', (e) => {
+      if (!this.on || Game.state !== 'play') return;
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      g = { id: e.pointerId, x: e.clientX, y: e.clientY, t: performance.now(), fired: false };
+    });
+    window.addEventListener('pointermove', (e) => {
+      if (!g || e.pointerId !== g.id || g.fired) return;
+      const dx = e.clientX - g.x, dy = e.clientY - g.y;
+      if (Math.hypot(dx, dy) >= 34 && performance.now() - g.t < 320) { g.fired = true; this.fire(dx, dy); }
+    });
+    const up = (e) => {
+      if (!g || e.pointerId !== g.id) return;
+      const d = Math.hypot(e.clientX - g.x, e.clientY - g.y);
+      if (!g.fired && d < 16 && performance.now() - g.t < 380) this.tap = true;
+      g = null;
+    };
+    window.addEventListener('pointerup', up); window.addEventListener('pointercancel', () => { g = null; });
+  },
+
+  /* rewrite this frame's input: autopilot steering + gestures */
+  apply(inp, P) {
+    if (Pad.steer !== null || Pad.stickY) this.pad(Pad.steer || 0, Pad.stickY || 0);
+    inp.steer = P.airborne ? 0 : Autopilot.steer(P);
+    inp.tuck = 0; inp.flipFwd = 0; inp.flipBack = 0; inp.butter = false; inp.pump = false; inp.stomp = false;
+    inp.brake = !P.airborne && P.speed > 24 ? 0.5 : 0;           // keep the speed sane
+    let f = this.pending; this.pending = null;
+    if (f && !P.airborne && f.y < 0 && !f.x) { inp.jump = true; inp.charge = 0.35; f = null; }   // flick up on snow = ollie
+    if (f && !f.x && !f.y) f = null;
+    inp.flick = f;
+    if (this.tap) {
+      this.tap = false;
+      if (P.airborne) this.airGrab = true; else { inp.jump = true; inp.charge = 0.35; }
+    }
+    if (!P.airborne) this.airGrab = false;
+    if (this.airGrab) inp.grab = inp.grab || 'Indy';
+  }
+};
+
+/* the autopilot line: gates on the mountain, features in the park, wall to wall in the pipe */
+const Autopilot = {
+  side: 1,
+  steer(P) {
+    const lv = Level.cur, z = P.pos.z;
+    // aim at a target POINT (tx, tz): heading = straight at it, not a fixed look-ahead,
+    // so a gate 150 m away is a gentle drift rather than a hard cut across the slope
+    let tx, tz = z + clamp(P.speed * 1.4, 10, 30), maxOff = 0.95;
+    if (lv.id === 'pipe') {
+      const lip = PIPE.B + PIPE.R;
+      if (P.pos.x * this.side > lip - 1.6) this.side = -this.side;       // reached this wall: go for the other
+      tx = this.side * (lip + 2); tz = z + 7; maxOff = 1.3;
+    } else if (lv.id === 'park') {
+      tx = 0;
+      for (const f of PARK_FEATURES) if (f.k === 'table' && f.z + f.up > z + 6 && f.z < z + 80) { tx = f.x; tz = Math.max(tz, f.z + f.up * 0.5); break; }
+    } else {
+      const g = lv.gates ? Gates.upcoming() : null;
+      if (g && g.z > z + 4 && g.z - z < 200) { tx = g.x; tz = g.z; }
+      else tx = centerX(tz) + Math.sin(z * 0.045) * 7;                    // easy S-carves down the fall line
+      const c = centerX(tz), lim = (lv.clearHalf || PISTE_HALF) - 6;     // stay inside the tree line
+      tx = clamp(tx, c - lim, c + lim);
+    }
+    // don't cut more than ~55° off the fall line (keeps the speed up on the mountain)
+    const fall = Math.atan2(centerX(z + 30) - centerX(z), 30);
+    let want = Math.atan2(tx - P.pos.x, Math.max(tz - z, 6));
+    if (lv.id !== 'pipe') want = fall + clamp(angDelta(fall, want), -maxOff, maxOff);
+    const head = P.speed > 1 ? Math.atan2(P.vel.x, P.vel.z) : P.yaw;
+    return clamp(angDelta(want, head) * 2.2, -1, 1);
   }
 };
 
@@ -736,6 +870,14 @@ const Game = {
   recover() { this.desat = 0; },
   onPump() { this.score += 15 * this.combo; },
 
+  /* flick mode: 180 on the snow to switch stance */
+  onSwitch(sw) {
+    const pts = Math.round(25 * this.combo);
+    this.score += pts; this.comboTimer = Math.max(this.comboTimer, 3);
+    this.showTrick(sw ? 'Ground 180 · switch' : 'Ground 180 · regular', pts);
+  },
+  onFlickTooLow() { this.msg('TOO LOW', 500); },
+
   /* butter / press finished: a clean hold scores and feeds the combo; a slip breaks it */
   onPress(type, t, clean, spin) {
     if (!clean) { this.msg('SLIPPED', 900); this.combo = 1; this.comboTimer = 0; Pad.rumble(0.5, 0.3, 140); return; }
@@ -793,7 +935,7 @@ const Game = {
       ? (a.spin > 0 ? 'Frontside ' : 'Backside ') + (names[clamp(rot - 1, 0, names.length - 1)] || (rot * 180))
       : (a.label || 'Big Air');
     if (flips > 0) {
-      const flipName = (['', '', 'Double ', 'Triple '][flips] || flips + '× ') + (a.flip > 0 ? 'Backflip' : 'Frontflip');
+      const flipName = (flips === 1 ? '' : (['', '', 'Double ', 'Triple '][flips] || flips + '× ')) + (a.flip > 0 ? 'Backflip' : 'Frontflip');
       name = rot > 0 ? name + ' ' + flipName : flipName;
     }
     if (heldGrab) name = { Indy: 'Indy ', method: 'Method ', stale: 'Stalefish ', mute: 'Mute ' }[a.grab] + name;
@@ -873,6 +1015,7 @@ const Game = {
   /* ---------------- per-frame ---------------- */
   update(dt, inp) {
     const P = this.P;
+    if (Flick.on) Flick.apply(inp, P);
     const wasAir = P.airborne;
     if (wasAir) {
       this.air.t = P.airTime; this.air.spin = P.spin;
