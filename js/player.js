@@ -312,7 +312,7 @@ class Player {
     // On natural terrain the rider soaks up crests with the legs and stays
     // planted; air only comes from an ollie (hold Space, release near the top).
     // Built kickers (park tables) still throw you off their lips.
-    if (centripetal < -G * 1.05 && !Level.cur.absorbCrests) {
+    if (centripetal < -G * 1.05 && (!Level.cur.absorbCrests || (Level.cur.rampLip && Level.cur.rampLip(this.pos.x, this.pos.z)))) {
       this._takeoff();
       this.vel.x = fX * vFwd + rX * vSide;
       this.vel.z = fZ * vFwd + rZ * vSide;

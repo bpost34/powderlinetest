@@ -240,6 +240,11 @@
   body.zen #lives, body.zen .corner.tr, body.zen #combo, body.zen #gateMark{display:none!important}
   /* level select */
   #levels{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:26px}
+  /* run length chips inside each level card (tap a chip = set length, tap the card = ride) */
+  .lvl .lens{display:flex;gap:4px;margin-top:8px}
+  .lvl .lens em{flex:1;font-style:normal;text-align:center;font-size:10px;font-weight:800;letter-spacing:.04em;
+    padding:5px 2px;border-radius:8px;border:1px solid rgba(190,225,255,.25);color:var(--dim);white-space:nowrap}
+  .lvl .lens em.on{border-color:var(--accent);color:var(--accent);background:rgba(95,226,255,.12)}
   .lvl{position:relative;width:176px;padding:12px 14px 12px;border-radius:12px;border:1.5px solid rgba(190,225,255,.28);
     background:rgba(10,22,38,.45);color:#eaf6ff;font-family:inherit;text-align:left;cursor:pointer;
     transition:border-color .15s,background .15s,transform .15s;touch-action:manipulation}
@@ -478,9 +483,9 @@
     <div><i class="key">D-pad</i> <i class="key">A</i> <i class="key">Y</i></div><div>Menu: pick level · drop in · customize rider</div>
   </div>
   <div id="levels">
-    <button class="lvl" type="button" data-id="mountain"><i class="kb-only">1</i><b>Backcountry</b><span>Endless mountain · gates · kickers</span></button>
-    <button class="lvl" type="button" data-id="pipe"><i class="kb-only">2</i><b>Half-pipe</b><span>Carve the walls · boost the lip</span></button>
-    <button class="lvl" type="button" data-id="park"><i class="kb-only">3</i><b>Park</b><span>Tabletops · mini-pipe · rails</span></button>
+    <button class="lvl" type="button" data-id="mountain"><i class="kb-only">1</i><b>Backcountry</b><span>Mountain run · gates · kickers · high ramps</span><span class="lens" data-for="mountain"></span></button>
+    <button class="lvl" type="button" data-id="pipe"><i class="kb-only">2</i><b>Half-pipe</b><span>Carve the walls · boost the lip</span><span class="lens" data-for="pipe"></span></button>
+    <button class="lvl" type="button" data-id="park"><i class="kb-only">3</i><b>Park</b><span>Tabletops · high ramp · mini-pipe · rails</span><span class="lens" data-for="park"></span></button>
     <button class="lvl" type="button" data-id="zen"><i class="kb-only">4</i><b>Zen</b><span>No gates, lives or score · day / night / neon</span></button>
   </div>
   <div class="go"><span class="kb-only">press 1–4 to pick a level · any other key to drop in</span><span class="touch-only">tap a level to drop in</span></div>
@@ -547,19 +552,19 @@
 
 <div id="fatal"></div>
 
-<script src="js/math.js?v=20261012b"></script>
-<script src="js/world.js?v=20261012b"></script>
-<script src="js/meshes.js?v=20261012b"></script>
-<script src="js/outfit.js?v=20261012b"></script>
-<script src="js/levels.js?v=20261012b"></script>
-<script src="js/gl.js?v=20261012b"></script>
-<script src="js/render.js?v=20261012b"></script>
-<script src="js/scenery.js?v=20261012b"></script>
-<script src="js/atmos.js?v=20261012b"></script>
-<script src="js/fx.js?v=20261012b"></script>
-<script src="js/audio.js?v=20261012b"></script>
-<script src="js/player.js?v=20261012b"></script>
-<script src="js/pad.js?v=20261012b"></script>
-<script src="js/game.js?v=20261012b"></script>
+<script src="js/math.js?v=20261013a"></script>
+<script src="js/world.js?v=20261013a"></script>
+<script src="js/meshes.js?v=20261013a"></script>
+<script src="js/outfit.js?v=20261013a"></script>
+<script src="js/levels.js?v=20261013a"></script>
+<script src="js/gl.js?v=20261013a"></script>
+<script src="js/render.js?v=20261013a"></script>
+<script src="js/scenery.js?v=20261013a"></script>
+<script src="js/atmos.js?v=20261013a"></script>
+<script src="js/fx.js?v=20261013a"></script>
+<script src="js/audio.js?v=20261013a"></script>
+<script src="js/player.js?v=20261013a"></script>
+<script src="js/pad.js?v=20261013a"></script>
+<script src="js/game.js?v=20261013a"></script>
 </body>
 </html>

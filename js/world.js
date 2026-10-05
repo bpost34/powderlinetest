@@ -60,9 +60,17 @@ function featureAt(segIndex) {
   const r1 = hash2(segIndex, 17, 5), r2 = hash2(segIndex, 29, 9), r3 = hash2(segIndex, 41, 13);
   const z0 = segIndex * SEG;
   if (segIndex < 2) { f = null; _featCache.set(segIndex, f); return f; }
-  const kind = r1 < 0.44 ? 'kicker' : (r1 < 0.62 ? 'rollers' : (r1 < 0.74 ? 'pipe' : null));
+  const kind = r1 < 0.44 ? 'kicker' : (r1 < 0.62 ? 'rollers' : (r1 < 0.74 ? 'pipe' : (r1 < 0.84 ? 'ramp' : null)));
   if (!kind) { f = null; _featCache.set(segIndex, f); return f; }
   const cx = mtnCenterX(z0);
+  if (kind === 'ramp') {
+    // HIGH RAMP: a built kicker — steep concave take-off to a sharp lip, then a long
+    // landing. Unlike the natural rollers, its lip launches you (see mtnRampLip).
+    f = { kind, z: z0 + 20 + r2 * 20, x: cx + (r3 - 0.5) * PISTE_HALF * 0.6,
+          h: 6.0 + r2 * 2.5, L: 14 + r3 * 4, D: 44, w: 6 + r2 * 2 };
+    _featCache.set(segIndex, f);
+    return f;
+  }
   f = {
     kind, z: z0 + r2 * 30, x: cx + (r3 - 0.5) * PISTE_HALF * 1.1,
     h: kind === 'kicker' ? 3.4 + r1 * 3.6 : 1.15,
@@ -75,6 +83,26 @@ function featureAt(segIndex) {
   if (_featCache.size > 400) { const k = _featCache.keys().next().value; _featCache.delete(k); }
   _featCache.set(segIndex, f);
   return f;
+}
+
+function rampBump(x, z, k) {
+  const v = Math.abs(x - k.x);
+  if (v > k.w + 3) return 0;
+  const u = z - k.z;                               // 0 = the lip
+  if (u < -k.L || u > k.D) return 0;
+  const m = sstep(k.w + 3, k.w, v);                // side walls fall away
+  const p = u < 0 ? k.h * Math.pow((u + k.L) / k.L, 1.8)         // take-off: steepens into the lip
+                  : k.h * (1 - sstep(0, 1, u / k.D));            // long landing back to the slope
+  return p * m;
+}
+/* is (x, z) on a high ramp's lip? (natural crests are absorbed; ramps launch) */
+function mtnRampLip(x, z) {
+  const s0 = Math.floor((z + 40) / SEG);
+  for (let i = 0; i < 3; i++) {
+    const k = featureAt(s0 + i - 1);
+    if (k && k.kind === 'ramp' && Math.abs(x - k.x) < k.w && z > k.z - 3 && z < k.z + 1.5) return true;
+  }
+  return false;
 }
 
 function kickerBump(x, z, k) {
@@ -120,7 +148,7 @@ function mtnHeightAt(x, z) {
   const s0 = Math.floor((z + 40) / SEG);
   for (let i = 0; i < 3; i++) {
     const k = featureAt(s0 + i - 1);
-    if (k) y += kickerBump(x, z, k);
+    if (k) y += k.kind === 'ramp' ? rampBump(x, z, k) : kickerBump(x, z, k);
   }
   return y;
 }
@@ -135,10 +163,15 @@ const Level = {
   define(def) { this.defs[def.id] = def; if (!this.cur) this.cur = def; },
 };
 Level.define({
-  id: 'mountain', name: 'Backcountry', blurb: 'Endless mountain · gates · natural kickers',
+  id: 'mountain', name: 'Backcountry', blurb: 'Mountain run · gates · kickers · high ramps',
   height: mtnHeightAt, centerX: mtnCenterX,
-  clearHalf: PISTE_HALF * 0.95, gates: true, finishZ: null, spawnZ: 0,
-  absorbCrests: true      // rollers/kickers only send you airborne if you ollie
+  clearHalf: PISTE_HALF * 0.95, gates: true, finishZ: 2500, spawnZ: 0,
+  absorbCrests: true,     // rollers/kickers only send you airborne if you ollie…
+  rampLip: mtnRampLip,    // …but built high ramps launch you off their lip
+  lengths: [{ key: 'short', label: '1.2 km', z: 1200 }, { key: 'medium', label: '2.5 km', z: 2500 }, { key: 'long', label: '5 km', z: 5000 }],
+  defaultLength: 1,
+  setLength(i) { this.finishZ = this.lengths[i].z; },
+  decor() { const g = Geo(); geoFinishArch(g, this.finishZ, PISTE_HALF + 4, mtnCenterX(this.finishZ)); return g; }
 });
 function heightAt(x, z) { return Level.cur.height(x, z); }
 function centerX(z) { return Level.cur.centerX(z); }

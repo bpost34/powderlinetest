@@ -134,6 +134,11 @@ const Pad = {
         else if (edge(4) || edge(5)) this.cyclePreset(edge(5) ? 1 : -1);
       } else if (st === 'menu') {
         if (nav) this.cycleLevel(nav);
+        // D-pad up / down: run length of the selected level
+        if (edge(12) || edge(13)) {
+          const i = Game.lenIdx(Level.cur.id);
+          if (i >= 0) Game.setLength(Level.cur.id, (i + (edge(13) ? 1 : 2)) % 3);
+        }
         if (edge(0) || edge(9)) { Game.menuAt = -1e9; Input.anyKey = true; }
         else if (edge(3)) Customize.open();
       } else if (st === 'pause') {

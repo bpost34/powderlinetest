@@ -240,6 +240,11 @@
   body.zen #lives, body.zen .corner.tr, body.zen #combo, body.zen #gateMark{display:none!important}
   /* level select */
   #levels{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:26px}
+  /* run length chips inside each level card (tap a chip = set length, tap the card = ride) */
+  .lvl .lens{display:flex;gap:4px;margin-top:8px}
+  .lvl .lens em{flex:1;font-style:normal;text-align:center;font-size:10px;font-weight:800;letter-spacing:.04em;
+    padding:5px 2px;border-radius:8px;border:1px solid rgba(190,225,255,.25);color:var(--dim);white-space:nowrap}
+  .lvl .lens em.on{border-color:var(--accent);color:var(--accent);background:rgba(95,226,255,.12)}
   .lvl{position:relative;width:176px;padding:12px 14px 12px;border-radius:12px;border:1.5px solid rgba(190,225,255,.28);
     background:rgba(10,22,38,.45);color:#eaf6ff;font-family:inherit;text-align:left;cursor:pointer;
     transition:border-color .15s,background .15s,transform .15s;touch-action:manipulation}
@@ -478,9 +483,9 @@
     <div><i class="key">D-pad</i> <i class="key">A</i> <i class="key">Y</i></div><div>Menu: pick level · drop in · customize rider</div>
   </div>
   <div id="levels">
-    <button class="lvl" type="button" data-id="mountain"><i class="kb-only">1</i><b>Backcountry</b><span>Endless mountain · gates · kickers</span></button>
-    <button class="lvl" type="button" data-id="pipe"><i class="kb-only">2</i><b>Half-pipe</b><span>Carve the walls · boost the lip</span></button>
-    <button class="lvl" type="button" data-id="park"><i class="kb-only">3</i><b>Park</b><span>Tabletops · mini-pipe · rails</span></button>
+    <button class="lvl" type="button" data-id="mountain"><i class="kb-only">1</i><b>Backcountry</b><span>Mountain run · gates · kickers · high ramps</span><span class="lens" data-for="mountain"></span></button>
+    <button class="lvl" type="button" data-id="pipe"><i class="kb-only">2</i><b>Half-pipe</b><span>Carve the walls · boost the lip</span><span class="lens" data-for="pipe"></span></button>
+    <button class="lvl" type="button" data-id="park"><i class="kb-only">3</i><b>Park</b><span>Tabletops · high ramp · mini-pipe · rails</span><span class="lens" data-for="park"></span></button>
     <button class="lvl" type="button" data-id="zen"><i class="kb-only">4</i><b>Zen</b><span>No gates, lives or score · day / night / neon</span></button>
   </div>
   <div class="go"><span class="kb-only">press 1–4 to pick a level · any other key to drop in</span><span class="touch-only">tap a level to drop in</span></div>
@@ -795,9 +800,17 @@ function featureAt(segIndex) {
   const r1 = hash2(segIndex, 17, 5), r2 = hash2(segIndex, 29, 9), r3 = hash2(segIndex, 41, 13);
   const z0 = segIndex * SEG;
   if (segIndex < 2) { f = null; _featCache.set(segIndex, f); return f; }
-  const kind = r1 < 0.44 ? 'kicker' : (r1 < 0.62 ? 'rollers' : (r1 < 0.74 ? 'pipe' : null));
+  const kind = r1 < 0.44 ? 'kicker' : (r1 < 0.62 ? 'rollers' : (r1 < 0.74 ? 'pipe' : (r1 < 0.84 ? 'ramp' : null)));
   if (!kind) { f = null; _featCache.set(segIndex, f); return f; }
   const cx = mtnCenterX(z0);
+  if (kind === 'ramp') {
+    // HIGH RAMP: a built kicker — steep concave take-off to a sharp lip, then a long
+    // landing. Unlike the natural rollers, its lip launches you (see mtnRampLip).
+    f = { kind, z: z0 + 20 + r2 * 20, x: cx + (r3 - 0.5) * PISTE_HALF * 0.6,
+          h: 6.0 + r2 * 2.5, L: 14 + r3 * 4, D: 44, w: 6 + r2 * 2 };
+    _featCache.set(segIndex, f);
+    return f;
+  }
   f = {
     kind, z: z0 + r2 * 30, x: cx + (r3 - 0.5) * PISTE_HALF * 1.1,
     h: kind === 'kicker' ? 3.4 + r1 * 3.6 : 1.15,
@@ -810,6 +823,26 @@ function featureAt(segIndex) {
   if (_featCache.size > 400) { const k = _featCache.keys().next().value; _featCache.delete(k); }
   _featCache.set(segIndex, f);
   return f;
+}
+
+function rampBump(x, z, k) {
+  const v = Math.abs(x - k.x);
+  if (v > k.w + 3) return 0;
+  const u = z - k.z;                               // 0 = the lip
+  if (u < -k.L || u > k.D) return 0;
+  const m = sstep(k.w + 3, k.w, v);                // side walls fall away
+  const p = u < 0 ? k.h * Math.pow((u + k.L) / k.L, 1.8)         // take-off: steepens into the lip
+                  : k.h * (1 - sstep(0, 1, u / k.D));            // long landing back to the slope
+  return p * m;
+}
+/* is (x, z) on a high ramp's lip? (natural crests are absorbed; ramps launch) */
+function mtnRampLip(x, z) {
+  const s0 = Math.floor((z + 40) / SEG);
+  for (let i = 0; i < 3; i++) {
+    const k = featureAt(s0 + i - 1);
+    if (k && k.kind === 'ramp' && Math.abs(x - k.x) < k.w && z > k.z - 3 && z < k.z + 1.5) return true;
+  }
+  return false;
 }
 
 function kickerBump(x, z, k) {
@@ -855,7 +888,7 @@ function mtnHeightAt(x, z) {
   const s0 = Math.floor((z + 40) / SEG);
   for (let i = 0; i < 3; i++) {
     const k = featureAt(s0 + i - 1);
-    if (k) y += kickerBump(x, z, k);
+    if (k) y += k.kind === 'ramp' ? rampBump(x, z, k) : kickerBump(x, z, k);
   }
   return y;
 }
@@ -870,10 +903,15 @@ const Level = {
   define(def) { this.defs[def.id] = def; if (!this.cur) this.cur = def; },
 };
 Level.define({
-  id: 'mountain', name: 'Backcountry', blurb: 'Endless mountain · gates · natural kickers',
+  id: 'mountain', name: 'Backcountry', blurb: 'Mountain run · gates · kickers · high ramps',
   height: mtnHeightAt, centerX: mtnCenterX,
-  clearHalf: PISTE_HALF * 0.95, gates: true, finishZ: null, spawnZ: 0,
-  absorbCrests: true      // rollers/kickers only send you airborne if you ollie
+  clearHalf: PISTE_HALF * 0.95, gates: true, finishZ: 2500, spawnZ: 0,
+  absorbCrests: true,     // rollers/kickers only send you airborne if you ollie…
+  rampLip: mtnRampLip,    // …but built high ramps launch you off their lip
+  lengths: [{ key: 'short', label: '1.2 km', z: 1200 }, { key: 'medium', label: '2.5 km', z: 2500 }, { key: 'long', label: '5 km', z: 5000 }],
+  defaultLength: 1,
+  setLength(i) { this.finishZ = this.lengths[i].z; },
+  decor() { const g = Geo(); geoFinishArch(g, this.finishZ, PISTE_HALF + 4, mtnCenterX(this.finishZ)); return g; }
 });
 function heightAt(x, z) { return Level.cur.height(x, z); }
 function centerX(z) { return Level.cur.centerX(z); }
@@ -2342,15 +2380,15 @@ function geoBeam(g, a, b, w, h, col) {
 }
 
 /* finish arch: two posts and a banner across the course at z */
-function geoFinishArch(g, z, halfW) {
-  const yL = heightAt(-halfW, z), yR = heightAt(halfW, z);
+function geoFinishArch(g, z, halfW, cx = 0) {
+  const yL = heightAt(cx - halfW, z), yR = heightAt(cx + halfW, z);
   const RED = [0.92, 0.22, 0.18], WHITE = [0.95, 0.96, 0.98];
-  geoBeam(g, [-halfW, yL - 0.3, z], [-halfW, yL + 6.2, z], 0.35, 0.35, WHITE);
-  geoBeam(g, [halfW, yR - 0.3, z], [halfW, yR + 6.2, z], 0.35, 0.35, WHITE);
-  geoBeam(g, [-halfW, yL + 5.4, z], [halfW, yR + 5.4, z], 0.12, 1.5, RED);
+  geoBeam(g, [cx - halfW, yL - 0.3, z], [cx - halfW, yL + 6.2, z], 0.35, 0.35, WHITE);
+  geoBeam(g, [cx + halfW, yR - 0.3, z], [cx + halfW, yR + 6.2, z], 0.35, 0.35, WHITE);
+  geoBeam(g, [cx - halfW, yL + 5.4, z], [cx + halfW, yR + 5.4, z], 0.12, 1.5, RED);
   for (let i = -3; i <= 3; i++) {                         // chequered strip under the banner
     const x0 = ((i - 0.5) / 3.5) * halfW, x1 = ((i + 0.5) / 3.5) * halfW;   // 7 squares spanning -halfW..+halfW
-    geoBeam(g, [x0, lerp(yL, yR, (x0 / halfW + 1) / 2) + 4.5, z + 0.08], [Math.min(x1, halfW), lerp(yL, yR, (Math.min(x1, halfW) / halfW + 1) / 2) + 4.5, z + 0.08],
+    geoBeam(g, [cx + x0, lerp(yL, yR, (x0 / halfW + 1) / 2) + 4.5, z + 0.08], [cx + x1, lerp(yL, yR, (x1 / halfW + 1) / 2) + 4.5, z + 0.08],
       0.06, 0.3, i % 2 ? WHITE : [0.08, 0.08, 0.1]);
   }
 }
@@ -2398,7 +2436,7 @@ Level.define({
   id: 'zen', name: 'Zen', blurb: 'Endless mountain · no gates, lives or score',
   height: mtnHeightAt, centerX: mtnCenterX,
   clearHalf: PISTE_HALF * 0.95, gates: false, zen: true, finishZ: null, spawnZ: 0,
-  absorbCrests: true
+  absorbCrests: true, rampLip: mtnRampLip
 });
 
 /* =====================================================================
@@ -2410,6 +2448,9 @@ function pipeEnv(z) { return sstep(PIPE.START - 25, PIPE.START + 5, z) * sstep(P
 Level.define({
   id: 'pipe', name: 'Half-pipe', blurb: 'Competition pipe · carve the walls · boost the lip',
   clearHalf: 26, gates: false, finishZ: PIPE.LEN + 70, spawnZ: 4, airMin: 0.6,
+  lengths: [{ key: 'short', label: '430 m', z: 430 }, { key: 'medium', label: '800 m', z: 800 }, { key: 'long', label: '1.2 km', z: 1200 }],
+  defaultLength: 0,
+  setLength(i) { PIPE.LEN = this.lengths[i].z; this.finishZ = PIPE.LEN + 70; },
   spawnSpeed: 12.5, wallAssist: 0.8,
   sunDir: [-0.30, 0.78, -0.45], sunScale: 0.8,   // high sun: the pipe floor isn't lost in the wall's shadow
   lod: [80, 40, 20],
@@ -2453,8 +2494,9 @@ Level.define({
 /* =====================================================================
    PARK
    ===================================================================== */
-const PARK = { SLOPE: 0.22, HALF: 26, LEN: 700 };
-const PARK_FEATURES = [
+const PARK = { SLOPE: 0.22, HALF: 26, LAP: 800, LEN: 800 };
+/* one lap of the course; longer runs repeat it (alternate laps mirrored) */
+const PARK_LAP = [
   // tabletops: x, z (start of take-off), half-width, take-off length, top length, landing length, height
   { k: 'table', x: -9, z: 40, w: 5, up: 6, top: 3, down: 8, h: 1.3 },
   { k: 'table', x: 0, z: 100, w: 6, up: 7, top: 6, down: 10, h: 2.0 },
@@ -2465,8 +2507,10 @@ const PARK_FEATURES = [
   { k: 'mini', z0: 345, z1: 425, B: 3.5, R: 3.6 },
   { k: 'table', x: -8, z: 520, w: 5, up: 7, top: 5, down: 9, h: 1.8 },
   { k: 'table', x: 0, z: 640, w: 7, up: 8, top: 10, down: 14, h: 3.0 },
+  // HIGH RAMP: the big one — steep take-off, short deck, long landing
+  { k: 'table', x: 0, z: 705, w: 8, up: 13, top: 3, down: 36, h: 6.5, big: true },
 ];
-const PARK_RAILS = [
+const PARK_LAP_RAILS = [
   // x0, z0 → x1, z1 ; height (m above the snow once past the ride-on entry)
   { x0: 9, z0: 36, x1: 9, z1: 52, h: 0.5 },
   { x0: 0, z0: 155, x1: 0, z1: 176, h: 0.55 },
@@ -2475,11 +2519,30 @@ const PARK_RAILS = [
   { x0: 9, z0: 515, x1: 9, z1: 532, h: 0.5 },
   { x0: 0, z0: 572, x1: 0, z1: 598, h: 0.6 },
 ];
-for (const r of PARK_RAILS) {
-  const dx = r.x1 - r.x0, dz = r.z1 - r.z0;
-  r.len = Math.hypot(dx, dz); r.ux = dx / r.len; r.uz = dz / r.len;
-  r.zmin = Math.min(r.z0, r.z1); r.zmax = Math.max(r.z0, r.z1);
+// the live course (rebuilt in place — Level.rails and the physics hold these arrays)
+const PARK_FEATURES = [], PARK_RAILS = [];
+function buildPark(laps) {
+  PARK_FEATURES.length = 0; PARK_RAILS.length = 0;
+  for (let l = 0; l < laps; l++) {
+    const dz = l * PARK.LAP, mx = l % 2 ? -1 : 1;           // odd laps mirrored for variety
+    for (const f of PARK_LAP) {
+      const c = Object.assign({}, f);
+      if (c.z !== undefined) c.z += dz;
+      if (c.z0 !== undefined) { c.z0 += dz; c.z1 += dz; }
+      if (c.x !== undefined) c.x *= mx;
+      PARK_FEATURES.push(c);
+    }
+    for (const r0 of PARK_LAP_RAILS) {
+      const r = { x0: r0.x0 * mx, z0: r0.z0 + dz, x1: r0.x1 * mx, z1: r0.z1 + dz, h: r0.h };
+      const dx = r.x1 - r.x0, dzz = r.z1 - r.z0;
+      r.len = Math.hypot(dx, dzz); r.ux = dx / r.len; r.uz = dzz / r.len;
+      r.zmin = Math.min(r.z0, r.z1); r.zmax = Math.max(r.z0, r.z1);
+      PARK_RAILS.push(r);
+    }
+  }
+  PARK.LEN = laps * PARK.LAP;
 }
+buildPark(1);
 /* rail top height: flush with the snow at the start, rising to r.h over ~1.5 m
    (a ride-on rail), so you can roll straight onto it or ollie on anywhere */
 function railTop(r, t) {
@@ -2490,8 +2553,11 @@ function railTop(r, t) {
 function miniEnv(f, z) { return sstep(f.z0, f.z0 + 8, z) * sstep(f.z1, f.z1 - 8, z); }
 
 Level.define({
-  id: 'park', name: 'Park', blurb: 'Tabletops · rollers · mini-pipe · rails to grind',
+  id: 'park', name: 'Park', blurb: 'Tabletops · high ramp · mini-pipe · rails',
   clearHalf: 30, gates: false, finishZ: PARK.LEN, spawnZ: 4, airMin: 0.7,
+  lengths: [{ key: 'short', label: '1 lap', laps: 1 }, { key: 'medium', label: '2 laps', laps: 2 }, { key: 'long', label: '3 laps', laps: 3 }],
+  defaultLength: 0,
+  setLength(i) { buildPark(this.lengths[i].laps); this.finishZ = PARK.LEN; },
   spawnSpeed: 9, wallAssist: 0.8,
   sunDir: [-0.30, 0.78, -0.45], sunScale: 0.8,
   lod: [80, 40, 20],
@@ -2553,7 +2619,7 @@ Level.define({
       if (f.k !== 'table') continue;
       for (const s of [-1, 1]) {
         const x = f.x + s * (f.w + 0.6), z = f.z + f.up, y = heightAt(x, z);
-        geoBeam(g, [x, y - 0.2, z], [x, y + 1.4, z], 0.08, 0.08, ORANGE);
+        geoBeam(g, [x, y - 0.2, z], [x, y + (f.big ? 3.0 : 1.4), z], f.big ? 0.14 : 0.08, f.big ? 0.14 : 0.08, ORANGE);
       }
     }
     // mini-pipe coping
@@ -5422,7 +5488,7 @@ class Player {
     // On natural terrain the rider soaks up crests with the legs and stays
     // planted; air only comes from an ollie (hold Space, release near the top).
     // Built kickers (park tables) still throw you off their lips.
-    if (centripetal < -G * 1.05 && !Level.cur.absorbCrests) {
+    if (centripetal < -G * 1.05 && (!Level.cur.absorbCrests || (Level.cur.rampLip && Level.cur.rampLip(this.pos.x, this.pos.z)))) {
       this._takeoff();
       this.vel.x = fX * vFwd + rX * vSide;
       this.vel.z = fZ * vFwd + rZ * vSide;
@@ -6142,6 +6208,11 @@ const Pad = {
         else if (edge(4) || edge(5)) this.cyclePreset(edge(5) ? 1 : -1);
       } else if (st === 'menu') {
         if (nav) this.cycleLevel(nav);
+        // D-pad up / down: run length of the selected level
+        if (edge(12) || edge(13)) {
+          const i = Game.lenIdx(Level.cur.id);
+          if (i >= 0) Game.setLength(Level.cur.id, (i + (edge(13) ? 1 : 2)) % 3);
+        }
         if (edge(0) || edge(9)) { Game.menuAt = -1e9; Input.anyKey = true; }
         else if (edge(3)) Customize.open();
       } else if (st === 'pause') {
@@ -6745,6 +6816,7 @@ const Game = {
     let lv = 'mountain';
     try { lv = localStorage.getItem('powderline.level') || 'mountain'; } catch (e) { }
     this.selectLevel(Level.defs[lv] ? lv : 'mountain', true);
+    this.syncLengths();
     this.startY = this.P.pos.y;
     this.lastZ = this.P.pos.z;
   },
@@ -6752,10 +6824,41 @@ const Game = {
   /* ---------------- levels ---------------- */
   spawnZ() { return Level.cur.spawnZ || 0; },
 
+  /* run length per level (3 options; saved per level) */
+  lenIdx(id) {
+    const def = Level.defs[id]; if (!def || !def.lengths) return -1;
+    let i = def.defaultLength || 0;
+    try { const v = localStorage.getItem('powderline.len.' + id); if (v !== null && def.lengths[+v]) i = +v; } catch (e) { }
+    return i;
+  },
+  setLength(id, i) {
+    const def = Level.defs[id]; if (!def || !def.lengths || !def.lengths[i]) return;
+    try { localStorage.setItem('powderline.len.' + id, String(i)); } catch (e) { }
+    this.syncLengths();
+    if (Level.cur === def) this.selectLevel(id, true);         // rebuild the course at the new length
+  },
+  syncLengths() {
+    for (const box of document.querySelectorAll('.lens')) {
+      const def = Level.defs[box.dataset.for], cur = this.lenIdx(box.dataset.for);
+      if (!box.children.length) {
+        def.lengths.forEach((L, i) => {
+          const em = document.createElement('em');
+          em.textContent = L.label;
+          // a chip sets the length; it must not also count as "tap the card to ride"
+          em.addEventListener('pointerdown', (e) => e.stopPropagation());
+          em.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); Audio.init(); this.setLength(box.dataset.for, i); });
+          box.appendChild(em);
+        });
+      }
+      [...box.children].forEach((em, i) => em.classList.toggle('on', i === cur));
+    }
+  },
+
   selectLevel(id, force) {
     const def = Level.defs[id]; if (!def) return;
     const changed = force || Level.cur !== def;
     Level.cur = def;
+    if (def.setLength) def.setLength(this.lenIdx(id));
     try { localStorage.setItem('powderline.level', id); } catch (e) { }
     for (const b of document.querySelectorAll('.lvl')) b.classList.toggle('sel', b.dataset.id === id);
     document.body.classList.toggle('zen', !!def.zen);
@@ -6775,7 +6878,11 @@ const Game = {
     Atmos.refresh();
   },
 
-  bestKey() { return Level.cur.id === 'mountain' ? 'powderline.best' : 'powderline.best.' + Level.cur.id; },
+  bestKey() {
+    const d = Level.cur;
+    if (d.lengths) return 'powderline.best.' + d.id + '.' + d.lengths[this.lenIdx(d.id)].key;   // per run length
+    return d.id === 'mountain' ? 'powderline.best' : 'powderline.best.' + d.id;
+  },
   loadBest() {
     let saved = 0;
     try { saved = +(localStorage.getItem(this.bestKey()) || 0); } catch (e) { saved = 0; }
@@ -6897,7 +7004,8 @@ const Game = {
 
   gameOver(finished) {
     this.state = 'over'; this.overAt = performance.now();
-    $('overTitle').textContent = (finished ? 'Run complete · ' : 'Run over · ') + Level.cur.name;
+    const L = Level.cur.lengths ? ' · ' + Level.cur.lengths[this.lenIdx(Level.cur.id)].label : '';
+    $('overTitle').textContent = (finished ? 'Run complete · ' : 'Run over · ') + Level.cur.name + L;
     $('overHead').textContent = finished ? 'NICE RUN' : 'RUN DOWN';
     document.body.classList.remove('playing');
     Audio.gameover();

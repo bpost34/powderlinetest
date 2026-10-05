@@ -570,6 +570,7 @@ const Game = {
     let lv = 'mountain';
     try { lv = localStorage.getItem('powderline.level') || 'mountain'; } catch (e) { }
     this.selectLevel(Level.defs[lv] ? lv : 'mountain', true);
+    this.syncLengths();
     this.startY = this.P.pos.y;
     this.lastZ = this.P.pos.z;
   },
@@ -577,10 +578,41 @@ const Game = {
   /* ---------------- levels ---------------- */
   spawnZ() { return Level.cur.spawnZ || 0; },
 
+  /* run length per level (3 options; saved per level) */
+  lenIdx(id) {
+    const def = Level.defs[id]; if (!def || !def.lengths) return -1;
+    let i = def.defaultLength || 0;
+    try { const v = localStorage.getItem('powderline.len.' + id); if (v !== null && def.lengths[+v]) i = +v; } catch (e) { }
+    return i;
+  },
+  setLength(id, i) {
+    const def = Level.defs[id]; if (!def || !def.lengths || !def.lengths[i]) return;
+    try { localStorage.setItem('powderline.len.' + id, String(i)); } catch (e) { }
+    this.syncLengths();
+    if (Level.cur === def) this.selectLevel(id, true);         // rebuild the course at the new length
+  },
+  syncLengths() {
+    for (const box of document.querySelectorAll('.lens')) {
+      const def = Level.defs[box.dataset.for], cur = this.lenIdx(box.dataset.for);
+      if (!box.children.length) {
+        def.lengths.forEach((L, i) => {
+          const em = document.createElement('em');
+          em.textContent = L.label;
+          // a chip sets the length; it must not also count as "tap the card to ride"
+          em.addEventListener('pointerdown', (e) => e.stopPropagation());
+          em.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); Audio.init(); this.setLength(box.dataset.for, i); });
+          box.appendChild(em);
+        });
+      }
+      [...box.children].forEach((em, i) => em.classList.toggle('on', i === cur));
+    }
+  },
+
   selectLevel(id, force) {
     const def = Level.defs[id]; if (!def) return;
     const changed = force || Level.cur !== def;
     Level.cur = def;
+    if (def.setLength) def.setLength(this.lenIdx(id));
     try { localStorage.setItem('powderline.level', id); } catch (e) { }
     for (const b of document.querySelectorAll('.lvl')) b.classList.toggle('sel', b.dataset.id === id);
     document.body.classList.toggle('zen', !!def.zen);
@@ -600,7 +632,11 @@ const Game = {
     Atmos.refresh();
   },
 
-  bestKey() { return Level.cur.id === 'mountain' ? 'powderline.best' : 'powderline.best.' + Level.cur.id; },
+  bestKey() {
+    const d = Level.cur;
+    if (d.lengths) return 'powderline.best.' + d.id + '.' + d.lengths[this.lenIdx(d.id)].key;   // per run length
+    return d.id === 'mountain' ? 'powderline.best' : 'powderline.best.' + d.id;
+  },
   loadBest() {
     let saved = 0;
     try { saved = +(localStorage.getItem(this.bestKey()) || 0); } catch (e) { saved = 0; }
@@ -722,7 +758,8 @@ const Game = {
 
   gameOver(finished) {
     this.state = 'over'; this.overAt = performance.now();
-    $('overTitle').textContent = (finished ? 'Run complete · ' : 'Run over · ') + Level.cur.name;
+    const L = Level.cur.lengths ? ' · ' + Level.cur.lengths[this.lenIdx(Level.cur.id)].label : '';
+    $('overTitle').textContent = (finished ? 'Run complete · ' : 'Run over · ') + Level.cur.name + L;
     $('overHead').textContent = finished ? 'NICE RUN' : 'RUN DOWN';
     document.body.classList.remove('playing');
     Audio.gameover();

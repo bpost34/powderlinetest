@@ -39,15 +39,15 @@ function geoBeam(g, a, b, w, h, col) {
 }
 
 /* finish arch: two posts and a banner across the course at z */
-function geoFinishArch(g, z, halfW) {
-  const yL = heightAt(-halfW, z), yR = heightAt(halfW, z);
+function geoFinishArch(g, z, halfW, cx = 0) {
+  const yL = heightAt(cx - halfW, z), yR = heightAt(cx + halfW, z);
   const RED = [0.92, 0.22, 0.18], WHITE = [0.95, 0.96, 0.98];
-  geoBeam(g, [-halfW, yL - 0.3, z], [-halfW, yL + 6.2, z], 0.35, 0.35, WHITE);
-  geoBeam(g, [halfW, yR - 0.3, z], [halfW, yR + 6.2, z], 0.35, 0.35, WHITE);
-  geoBeam(g, [-halfW, yL + 5.4, z], [halfW, yR + 5.4, z], 0.12, 1.5, RED);
+  geoBeam(g, [cx - halfW, yL - 0.3, z], [cx - halfW, yL + 6.2, z], 0.35, 0.35, WHITE);
+  geoBeam(g, [cx + halfW, yR - 0.3, z], [cx + halfW, yR + 6.2, z], 0.35, 0.35, WHITE);
+  geoBeam(g, [cx - halfW, yL + 5.4, z], [cx + halfW, yR + 5.4, z], 0.12, 1.5, RED);
   for (let i = -3; i <= 3; i++) {                         // chequered strip under the banner
     const x0 = ((i - 0.5) / 3.5) * halfW, x1 = ((i + 0.5) / 3.5) * halfW;   // 7 squares spanning -halfW..+halfW
-    geoBeam(g, [x0, lerp(yL, yR, (x0 / halfW + 1) / 2) + 4.5, z + 0.08], [Math.min(x1, halfW), lerp(yL, yR, (Math.min(x1, halfW) / halfW + 1) / 2) + 4.5, z + 0.08],
+    geoBeam(g, [cx + x0, lerp(yL, yR, (x0 / halfW + 1) / 2) + 4.5, z + 0.08], [cx + x1, lerp(yL, yR, (x1 / halfW + 1) / 2) + 4.5, z + 0.08],
       0.06, 0.3, i % 2 ? WHITE : [0.08, 0.08, 0.1]);
   }
 }
@@ -95,7 +95,7 @@ Level.define({
   id: 'zen', name: 'Zen', blurb: 'Endless mountain · no gates, lives or score',
   height: mtnHeightAt, centerX: mtnCenterX,
   clearHalf: PISTE_HALF * 0.95, gates: false, zen: true, finishZ: null, spawnZ: 0,
-  absorbCrests: true
+  absorbCrests: true, rampLip: mtnRampLip
 });
 
 /* =====================================================================
@@ -107,6 +107,9 @@ function pipeEnv(z) { return sstep(PIPE.START - 25, PIPE.START + 5, z) * sstep(P
 Level.define({
   id: 'pipe', name: 'Half-pipe', blurb: 'Competition pipe · carve the walls · boost the lip',
   clearHalf: 26, gates: false, finishZ: PIPE.LEN + 70, spawnZ: 4, airMin: 0.6,
+  lengths: [{ key: 'short', label: '430 m', z: 430 }, { key: 'medium', label: '800 m', z: 800 }, { key: 'long', label: '1.2 km', z: 1200 }],
+  defaultLength: 0,
+  setLength(i) { PIPE.LEN = this.lengths[i].z; this.finishZ = PIPE.LEN + 70; },
   spawnSpeed: 12.5, wallAssist: 0.8,
   sunDir: [-0.30, 0.78, -0.45], sunScale: 0.8,   // high sun: the pipe floor isn't lost in the wall's shadow
   lod: [80, 40, 20],
@@ -150,8 +153,9 @@ Level.define({
 /* =====================================================================
    PARK
    ===================================================================== */
-const PARK = { SLOPE: 0.22, HALF: 26, LEN: 700 };
-const PARK_FEATURES = [
+const PARK = { SLOPE: 0.22, HALF: 26, LAP: 800, LEN: 800 };
+/* one lap of the course; longer runs repeat it (alternate laps mirrored) */
+const PARK_LAP = [
   // tabletops: x, z (start of take-off), half-width, take-off length, top length, landing length, height
   { k: 'table', x: -9, z: 40, w: 5, up: 6, top: 3, down: 8, h: 1.3 },
   { k: 'table', x: 0, z: 100, w: 6, up: 7, top: 6, down: 10, h: 2.0 },
@@ -162,8 +166,10 @@ const PARK_FEATURES = [
   { k: 'mini', z0: 345, z1: 425, B: 3.5, R: 3.6 },
   { k: 'table', x: -8, z: 520, w: 5, up: 7, top: 5, down: 9, h: 1.8 },
   { k: 'table', x: 0, z: 640, w: 7, up: 8, top: 10, down: 14, h: 3.0 },
+  // HIGH RAMP: the big one — steep take-off, short deck, long landing
+  { k: 'table', x: 0, z: 705, w: 8, up: 13, top: 3, down: 36, h: 6.5, big: true },
 ];
-const PARK_RAILS = [
+const PARK_LAP_RAILS = [
   // x0, z0 → x1, z1 ; height (m above the snow once past the ride-on entry)
   { x0: 9, z0: 36, x1: 9, z1: 52, h: 0.5 },
   { x0: 0, z0: 155, x1: 0, z1: 176, h: 0.55 },
@@ -172,11 +178,30 @@ const PARK_RAILS = [
   { x0: 9, z0: 515, x1: 9, z1: 532, h: 0.5 },
   { x0: 0, z0: 572, x1: 0, z1: 598, h: 0.6 },
 ];
-for (const r of PARK_RAILS) {
-  const dx = r.x1 - r.x0, dz = r.z1 - r.z0;
-  r.len = Math.hypot(dx, dz); r.ux = dx / r.len; r.uz = dz / r.len;
-  r.zmin = Math.min(r.z0, r.z1); r.zmax = Math.max(r.z0, r.z1);
+// the live course (rebuilt in place — Level.rails and the physics hold these arrays)
+const PARK_FEATURES = [], PARK_RAILS = [];
+function buildPark(laps) {
+  PARK_FEATURES.length = 0; PARK_RAILS.length = 0;
+  for (let l = 0; l < laps; l++) {
+    const dz = l * PARK.LAP, mx = l % 2 ? -1 : 1;           // odd laps mirrored for variety
+    for (const f of PARK_LAP) {
+      const c = Object.assign({}, f);
+      if (c.z !== undefined) c.z += dz;
+      if (c.z0 !== undefined) { c.z0 += dz; c.z1 += dz; }
+      if (c.x !== undefined) c.x *= mx;
+      PARK_FEATURES.push(c);
+    }
+    for (const r0 of PARK_LAP_RAILS) {
+      const r = { x0: r0.x0 * mx, z0: r0.z0 + dz, x1: r0.x1 * mx, z1: r0.z1 + dz, h: r0.h };
+      const dx = r.x1 - r.x0, dzz = r.z1 - r.z0;
+      r.len = Math.hypot(dx, dzz); r.ux = dx / r.len; r.uz = dzz / r.len;
+      r.zmin = Math.min(r.z0, r.z1); r.zmax = Math.max(r.z0, r.z1);
+      PARK_RAILS.push(r);
+    }
+  }
+  PARK.LEN = laps * PARK.LAP;
 }
+buildPark(1);
 /* rail top height: flush with the snow at the start, rising to r.h over ~1.5 m
    (a ride-on rail), so you can roll straight onto it or ollie on anywhere */
 function railTop(r, t) {
@@ -187,8 +212,11 @@ function railTop(r, t) {
 function miniEnv(f, z) { return sstep(f.z0, f.z0 + 8, z) * sstep(f.z1, f.z1 - 8, z); }
 
 Level.define({
-  id: 'park', name: 'Park', blurb: 'Tabletops · rollers · mini-pipe · rails to grind',
+  id: 'park', name: 'Park', blurb: 'Tabletops · high ramp · mini-pipe · rails',
   clearHalf: 30, gates: false, finishZ: PARK.LEN, spawnZ: 4, airMin: 0.7,
+  lengths: [{ key: 'short', label: '1 lap', laps: 1 }, { key: 'medium', label: '2 laps', laps: 2 }, { key: 'long', label: '3 laps', laps: 3 }],
+  defaultLength: 0,
+  setLength(i) { buildPark(this.lengths[i].laps); this.finishZ = PARK.LEN; },
   spawnSpeed: 9, wallAssist: 0.8,
   sunDir: [-0.30, 0.78, -0.45], sunScale: 0.8,
   lod: [80, 40, 20],
@@ -250,7 +278,7 @@ Level.define({
       if (f.k !== 'table') continue;
       for (const s of [-1, 1]) {
         const x = f.x + s * (f.w + 0.6), z = f.z + f.up, y = heightAt(x, z);
-        geoBeam(g, [x, y - 0.2, z], [x, y + 1.4, z], 0.08, 0.08, ORANGE);
+        geoBeam(g, [x, y - 0.2, z], [x, y + (f.big ? 3.0 : 1.4), z], f.big ? 0.14 : 0.08, f.big ? 0.14 : 0.08, ORANGE);
       }
     }
     // mini-pipe coping
