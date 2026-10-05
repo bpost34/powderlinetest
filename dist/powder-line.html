@@ -5205,6 +5205,9 @@ const Audio = {
 const G = 9.81;
 const BOARD_L = 1.60;
 const RIDE_H = 0.12;          // rider origin height above the board base
+/* fastest flip rotation (rad/s ≈ 430°/s): a double cork fits a big pipe air or a ramp
+   (real ones take ~1.5–1.9 s), a flat ollie can't fit even a single */
+const FLIP_MAX = 7.5;
 const LEAN_VIS = 1;           // visual lean direction (board tilt + body). Set to -1 to reverse. Physics unaffected.
 
 class Player {
@@ -5606,7 +5609,7 @@ class Player {
     if ((fF < 0.1 && fB < 0.1) || input.grab) this.flipArmed = true;
     const want = this.flipArmed ? fB - fF : 0;                        // + = nose up = backflip
     if (!this.flickRot) {
-      this.flipRate = damp(this.flipRate, want * 5.2, 9, dt);
+      this.flipRate = damp(this.flipRate, want * FLIP_MAX * 0.95, 9, dt);
       this.flip += this.flipRate * dt;
     }
 
@@ -5772,18 +5775,29 @@ class Player {
   /* ---------------- wipeout ---------------- */
   /* flick mode: queue a full flip (dy) and/or spin (dx) if there's air left to finish it.
      The rotation rate is chosen so it completes before the predicted touchdown. */
+  /* time until touchdown: trace the ballistic arc against the real terrain
+     (a flat-ground estimate badly underestimates air over a downhill landing) */
+  timeToLand() {
+    let x = this.pos.x, y = this.pos.y, z = this.pos.z, vy = this.vel.y;
+    const vx = this.vel.x, vz = this.vel.z, h = 1 / 30;
+    for (let t = 0; t < 6; t += h) {
+      if (y - RIDE_H <= heightAt(x, z)) return t;
+      x += vx * h; z += vz * h; y += vy * h; vy -= G * h;
+    }
+    return 6;
+  }
+
   queueFlick(f) {
-    const h = Math.max(0, this.pos.y - RIDE_H - heightAt(this.pos.x, this.pos.z));
-    const vy = this.vel.y, tLeft = (vy + Math.sqrt(vy * vy + 2 * G * h)) / G;    // flat-ground estimate
+    const tLeft = this.timeToLand();
     const q = this.flickRot || { flip: 0, spin: 0, rf: 0, rs: 0 };
-    const avail = tLeft * 0.82;
+    const avail = tLeft * 0.9;
     if (avail < 0.42) { Game.onFlickTooLow(); return; }
     const nf = q.flip + (Math.abs(f.y) > 0.38 ? (f.y < 0 ? -TAU : TAU) : 0);   // up = frontflip
     const ns = q.spin + (Math.abs(f.x) > 0.38 ? (f.x > 0 ? -TAU : TAU) : 0);   // right = spin right
     // finish the whole queue within the air left (snappy: ~0.85 s per rotation at most),
     // at no more than a real rider's rotation speed — flips ≤ ~315°/s, spins ≤ this
     // takeoff's spinCap. A flick that can't make it is refused (TOO LOW).
-    const need = Math.max(Math.abs(nf) / 5.5, Math.abs(ns) / (this.spinCap || 12.4));   // fastest possible
+    const need = Math.max(Math.abs(nf) / FLIP_MAX, Math.abs(ns) / (this.spinCap || 12.4));   // fastest possible
     if (need > avail) { Game.onFlickTooLow(); return; }
     const dur = clamp(0.85 * Math.max(1, Math.max(Math.abs(nf), Math.abs(ns)) / TAU), need, avail);
     const rf = Math.abs(nf) / dur, rs = Math.abs(ns) / dur;
