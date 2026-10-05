@@ -701,16 +701,16 @@ const Game = {
   onPump() { this.score += 15 * this.combo; },
 
   /* butter / press finished: a clean hold scores and feeds the combo; a slip breaks it */
-  onPress(type, t, clean) {
+  onPress(type, t, clean, spin) {
     if (!clean) { this.msg('SLIPPED', 900); this.combo = 1; this.comboTimer = 0; Pad.rumble(0.5, 0.3, 140); return; }
-    if (t < 0.4) return;
-    const pts = Math.round((40 + t * 110) * this.combo);
+    if (t < 0.4 && !spin) return;
+    const pts = Math.round((40 + t * 110 + (spin || 0) * 0.9) * this.combo);   // butter spins: 180 → +162
     this.score += pts;
     this.bestHit = Math.max(this.bestHit, pts);
     if (t >= 1) { this.combo = Math.min(this.combo + 1, 12); }
     this.comboTimer = 5.5;
     Audio.trick(1);
-    this.showTrick((type === 'nose' ? 'Nose' : 'Tail') + ' Press ' + t.toFixed(1) + 's', pts);
+    this.showTrick((type === 'nose' ? 'Nose' : 'Tail') + ' Press' + (spin ? ' ' + spin : '') + ' ' + t.toFixed(1) + 's', pts);
   },
 
   /* stomped landing: well-timed press just before touchdown */

@@ -84,7 +84,7 @@ class Player {
   /* leaving the ground (ollie, crest, rail exit): a fresh air phase — no spin or
      flip carried over, flips must be re-armed, and no leftover grace window */
   _takeoff() {
-    if (this.press) this.endPress(true);          // ollie / pop out of a press: it counts
+    if (this.press) { this.airborne = true; this.endPress(true); }   // pop out of a press: counts, spin carries on
     this.airborne = true; this.airTime = 0; this.coyote = 0; this.stompAt = -1;
     this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false;
     this.autoYaw = null; this.airLabel = null;
@@ -182,10 +182,13 @@ class Player {
     // flat horizontal plane; the tilted basis exists for rendering only.
     // sliding backwards (e.g. back down a pipe wall): swing the board round so
     // the rider rides out nose-first instead of fighting the forward clamp below
-    if (this.vel.x * Math.sin(this.yaw) + this.vel.z * Math.cos(this.yaw) < -0.6) {
-      this.yaw += Math.PI; this.updateBasis();
+    // (not during a press: the board spins freely there and travel follows press.head)
+    if (!this.press && this.vel.x * Math.sin(this.yaw) + this.vel.z * Math.cos(this.yaw) < -0.6) {
+      this.yaw += Math.PI; this.yawVis = (this.yawVis || 0) - Math.PI;   // ease the 180° visually
+      this.updateBasis();
     }
-    const fX = Math.sin(this.yaw), fZ = Math.cos(this.yaw);
+    const head = this.press ? this.press.head : this.yaw;     // physics axes: travel during a press
+    const fX = Math.sin(head), fZ = Math.cos(head);
     const rX = fZ, rZ = -fX;
 
     // speed projected on the flat board axes
@@ -198,8 +201,15 @@ class Player {
     let turn = -this.lean * clamp(sp / 11, 0, 1.6) * 1.05;
     turn = clamp(turn, -1.15, 1.15);
     if (sp < 1.2) turn *= sp / 1.2;
-    this.turnRate = damp(this.turnRate, turn, 12, dt);
-    this.yaw += this.turnRate * dt;
+    if (this.press) {
+      // butter spin: the stick spins the flat board on the snow; no carving while pressed
+      this.turnRate = damp(this.turnRate, 0, 12, dt);
+      const spin = clamp(-this.lean * 4.6, -4.6, 4.6);
+      this.yaw += spin * dt; this.press.spin += spin * dt;
+    } else {
+      this.turnRate = damp(this.turnRate, turn, 12, dt);
+      this.yaw += this.turnRate * dt;
+    }
 
     // ---- gravity along the fall line, split into board axes ----
     // For a surface y = h(x,z) the normal is (-dh/dx, 1, -dh/dz), so the
@@ -223,7 +233,8 @@ class Player {
     const sFwd = +input.flipFwd || 0, sBack = +input.flipBack || 0;
     if (!input.butter) this.pressLock = false;            // after a slip, let go before pressing again
     if (input.butter && !this.press && !this.pressLock && sp > 2.5) {
-      this.press = { type: sFwd > 0.3 ? 'nose' : 'tail', t: 0, bal: (Math.random() - 0.5) * 0.15, nz: Math.random() * 20 };
+      this.press = { type: sFwd > 0.3 ? 'nose' : 'tail', t: 0, bal: (Math.random() - 0.5) * 0.15, nz: Math.random() * 20,
+                     head: Math.atan2(this.vel.x, this.vel.z), spin: 0 };
     }
     if (this.press) {
       const p = this.press;
@@ -313,6 +324,7 @@ class Player {
     this.vel.x = fX * vFwd + rX * vSide;
     this.vel.z = fZ * vFwd + rZ * vSide;
     this.vel.y = 0;
+    if (this.press && Math.hypot(this.vel.x, this.vel.z) > 1) this.press.head = Math.atan2(this.vel.x, this.vel.z);
 
     // chatter: off-piste snow is rougher than the corduroy
     const d = Math.abs(this.pos.x - centerX(this.pos.z));
@@ -534,7 +546,17 @@ class Player {
   endPress(clean) {
     const p = this.press; if (!p) return;
     this.press = null;
-    Game.onPress(p.type, p.t, clean);
+    if (!this.airborne) {
+      // back on the edges: the board must be near straight or switch to ride out;
+      // anything else is a sideways slip (combo gone, but no crash)
+      const a = Math.abs(angDelta(p.head, this.yaw));
+      if (Math.min(a, Math.PI - a) > 0.6) clean = false;
+      const oldYaw = this.yaw;
+      this.yaw = p.head;                                     // ride out nose-first
+      this.yawVis = angDelta(this.yaw, oldYaw);              // …easing round from switch if needed
+      this.updateBasis();
+    }
+    Game.onPress(p.type, p.t, clean, Math.floor((Math.abs(p.spin) + 0.6) / Math.PI) * 180);   // completed half-turns (same ±35° as a clean ride-out)
   }
 
   crash(fx) {
@@ -618,7 +640,7 @@ class Player {
     const nrm = (x, y, z) => V3.norm(V3(), V3(x, y, z));
     const lerpV = (a, b, k) => V3(lerp(a.x, b.x, k), lerp(a.y, b.y, k), lerp(a.z, b.z, k));
 
-    const t = GL.time, crash = this.crashTimer > 0, air = this.airborne, lean = this.lean * LEAN_VIS - bv * 0.85;   // braking: sit back onto the heels
+    const t = GL.time, crash = this.crashTimer > 0, air = this.airborne, lean = this.lean * LEAN_VIS * (this.press ? 0.35 : 1) - bv * 0.85;   // braking: sit back onto the heels
     const grab = !crash && air && this.grab ? this.grab : null;
     const tuck = air ? Math.max(this.tuck, this.braking, Math.min(1, Math.abs(this.flipRate) / 2)) : this.tuck;
 
