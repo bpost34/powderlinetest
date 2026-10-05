@@ -157,7 +157,9 @@ const Input = {
       el.addEventListener('pointerup', off); el.addEventListener('pointercancel', off);
       el.addEventListener('lostpointercapture', off);
     };
-    hold('tJ', 'jump'); hold('tT', 'tuck'); hold('tB', 'brake'); hold('tG', 'Indy');
+    // virtual Xbox pad — same mapping as a real controller (pad.js)
+    hold('xA', 'jump'); hold('xRT', 'tuck'); hold('xLT', 'brake');
+    hold('xX', 'Indy'); hold('xB', 'method'); hold('xY', 'stale'); hold('xRB', 'mutegrab');
     const tap = (id, fn) => $(id).addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); fn(); });
     tap('tP', () => Game.togglePause());
     tap('tR', () => { if (Game.state === 'play' || Game.state === 'pause') Game.restart(true); });
