@@ -99,7 +99,8 @@ class Player {
   _takeoff() {
     if (this.press) { this.airborne = true; this.endPress(true); }   // pop out of a press: counts, spin carries on
     this.airborne = true; this.airTime = 0; this.coyote = 0; this.stompAt = -1; this.flickRot = null; this.lipLaunch = false;
-    this.lean *= 0.5;           // carve lean carries into the air as pre-spin; halved since spins got ~2x faster
+    this.lean = 0;              // no pre-spin from the carve: in the air, spin only comes from the stick
+                                // (a carving takeoff used to add 30–60° to a "pure" flip)
     this.spinCap = null;        // set from the takeoff speed on the first air frame
     this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false;
     this.autoYaw = null; this.airLabel = null;
@@ -401,7 +402,13 @@ class Player {
       this.autoYaw.target += spinRate * dt; // the rider's own spins ride on top of it
       this.yaw += angDelta(this.yaw, this.autoYaw.target) * (1 - Math.exp(-3.2 * dt));
     }
-    this.lean = damp(this.lean, input.steer * 0.92, 6, dt);
+    // axis lock: a stick pushed mostly up / down is a PURE flip — its small sideways
+    // drift doesn't spin you (diagonals past ~30° still cork). Plus a small dead zone.
+    const fMag = Math.max(+(input.flipFwd !== undefined ? input.flipFwd : input.tuck) || 0,
+                          +(input.flipBack !== undefined ? input.flipBack : input.brake) || 0);
+    let sIn = Math.abs(input.steer) < 0.12 ? 0 : input.steer;
+    if (fMag > 0.2 && Math.abs(sIn) < fMag * 0.6) sIn = 0;
+    this.lean = damp(this.lean, sIn * 0.92, 6, dt);
 
     // ---- flick mode: a flick queues a whole rotation that finishes before touchdown ----
     // in the air you're committed: only a short window after takeoff to add to the trick
@@ -824,6 +831,10 @@ class Player {
       return [V3.cross(V3(), Y, Z), Y, Z];            // right-handed: Z = X × Y
     };
     let open = (0.62 + (air ? clamp(this.spin * 0.08, -0.3, 0.3) : 0)) * (1 - 0.6 * bv);   // square up to the slope when stopping
+    // switch: the model is turned 180° (nose uphill), so open toward the TAIL — the end
+    // that now leads — or the rider faces back up the hill at the camera. Mid-180 the
+    // shoulders pass through square.
+    open *= Math.cos(this.stanceVis);
     // toe-side turns (lean > 0) press the chest forward over the toes; heel-side turns
     // (lean < 0) sit back over the heels — otherwise the constant forward bend
     // cancels most of a heel-side lean and the rider looks like they lean out

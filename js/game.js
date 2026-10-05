@@ -417,7 +417,8 @@ const Flick = {
   /* snap a direction to 8-way (components 0 / ±1) */
   fire(dx, dy) {
     const m = Math.hypot(dx, dy) || 1, x = dx / m, y = dy / m;
-    this.pending = { x: Math.abs(x) > 0.38 ? Math.sign(x) : 0, y: Math.abs(y) > 0.38 ? Math.sign(y) : 0 };
+    // pure flip / spin within ±30° of the axis; diagonals (30–60°) combine both
+    this.pending = { x: Math.abs(x) > 0.5 ? Math.sign(x) : 0, y: Math.abs(y) > 0.5 ? Math.sign(y) : 0 };
   },
 
   /* keyboard: collect a second direction key within 70 ms for diagonals */
