@@ -6,6 +6,41 @@
 /* tiny DOM helper (used everywhere) */
 const $ = (id) => document.getElementById(id);
 
+/* ---------------- X / Y button abilities ----------------
+   Three abilities, two buttons — the rider picks which two (Controls editor:
+   tap X or Y to cycle). Keyboard has all three on E / Q / F.
+     butter : hold on the snow for a nose/tail press (stick keeps the balance)
+     pump   : press into a dip / transition / roller up-slope for speed
+     stomp  : press just before touchdown for a firmer, more forgiving landing */
+const ABILITIES = ['butter', 'pump', 'stomp'];
+const ABILITY_LABEL = { butter: 'press', pump: 'pump', stomp: 'stomp' };
+const Buttons = {
+  KEY: 'powderline.buttons',
+  map: { X: 'butter', Y: 'pump' },
+  load() {
+    try {
+      const m = JSON.parse(localStorage.getItem(this.KEY) || 'null');
+      if (m && ABILITIES.includes(m.X) && ABILITIES.includes(m.Y) && m.X !== m.Y) this.map = m;
+    } catch (e) { }
+    this.sync();
+  },
+  /* next ability on this button; if the other button has it, they swap */
+  cycle(btn) {
+    const other = btn === 'X' ? 'Y' : 'X';
+    const next = ABILITIES[(ABILITIES.indexOf(this.map[btn]) + 1) % ABILITIES.length];
+    if (next === this.map[other]) this.map[other] = this.map[btn];
+    this.map[btn] = next;
+    try { localStorage.setItem(this.KEY, JSON.stringify(this.map)); } catch (e) { }
+    this.sync();
+  },
+  sync() {
+    for (const b of ['X', 'Y']) {
+      const el = document.querySelector('#x' + b + ' small'); if (el) el.textContent = ABILITY_LABEL[this.map[b]];
+    }
+    for (const el of document.querySelectorAll('[data-ability]')) el.textContent = ABILITY_LABEL[this.map[el.dataset.ability]];
+  }
+};
+
 /* ---------------- input ---------------- */
 const Input = {
   down: {}, steer: 0, jumpEdge: false, grab: null,
@@ -16,7 +51,8 @@ const Input = {
       KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right',
       KeyS: 'brake', ArrowDown: 'brake', KeyW: 'tuck', ArrowUp: 'tuck',
       Space: 'jump', KeyR: 'restart', KeyP: 'pause', KeyM: 'mute',
-      KeyN: 'atmos', Backquote: 'debug', KeyJ: 'Indy', KeyK: 'method', KeyL: 'mutegrab', Semicolon: 'stale'
+      KeyN: 'atmos', Backquote: 'debug', KeyJ: 'Indy', KeyK: 'method', KeyL: 'mutegrab', Semicolon: 'stale',
+      KeyE: 'butter', KeyQ: 'pump', KeyF: 'stomp'
     };
     window.addEventListener('keydown', (e) => {
       if (e.repeat) return;
@@ -170,7 +206,8 @@ const Input = {
       el.addEventListener('lostpointercapture', off);
     };
     // virtual Xbox pad: A ollie, X/B/Y grabs (as on a real controller); tuck/brake live on the stick
-    hold('xA', 'jump'); hold('xX', 'Indy'); hold('xB', 'method'); hold('xY', 'stale');
+    hold('xA', 'jump'); hold('xB', 'grabB'); hold('xX', 'btnX'); hold('xY', 'btnY');
+    Buttons.load();
     const tap = (id, fn) => $(id).addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); fn(); });
     tap('tP', () => Game.togglePause());
     tap('tR', () => { if (Game.state === 'play' || Game.state === 'pause') Game.restart(true); });
@@ -290,11 +327,26 @@ const Input = {
     if (loading) this.chargeT += dt;
     this.brake = Math.max(this.down.brake ? 1 : 0, back);
     this.tuck = Math.max(this.down.tuck || loading ? 1 : 0, fwd);   // holding Space = tuck
+    // B (touch / controller): one grab button — the stick direction when you press it
+    // picks the grab: neutral or up = Indy, down = stale, left = method, right = mute
+    const grabB = !!this.down.grabB || Pad.grabB;
+    if (grabB && !this._grabB) {
+      const gx = this.touchSteer !== null ? this.touchSteer : (Pad.steer !== null ? Pad.steer : target);
+      this._grabType = Math.abs(gx) > 0.45 ? (gx < 0 ? 'method' : 'mute') : (sy > 0.4 ? 'stale' : 'Indy');
+    }
+    this._grabB = grabB;
     this.grab = this.down.method ? 'method' : this.down.Indy ? 'Indy'
-      : this.down.stale ? 'stale' : this.down.mutegrab ? 'mute' : Pad.grab;
+      : this.down.stale ? 'stale' : this.down.mutegrab ? 'mute' : grabB ? this._grabType : Pad.grab;
+    // X / Y abilities (whichever the rider assigned), plus their keyboard keys
+    const held = (ab) => !!this.down[ab] || ((this.down.btnX || Pad.btnX) && Buttons.map.X === ab)
+      || ((this.down.btnY || Pad.btnY) && Buttons.map.Y === ab);
+    const pumpNow = held('pump'), stompNow = held('stomp');
+    const pump = pumpNow && !this._pumpPrev, stomp = stompNow && !this._stompPrev;
+    this._pumpPrev = pumpNow; this._stompPrev = stompNow;
     const j = this.jumpRelease; this.jumpRelease = false;
     return { steer: this.steer, brake: this.brake, tuck: this.tuck, jump: j, charge: this.releaseCharge,
-             flipFwd: Math.max(this.down.tuck ? 1 : 0, fwd), flipBack: Math.max(this.down.brake ? 1 : 0, back), grab: this.grab };
+             flipFwd: Math.max(this.down.tuck ? 1 : 0, fwd), flipBack: Math.max(this.down.brake ? 1 : 0, back), grab: this.grab,
+             butter: held('butter'), pump, stomp };
   }
 };
 
@@ -350,9 +402,17 @@ const TouchLayout = {
 
   bind(g) {
     const grip = g.querySelector('.tgrip');
-    let id = null, timer = 0, moving = false, dx = 0, dy = 0, last = null;
-    const end = () => {
+    let id = null, timer = 0, moving = false, dx = 0, dy = 0, last = null, sx = 0, sy = 0, dragged = false;
+    const end = (e) => {
       clearTimeout(timer);
+      // editor: a tap that didn't drag, on X or Y, cycles that button's ability
+      if (Game.editingLayout && id !== null && !dragged && e && e.type === 'pointerup') {
+        for (const b of ['X', 'Y']) {
+          const r = $('x' + b).getBoundingClientRect();
+          if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) { Buttons.cycle(b); break; }
+        }
+      }
+      dragged = false;
       if (moving && last) {
         const o = this.saved[this.orient()] || (this.saved[this.orient()] = {});
         o[g.id] = [last[0] / innerWidth, last[1] / innerHeight];
@@ -367,11 +427,14 @@ const TouchLayout = {
       e.preventDefault(); e.stopPropagation();
       try { g.setPointerCapture(e.pointerId); } catch (_) { }
       id = e.pointerId; moving = true; g.classList.add('moving');
+      sx = e.clientX; sy = e.clientY; dragged = false;
       const r = g.getBoundingClientRect();
       dx = e.clientX - (r.left + r.width / 2); dy = e.clientY - (r.top + r.height / 2);
     });
     g.addEventListener('pointermove', (e) => {
       if (!Game.editingLayout || e.pointerId !== id || !moving) return;
+      if (!dragged && Math.hypot(e.clientX - sx, e.clientY - sy) < 8) return;   // still a tap
+      dragged = true;
       last = this.place(g, e.clientX - dx, e.clientY - dy);
     });
     g.addEventListener('pointerup', end); g.addEventListener('pointercancel', end);
@@ -637,6 +700,26 @@ const Game = {
   recover() { this.desat = 0; },
   onPump() { this.score += 15 * this.combo; },
 
+  /* butter / press finished: a clean hold scores and feeds the combo; a slip breaks it */
+  onPress(type, t, clean) {
+    if (!clean) { this.msg('SLIPPED', 900); this.combo = 1; this.comboTimer = 0; Pad.rumble(0.5, 0.3, 140); return; }
+    if (t < 0.4) return;
+    const pts = Math.round((40 + t * 110) * this.combo);
+    this.score += pts;
+    this.bestHit = Math.max(this.bestHit, pts);
+    if (t >= 1) { this.combo = Math.min(this.combo + 1, 12); }
+    this.comboTimer = 5.5;
+    Audio.trick(1);
+    this.showTrick((type === 'nose' ? 'Nose' : 'Tail') + ' Press ' + t.toFixed(1) + 's', pts);
+  },
+
+  /* stomped landing: well-timed press just before touchdown */
+  onStomp() {
+    this.score += Math.round(50 * this.combo);
+    this.msg('STOMPED!', 900);
+    Pad.rumble(0.9, 0.5, 160);
+  },
+
   gameOver(finished) {
     this.state = 'over'; this.overAt = performance.now();
     $('overTitle').textContent = (finished ? 'Run complete · ' : 'Run over · ') + Level.cur.name;
@@ -788,6 +871,7 @@ const Game = {
     if (dz > 0) { this.distance += dz; this.score += dz * 0.6; }
     this.lastZ = P.pos.z;
     this.topSpeed = Math.max(this.topSpeed, P.speed);
+    if (P.press && this.comboTimer > 0) this.comboTimer = Math.max(this.comboTimer, 0.75);   // a press keeps the line alive
     if (this.comboTimer > 0) { this.comboTimer -= dt; if (this.comboTimer <= 0) this.combo = 1; }
     this.flash = damp(this.flash, 0, 4, dt);
     this.desat = damp(this.desat, 0, 2.2, dt);
@@ -850,6 +934,14 @@ const Game = {
     if (this._fill !== fill) { this._fill = fill; $('speedfill').style.width = fill; }
     $('combo').classList.toggle('on', this.combo > 1);
     if (this.combo > 1) this.put('combo', '\u00D7' + this.combo + ' COMBO');
+    // press balance meter
+    const pm = $('pressMeter');
+    pm.classList.toggle('on', !!P.press);
+    if (P.press) {
+      this.put('pressLabel', (P.press.type === 'nose' ? 'NOSE' : 'TAIL') + ' PRESS ' + P.press.t.toFixed(1) + 's');
+      $('pressNeedle').style.left = (50 + clamp(P.press.bal, -1, 1) * 46) + '%';
+      pm.classList.toggle('warn', Math.abs(P.press.bal) > 0.65);
+    }
     $('airtime').classList.toggle('on', P.airborne);
     if (P.airborne) this.put('airtime', P.airTime.toFixed(2) + ' s');
     if ($('debug').classList.contains('on')) {

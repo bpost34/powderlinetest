@@ -15,7 +15,7 @@ const PAD_LEVELS = ['mountain', 'pipe', 'park', 'zen'];
 
 const Pad = {
   index: -1, prev: [], active: false,
-  steer: null, stickY: 0, lt: 0, rt: 0, grab: null,
+  steer: null, stickY: 0, lt: 0, rt: 0, grab: null, grabB: false, btnX: false, btnY: false,
   _jump: false, _cam: false, _navT: 0, _toastT: 0,
 
   init() {
@@ -58,6 +58,7 @@ const Pad = {
     if (this._jump) { Input.releaseJump(); Input.down.jump = false; this._jump = false; }
     if (this._cam) { Cam.dragging = false; Cam.releaseT = 1.0; this._cam = false; }
     this.steer = null; this.stickY = 0; this.lt = this.rt = 0; this.grab = null;
+    this.grabB = this.btnX = this.btnY = false;
   },
 
   rumble(strong, weak, ms) {
@@ -101,7 +102,9 @@ const Pad = {
       this.steer = lx ? lx : (now[14] ? -1 : now[15] ? 1 : null);
       this.stickY = ly || (now[12] ? -1 : now[13] ? 1 : 0);
       this.lt = lt; this.rt = rt;                               // triggers: brake / tuck (and flips in the air)
-      this.grab = now[2] ? 'Indy' : now[1] ? 'method' : now[3] ? 'stale' : (now[4] || now[5]) ? 'mute' : null;
+      // B = grab (stick picks which, in Input.sample); X / Y = the rider's chosen abilities; bumpers = mute grab
+      this.grabB = now[1]; this.btnX = now[2]; this.btnY = now[3];
+      this.grab = (now[4] || now[5]) ? 'mute' : null;
       // A = Space: hold to load, release to ollie
       if (now[0] && !this._jump && !this.prev[0]) {
         this._jump = true;

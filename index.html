@@ -50,6 +50,13 @@
   #airtime{font-size:15px;font-weight:700;color:var(--accent);margin-top:8px;opacity:0;
     text-shadow:0 0 18px rgba(80,220,255,.6)}
   #airtime.on{opacity:1}
+  /* butter / press balance meter: keep the needle in the middle */
+  #pressMeter{display:none;margin:8px auto 0;width:180px}
+  #pressMeter.on{display:block}
+  #pressLabel{font-size:12px;font-weight:800;letter-spacing:.14em;color:var(--accent);margin-bottom:5px}
+  .pmBar{position:relative;height:8px;border-radius:4px;background:linear-gradient(90deg,#ff5a4c,#f5c638 25%,#5fd35a 42% 58%,#f5c638 75%,#ff5a4c)}
+  #pressNeedle{position:absolute;top:-4px;width:4px;height:16px;margin-left:-2px;border-radius:2px;background:#fff;box-shadow:0 0 6px #000}
+  #pressMeter.warn #pressLabel{color:#ff7a5c}
   #trick{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%) scale(.86);text-align:center;
     opacity:0;pointer-events:none}
   #trickName{font-size:38px;font-weight:850;letter-spacing:.01em;color:#fff;
@@ -313,6 +320,8 @@
     color:#eaf6ff;font:800 11px/1 inherit;font-family:inherit;letter-spacing:.14em;text-transform:uppercase;touch-action:manipulation}
   #layoutBar #lDone{border-color:var(--accent);color:var(--accent)}
   body.editLayout #layoutBar{display:flex}
+  body.pad #ctrlBtn{display:inline-block}                /* controller players pick their X / Y too */
+  body.editLayout #xX, body.editLayout #xY{box-shadow:0 0 0 2px rgba(95,226,255,.45)}
   body.editLayout #touch{display:block}
   body.editLayout #menu, body.editLayout #muteBtn, body.editLayout #atmosBtn, body.editLayout .tbtn.sbtn{display:none!important}
   body.editLayout .tgroup{pointer-events:auto;cursor:grab;border-radius:24px;outline:2px dashed rgba(95,226,255,.55);outline-offset:8px}
@@ -415,6 +424,7 @@
   <div id="center">
     <div id="combo">×1 COMBO</div>
     <div id="airtime">0.00 s</div>
+    <div id="pressMeter"><div id="pressLabel">TAIL PRESS</div><div class="pmBar"><i id="pressNeedle"></i></div></div>
   </div>
   <div id="trick"><div id="trickName"></div><div id="trickPts"></div></div>
   <div id="gateMark"><div class="gm-label">GATE</div><div class="gm-dist num" id="gateDist">0 m</div><div class="gm-arrow"></div></div>
@@ -425,6 +435,7 @@
     <span><i class="key">W</i><span class="kdesc">tuck · frontflip</span></span>
     <span><i class="key">Space</i><span class="kdesc">hold · release to ollie</span></span>
     <span><i class="key">J K L ;</i><span class="kdesc">grab</span></span>
+    <span><i class="key">E Q F</i><span class="kdesc">press · pump · stomp</span></span>
     <span><i class="key">P</i><span class="kdesc">pause</span></span>
     <span class="zen-only"><i class="key">N</i><span class="kdesc">day · night · neon</span></span>
     <span><i class="key">Right/Middle drag</i><span class="kdesc">camera</span></span>
@@ -433,7 +444,7 @@
 </div>
 
 <div id="padToast"></div>
-<div id="layoutBar"><span>Drag to arrange</span><button type="button" id="lReset">Reset</button><button type="button" id="lDone">Done</button></div>
+<div id="layoutBar"><span>Drag to move · tap X / Y to swap</span><button type="button" id="lReset">Reset</button><button type="button" id="lDone">Done</button></div>
 <div class="screen" id="menu">
   <div class="eyebrow">WebGL2 · no engine · no assets</div>
   <h1>POWDER<br>LINE</h1>
@@ -445,20 +456,23 @@
     <div><i class="key">W</i> / <i class="key">↑</i></div><div>Tuck · front flip in the air</div>
     <div><i class="key">Space</i></div><div>Hold to tuck &amp; load · release to ollie (or pump a dip)</div>
     <div><i class="key">J</i> <i class="key">K</i> <i class="key">L</i> <i class="key">;</i></div><div>Grabs (hold in air)</div>
+    <div><i class="key">E</i> <i class="key">Q</i> <i class="key">F</i></div><div>Butter/press (hold, ↑↓ balance) · pump a dip · stomp just before landing</div>
     <div><i class="key">Right</i> / <i class="key">Middle</i> drag</div><div>Orbit camera · wheel to zoom</div>
     <div><i class="key">R</i> <i class="key">P</i> <i class="key">M</i> <i class="key">`</i></div><div>Restart · pause · mute · debug</div>
   </div>
   <div class="keys touch-only">
     <div><i class="key">L stick</i></div><div>◀ ▶ carve (spin in air) · ▲ tuck / front flip · ▼ brake / back flip</div>
     <div><i class="key">A</i></div><div>Hold to tuck &amp; load · release to ollie</div>
-    <div><i class="key">X</i> <i class="key">B</i> <i class="key">Y</i></div><div>Grabs (hold in air)</div>
+    <div><i class="key">B</i></div><div>Grab (hold in air) — stick picks it: ↑ Indy · ↓ stale · ◀ method · ▶ mute</div>
+    <div><i class="key">X</i> <i class="key">Y</i></div><div><b data-ability="X">press</b> · <b data-ability="Y">pump</b> — your pick (Controls → tap X / Y)</div>
     <div><i class="key">drag</i></div><div>Swipe open screen to look around</div>
   </div>
   <div class="keys pad-only">
     <div><i class="key">L stick</i></div><div>◀ ▶ carve (spin in air) · ▲ tuck / front flip · ▼ brake / back flip</div>
     <div><i class="key">A</i></div><div>Hold to tuck &amp; load · release to ollie</div>
     <div><i class="key">RT</i> <i class="key">LT</i></div><div>Tuck · brake (front / back flip in the air)</div>
-    <div><i class="key">X</i> <i class="key">B</i> <i class="key">Y</i> <i class="key">RB</i></div><div>Grabs (hold in air)</div>
+    <div><i class="key">B</i></div><div>Grab (hold in air) — stick picks it: ↑ Indy · ↓ stale · ◀ method · ▶ mute</div>
+    <div><i class="key">X</i> <i class="key">Y</i></div><div><b data-ability="X">press</b> · <b data-ability="Y">pump</b> — your pick (Controls → tap X / Y)</div>
     <div><i class="key">R stick</i></div><div>Look around</div>
     <div><i class="key">Menu</i> <i class="key">View</i></div><div>Pause · restart</div>
     <div><i class="key">D-pad</i> <i class="key">A</i> <i class="key">Y</i></div><div>Menu: pick level · drop in · customize rider</div>
@@ -520,8 +534,8 @@
   </div>
   <div class="tgroup" id="gAbxy"><div class="tgrip" title="Hold, then drag to move">⠿</div>
   <div id="abxy">
-    <div class="tbtn xbtn" id="xY"><b>Y</b><small>grab</small></div>
-    <div class="tbtn xbtn" id="xX"><b>X</b><small>grab</small></div>
+    <div class="tbtn xbtn" id="xY"><b>Y</b><small>pump</small></div>
+    <div class="tbtn xbtn" id="xX"><b>X</b><small>press</small></div>
     <div class="tbtn xbtn" id="xB"><b>B</b><small>grab</small></div>
     <div class="tbtn xbtn" id="xA"><b>A</b><small>ollie</small></div>
   </div>
@@ -533,19 +547,19 @@
 
 <div id="fatal"></div>
 
-<script src="js/math.js?v=20261011c"></script>
-<script src="js/world.js?v=20261011c"></script>
-<script src="js/meshes.js?v=20261011c"></script>
-<script src="js/outfit.js?v=20261011c"></script>
-<script src="js/levels.js?v=20261011c"></script>
-<script src="js/gl.js?v=20261011c"></script>
-<script src="js/render.js?v=20261011c"></script>
-<script src="js/scenery.js?v=20261011c"></script>
-<script src="js/atmos.js?v=20261011c"></script>
-<script src="js/fx.js?v=20261011c"></script>
-<script src="js/audio.js?v=20261011c"></script>
-<script src="js/player.js?v=20261011c"></script>
-<script src="js/pad.js?v=20261011c"></script>
-<script src="js/game.js?v=20261011c"></script>
+<script src="js/math.js?v=20261012a"></script>
+<script src="js/world.js?v=20261012a"></script>
+<script src="js/meshes.js?v=20261012a"></script>
+<script src="js/outfit.js?v=20261012a"></script>
+<script src="js/levels.js?v=20261012a"></script>
+<script src="js/gl.js?v=20261012a"></script>
+<script src="js/render.js?v=20261012a"></script>
+<script src="js/scenery.js?v=20261012a"></script>
+<script src="js/atmos.js?v=20261012a"></script>
+<script src="js/fx.js?v=20261012a"></script>
+<script src="js/audio.js?v=20261012a"></script>
+<script src="js/player.js?v=20261012a"></script>
+<script src="js/pad.js?v=20261012a"></script>
+<script src="js/game.js?v=20261012a"></script>
 </body>
 </html>

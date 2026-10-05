@@ -39,6 +39,10 @@ class Player {
     this.landedClean = false;
     this.jumpBuffer = 0;
     this.pumpCooldown = 0;
+    this.pumpBuf = 0;         // pump button: short buffer so a press just before the dip counts
+    this.press = null;        // butter / press: { type: 'nose'|'tail', t, bal, nz } while on the snow
+    this.pressVis = 0;        // render-only board pitch for the press
+    this.stompAt = -1;        // air time when stomp was pressed (-1 = not yet this air)
     this.spin = 0;            // accumulated in-air rotation (radians)
     this.flip = 0;            // accumulated in-air flip (radians, + = backflip / nose up)
     this.flipRate = 0;
@@ -73,13 +77,15 @@ class Player {
     this.grind = null;
     // nothing from before the reset carries over (turn momentum, landing settle, skid pose, buffered jumps)
     this.turnRate = 0; this.yawVis = 0; this.brakeVis = 0; this.jumpBuffer = 0; this.coyote = 0;
+    this.press = null; this.pressVis = 0; this.pumpBuf = 0; this.stompAt = -1;
     this.updateBasis();
   }
 
   /* leaving the ground (ollie, crest, rail exit): a fresh air phase — no spin or
      flip carried over, flips must be re-armed, and no leftover grace window */
   _takeoff() {
-    this.airborne = true; this.airTime = 0; this.coyote = 0;
+    if (this.press) this.endPress(true);          // ollie / pop out of a press: it counts
+    this.airborne = true; this.airTime = 0; this.coyote = 0; this.stompAt = -1;
     this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false;
     this.autoYaw = null; this.airLabel = null;
   }
@@ -213,8 +219,43 @@ class Player {
     const centripetal = sp * sp * curv;
     this.load = clamp(1 + centripetal / G, 0, 3.4);
 
-    this.tuck = damp(this.tuck, +input.tuck || 0, 8, dt);          // analog from the joystick, 0/1 from keys
-    this.braking = damp(this.braking, +input.brake || 0, 9, dt);
+    // ---- butter / press: hold the button on the snow; the stick (up/down) keeps the balance ----
+    const sFwd = +input.flipFwd || 0, sBack = +input.flipBack || 0;
+    if (!input.butter) this.pressLock = false;            // after a slip, let go before pressing again
+    if (input.butter && !this.press && !this.pressLock && sp > 2.5) {
+      this.press = { type: sFwd > 0.3 ? 'nose' : 'tail', t: 0, bal: (Math.random() - 0.5) * 0.15, nz: Math.random() * 20 };
+    }
+    if (this.press) {
+      const p = this.press;
+      if (!input.butter) this.endPress(true);
+      else {
+        p.t += dt;
+        // the press wants to tip further the longer you hold it; the stick fights back
+        // (tail press: push up to come forward; nose press: pull back)
+        const k = 1.3 + p.t * 0.35;
+        const wobble = Math.sin(p.nz + p.t * 2.3) * 0.6 + Math.sin(p.nz * 1.7 + p.t * 3.9) * 0.4;
+        const fix = (p.type === 'tail' ? sFwd - sBack : sBack - sFwd) * 2.6;
+        p.bal += (p.bal * k + wobble * 0.55 - fix) * dt;
+        if (Math.abs(p.bal) > 1) { this.endPress(false); this.pressLock = true; }
+      }
+    }
+    const pressing = !!this.press;
+    this.tuck = damp(this.tuck, pressing ? 0 : +input.tuck || 0, 8, dt);          // analog from the joystick, 0/1 from keys
+    this.braking = damp(this.braking, pressing ? 0 : +input.brake || 0, 9, dt);   // (the stick balances a press instead)
+    if (pressing) vFwd -= 0.45 * dt;                                                // a press scrubs a little speed
+
+    // ---- pump button: push into a compression (dip, transition, roller up-slope) for speed ----
+    if (input.pump) this.pumpBuf = 0.16;
+    if (this.pumpBuf > 0) {
+      this.pumpBuf -= dt;
+      if (this.pumpCooldown <= 0 && this.load > 1.08) {
+        vFwd += 1.2 + (this.load - 1) * 5.5;
+        this.pumpCooldown = 0.3; this.pumpBuf = 0;
+        fx.puff(this.pos.x, this.groundY, this.pos.z, 0.45);
+        Audio.ollie();
+        Game.onPump();
+      }
+    }
 
     // ---- jump: pump a compression, or ollie ----
     if (this.jumpBuffer > 0 && this.pumpCooldown <= 0) {
@@ -287,6 +328,7 @@ class Player {
   }
 
   stepAir(dt, input, fx) {
+    if (input.stomp && this.stompAt < 0) this.stompAt = this.airTime;   // one stomp per air: timing is the skill
     // "coyote time": a bump or lip launched us a moment before the jump was
     // released — still give the full ollie pop (plus some of the lip's own lift)
     if (this.coyote > 0) {
@@ -346,6 +388,10 @@ class Player {
     // touching down on a downslope that matches your arc is soft, flat-to-flat is not
     const vN = this.vel.x * n.x + this.vel.y * n.y + this.vel.z * n.z;
     const impact = clamp(-vN / 12, 0.05, 2.4);
+    // STOMP: pressed in the last ~0.22 s before touchdown → firmer, more forgiving landing
+    const stomped = this.stompAt >= 0 && this.airTime > 0.35 && this.airTime - this.stompAt <= 0.22;
+    const sf = stomped ? 1.2 : 1;
+    this.stompAt = -1;
     this.airborne = false;
     this.airTime = 0;
     this.pos.y = heightAt(this.pos.x, this.pos.z) + RIDE_H;
@@ -372,11 +418,12 @@ class Player {
     const flipResidual = Math.abs(angDelta(0, this.flip));
 
     const bad =
-      baseError > 0.95 ||                       // landing on the rail / sideways
-      missAngle > 1.25 ||                       // travelling the wrong way (~72°)
-      (overLean > 0.85 && impact > 0.8) ||      // edge catch
-      impact > 2.0 ||                           // just fell in it
-      flipResidual > 1.05;                      // under/over-rotated the flip (~60°)
+      baseError > 0.95 * sf ||                  // landing on the rail / sideways
+      missAngle > 1.25 * sf ||                  // travelling the wrong way (~72°)
+      (overLean > 0.85 && impact > 0.8 * sf) || // edge catch
+      impact > 2.0 * sf ||                      // just fell in it
+      flipResidual > 1.05 * sf;                 // under/over-rotated the flip (~60°)
+    if (stomped && !bad) { Game.onStomp(); Cam.shake = Math.max(Cam.shake, 0.12); fx.puff(this.pos.x, this.groundY, this.pos.z, 1.3); }
 
     const oldYaw = this.yaw;
     if (!bad && travel > 1.5) {
@@ -483,8 +530,16 @@ class Player {
   }
 
   /* ---------------- wipeout ---------------- */
+  /* end a butter/press: clean (released, or popped off) or slipped (lost the balance) */
+  endPress(clean) {
+    const p = this.press; if (!p) return;
+    this.press = null;
+    Game.onPress(p.type, p.t, clean);
+  }
+
   crash(fx) {
     if (this.invuln > 0) return;
+    this.press = null;
     this.crashTimer = 1.75;
     this.invuln = 0.2;
     this.spin = 0;
@@ -592,7 +647,10 @@ class Player {
     // toe-side turns (lean > 0) press the chest forward over the toes; heel-side turns
     // (lean < 0) sit back over the heels — otherwise the constant forward bend
     // cancels most of a heel-side lean and the rider looks like they lean out
-    let bend = 0.22 + tuck * 0.40 + (grab ? 0.65 : 0) + Math.max(0, lean) * 0.15 + Math.min(0, lean) * 0.30;
+    // press: + = tail press (nose up), − = nose press
+    this.pressVis = damp(this.pressVis, this.press ? (this.press.type === 'tail' ? 1 : -1) : 0, 10, 1 / 60);
+    let bend = 0.22 + tuck * 0.40 + (grab ? 0.65 : 0) + Math.max(0, lean) * 0.15 + Math.min(0, lean) * 0.30
+      - this.pressVis * 0.28;                        // sit back over a tail press, lean out over a nose press
     if (crash) { bend += Math.sin(this.crashTimer * 7) * 0.7; open += Math.cos(this.crashTimer * 5) * 0.8; }
     const [TX, TY, TZ] = frame(open, bend, 0.40);
     const [PX, PY, PZ] = frame(open * 0.45, bend * 0.3, 0.25);
@@ -696,6 +754,22 @@ class Player {
 
     // flips: rotate board + rider together about the board's toe–heel axis,
     // pivoting at the rider's centre of mass (+ = nose up = backflip)
+    // butter / press: pitch board + rider up off the tail (or nose) contact point
+    const pv = this.pressVis;
+    if (Math.abs(pv) > 1e-3) {
+      const piv = local(-Math.sign(pv) * 0.70, 0, 0), k = right, a = pv * 0.21;
+      const c = Math.cos(a), sn = Math.sin(a), ic = 1 - c, R = this._m();
+      R[0] = c + k.x * k.x * ic;       R[1] = k.y * k.x * ic + k.z * sn; R[2] = k.z * k.x * ic - k.y * sn; R[3] = 0;
+      R[4] = k.x * k.y * ic - k.z * sn; R[5] = c + k.y * k.y * ic;      R[6] = k.z * k.y * ic + k.x * sn; R[7] = 0;
+      R[8] = k.x * k.z * ic + k.y * sn; R[9] = k.y * k.z * ic - k.x * sn; R[10] = c + k.z * k.z * ic;    R[11] = 0;
+      R[12] = piv.x - (R[0] * piv.x + R[4] * piv.y + R[8] * piv.z);
+      R[13] = piv.y - (R[1] * piv.x + R[5] * piv.y + R[9] * piv.z);
+      R[14] = piv.z - (R[2] * piv.x + R[6] * piv.y + R[10] * piv.z);
+      R[15] = 1;
+      m4mul(this.boardMat, R, this.boardMat);
+      for (const q of out) m4mul(q.mat, R, q.mat);
+    }
+
     const fv = this.flipVis;
     if (Math.abs(fv) > 1e-3) {
       const piv = local(0, 0.70 * crouch, 0);

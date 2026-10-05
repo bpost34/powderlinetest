@@ -50,6 +50,13 @@
   #airtime{font-size:15px;font-weight:700;color:var(--accent);margin-top:8px;opacity:0;
     text-shadow:0 0 18px rgba(80,220,255,.6)}
   #airtime.on{opacity:1}
+  /* butter / press balance meter: keep the needle in the middle */
+  #pressMeter{display:none;margin:8px auto 0;width:180px}
+  #pressMeter.on{display:block}
+  #pressLabel{font-size:12px;font-weight:800;letter-spacing:.14em;color:var(--accent);margin-bottom:5px}
+  .pmBar{position:relative;height:8px;border-radius:4px;background:linear-gradient(90deg,#ff5a4c,#f5c638 25%,#5fd35a 42% 58%,#f5c638 75%,#ff5a4c)}
+  #pressNeedle{position:absolute;top:-4px;width:4px;height:16px;margin-left:-2px;border-radius:2px;background:#fff;box-shadow:0 0 6px #000}
+  #pressMeter.warn #pressLabel{color:#ff7a5c}
   #trick{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%) scale(.86);text-align:center;
     opacity:0;pointer-events:none}
   #trickName{font-size:38px;font-weight:850;letter-spacing:.01em;color:#fff;
@@ -313,6 +320,8 @@
     color:#eaf6ff;font:800 11px/1 inherit;font-family:inherit;letter-spacing:.14em;text-transform:uppercase;touch-action:manipulation}
   #layoutBar #lDone{border-color:var(--accent);color:var(--accent)}
   body.editLayout #layoutBar{display:flex}
+  body.pad #ctrlBtn{display:inline-block}                /* controller players pick their X / Y too */
+  body.editLayout #xX, body.editLayout #xY{box-shadow:0 0 0 2px rgba(95,226,255,.45)}
   body.editLayout #touch{display:block}
   body.editLayout #menu, body.editLayout #muteBtn, body.editLayout #atmosBtn, body.editLayout .tbtn.sbtn{display:none!important}
   body.editLayout .tgroup{pointer-events:auto;cursor:grab;border-radius:24px;outline:2px dashed rgba(95,226,255,.55);outline-offset:8px}
@@ -415,6 +424,7 @@
   <div id="center">
     <div id="combo">×1 COMBO</div>
     <div id="airtime">0.00 s</div>
+    <div id="pressMeter"><div id="pressLabel">TAIL PRESS</div><div class="pmBar"><i id="pressNeedle"></i></div></div>
   </div>
   <div id="trick"><div id="trickName"></div><div id="trickPts"></div></div>
   <div id="gateMark"><div class="gm-label">GATE</div><div class="gm-dist num" id="gateDist">0 m</div><div class="gm-arrow"></div></div>
@@ -425,6 +435,7 @@
     <span><i class="key">W</i><span class="kdesc">tuck · frontflip</span></span>
     <span><i class="key">Space</i><span class="kdesc">hold · release to ollie</span></span>
     <span><i class="key">J K L ;</i><span class="kdesc">grab</span></span>
+    <span><i class="key">E Q F</i><span class="kdesc">press · pump · stomp</span></span>
     <span><i class="key">P</i><span class="kdesc">pause</span></span>
     <span class="zen-only"><i class="key">N</i><span class="kdesc">day · night · neon</span></span>
     <span><i class="key">Right/Middle drag</i><span class="kdesc">camera</span></span>
@@ -433,7 +444,7 @@
 </div>
 
 <div id="padToast"></div>
-<div id="layoutBar"><span>Drag to arrange</span><button type="button" id="lReset">Reset</button><button type="button" id="lDone">Done</button></div>
+<div id="layoutBar"><span>Drag to move · tap X / Y to swap</span><button type="button" id="lReset">Reset</button><button type="button" id="lDone">Done</button></div>
 <div class="screen" id="menu">
   <div class="eyebrow">WebGL2 · no engine · no assets</div>
   <h1>POWDER<br>LINE</h1>
@@ -445,20 +456,23 @@
     <div><i class="key">W</i> / <i class="key">↑</i></div><div>Tuck · front flip in the air</div>
     <div><i class="key">Space</i></div><div>Hold to tuck &amp; load · release to ollie (or pump a dip)</div>
     <div><i class="key">J</i> <i class="key">K</i> <i class="key">L</i> <i class="key">;</i></div><div>Grabs (hold in air)</div>
+    <div><i class="key">E</i> <i class="key">Q</i> <i class="key">F</i></div><div>Butter/press (hold, ↑↓ balance) · pump a dip · stomp just before landing</div>
     <div><i class="key">Right</i> / <i class="key">Middle</i> drag</div><div>Orbit camera · wheel to zoom</div>
     <div><i class="key">R</i> <i class="key">P</i> <i class="key">M</i> <i class="key">`</i></div><div>Restart · pause · mute · debug</div>
   </div>
   <div class="keys touch-only">
     <div><i class="key">L stick</i></div><div>◀ ▶ carve (spin in air) · ▲ tuck / front flip · ▼ brake / back flip</div>
     <div><i class="key">A</i></div><div>Hold to tuck &amp; load · release to ollie</div>
-    <div><i class="key">X</i> <i class="key">B</i> <i class="key">Y</i></div><div>Grabs (hold in air)</div>
+    <div><i class="key">B</i></div><div>Grab (hold in air) — stick picks it: ↑ Indy · ↓ stale · ◀ method · ▶ mute</div>
+    <div><i class="key">X</i> <i class="key">Y</i></div><div><b data-ability="X">press</b> · <b data-ability="Y">pump</b> — your pick (Controls → tap X / Y)</div>
     <div><i class="key">drag</i></div><div>Swipe open screen to look around</div>
   </div>
   <div class="keys pad-only">
     <div><i class="key">L stick</i></div><div>◀ ▶ carve (spin in air) · ▲ tuck / front flip · ▼ brake / back flip</div>
     <div><i class="key">A</i></div><div>Hold to tuck &amp; load · release to ollie</div>
     <div><i class="key">RT</i> <i class="key">LT</i></div><div>Tuck · brake (front / back flip in the air)</div>
-    <div><i class="key">X</i> <i class="key">B</i> <i class="key">Y</i> <i class="key">RB</i></div><div>Grabs (hold in air)</div>
+    <div><i class="key">B</i></div><div>Grab (hold in air) — stick picks it: ↑ Indy · ↓ stale · ◀ method · ▶ mute</div>
+    <div><i class="key">X</i> <i class="key">Y</i></div><div><b data-ability="X">press</b> · <b data-ability="Y">pump</b> — your pick (Controls → tap X / Y)</div>
     <div><i class="key">R stick</i></div><div>Look around</div>
     <div><i class="key">Menu</i> <i class="key">View</i></div><div>Pause · restart</div>
     <div><i class="key">D-pad</i> <i class="key">A</i> <i class="key">Y</i></div><div>Menu: pick level · drop in · customize rider</div>
@@ -520,8 +534,8 @@
   </div>
   <div class="tgroup" id="gAbxy"><div class="tgrip" title="Hold, then drag to move">⠿</div>
   <div id="abxy">
-    <div class="tbtn xbtn" id="xY"><b>Y</b><small>grab</small></div>
-    <div class="tbtn xbtn" id="xX"><b>X</b><small>grab</small></div>
+    <div class="tbtn xbtn" id="xY"><b>Y</b><small>pump</small></div>
+    <div class="tbtn xbtn" id="xX"><b>X</b><small>press</small></div>
     <div class="tbtn xbtn" id="xB"><b>B</b><small>grab</small></div>
     <div class="tbtn xbtn" id="xA"><b>A</b><small>ollie</small></div>
   </div>
@@ -5135,6 +5149,10 @@ class Player {
     this.landedClean = false;
     this.jumpBuffer = 0;
     this.pumpCooldown = 0;
+    this.pumpBuf = 0;         // pump button: short buffer so a press just before the dip counts
+    this.press = null;        // butter / press: { type: 'nose'|'tail', t, bal, nz } while on the snow
+    this.pressVis = 0;        // render-only board pitch for the press
+    this.stompAt = -1;        // air time when stomp was pressed (-1 = not yet this air)
     this.spin = 0;            // accumulated in-air rotation (radians)
     this.flip = 0;            // accumulated in-air flip (radians, + = backflip / nose up)
     this.flipRate = 0;
@@ -5169,13 +5187,15 @@ class Player {
     this.grind = null;
     // nothing from before the reset carries over (turn momentum, landing settle, skid pose, buffered jumps)
     this.turnRate = 0; this.yawVis = 0; this.brakeVis = 0; this.jumpBuffer = 0; this.coyote = 0;
+    this.press = null; this.pressVis = 0; this.pumpBuf = 0; this.stompAt = -1;
     this.updateBasis();
   }
 
   /* leaving the ground (ollie, crest, rail exit): a fresh air phase — no spin or
      flip carried over, flips must be re-armed, and no leftover grace window */
   _takeoff() {
-    this.airborne = true; this.airTime = 0; this.coyote = 0;
+    if (this.press) this.endPress(true);          // ollie / pop out of a press: it counts
+    this.airborne = true; this.airTime = 0; this.coyote = 0; this.stompAt = -1;
     this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false;
     this.autoYaw = null; this.airLabel = null;
   }
@@ -5309,8 +5329,43 @@ class Player {
     const centripetal = sp * sp * curv;
     this.load = clamp(1 + centripetal / G, 0, 3.4);
 
-    this.tuck = damp(this.tuck, +input.tuck || 0, 8, dt);          // analog from the joystick, 0/1 from keys
-    this.braking = damp(this.braking, +input.brake || 0, 9, dt);
+    // ---- butter / press: hold the button on the snow; the stick (up/down) keeps the balance ----
+    const sFwd = +input.flipFwd || 0, sBack = +input.flipBack || 0;
+    if (!input.butter) this.pressLock = false;            // after a slip, let go before pressing again
+    if (input.butter && !this.press && !this.pressLock && sp > 2.5) {
+      this.press = { type: sFwd > 0.3 ? 'nose' : 'tail', t: 0, bal: (Math.random() - 0.5) * 0.15, nz: Math.random() * 20 };
+    }
+    if (this.press) {
+      const p = this.press;
+      if (!input.butter) this.endPress(true);
+      else {
+        p.t += dt;
+        // the press wants to tip further the longer you hold it; the stick fights back
+        // (tail press: push up to come forward; nose press: pull back)
+        const k = 1.3 + p.t * 0.35;
+        const wobble = Math.sin(p.nz + p.t * 2.3) * 0.6 + Math.sin(p.nz * 1.7 + p.t * 3.9) * 0.4;
+        const fix = (p.type === 'tail' ? sFwd - sBack : sBack - sFwd) * 2.6;
+        p.bal += (p.bal * k + wobble * 0.55 - fix) * dt;
+        if (Math.abs(p.bal) > 1) { this.endPress(false); this.pressLock = true; }
+      }
+    }
+    const pressing = !!this.press;
+    this.tuck = damp(this.tuck, pressing ? 0 : +input.tuck || 0, 8, dt);          // analog from the joystick, 0/1 from keys
+    this.braking = damp(this.braking, pressing ? 0 : +input.brake || 0, 9, dt);   // (the stick balances a press instead)
+    if (pressing) vFwd -= 0.45 * dt;                                                // a press scrubs a little speed
+
+    // ---- pump button: push into a compression (dip, transition, roller up-slope) for speed ----
+    if (input.pump) this.pumpBuf = 0.16;
+    if (this.pumpBuf > 0) {
+      this.pumpBuf -= dt;
+      if (this.pumpCooldown <= 0 && this.load > 1.08) {
+        vFwd += 1.2 + (this.load - 1) * 5.5;
+        this.pumpCooldown = 0.3; this.pumpBuf = 0;
+        fx.puff(this.pos.x, this.groundY, this.pos.z, 0.45);
+        Audio.ollie();
+        Game.onPump();
+      }
+    }
 
     // ---- jump: pump a compression, or ollie ----
     if (this.jumpBuffer > 0 && this.pumpCooldown <= 0) {
@@ -5383,6 +5438,7 @@ class Player {
   }
 
   stepAir(dt, input, fx) {
+    if (input.stomp && this.stompAt < 0) this.stompAt = this.airTime;   // one stomp per air: timing is the skill
     // "coyote time": a bump or lip launched us a moment before the jump was
     // released — still give the full ollie pop (plus some of the lip's own lift)
     if (this.coyote > 0) {
@@ -5442,6 +5498,10 @@ class Player {
     // touching down on a downslope that matches your arc is soft, flat-to-flat is not
     const vN = this.vel.x * n.x + this.vel.y * n.y + this.vel.z * n.z;
     const impact = clamp(-vN / 12, 0.05, 2.4);
+    // STOMP: pressed in the last ~0.22 s before touchdown → firmer, more forgiving landing
+    const stomped = this.stompAt >= 0 && this.airTime > 0.35 && this.airTime - this.stompAt <= 0.22;
+    const sf = stomped ? 1.2 : 1;
+    this.stompAt = -1;
     this.airborne = false;
     this.airTime = 0;
     this.pos.y = heightAt(this.pos.x, this.pos.z) + RIDE_H;
@@ -5468,11 +5528,12 @@ class Player {
     const flipResidual = Math.abs(angDelta(0, this.flip));
 
     const bad =
-      baseError > 0.95 ||                       // landing on the rail / sideways
-      missAngle > 1.25 ||                       // travelling the wrong way (~72°)
-      (overLean > 0.85 && impact > 0.8) ||      // edge catch
-      impact > 2.0 ||                           // just fell in it
-      flipResidual > 1.05;                      // under/over-rotated the flip (~60°)
+      baseError > 0.95 * sf ||                  // landing on the rail / sideways
+      missAngle > 1.25 * sf ||                  // travelling the wrong way (~72°)
+      (overLean > 0.85 && impact > 0.8 * sf) || // edge catch
+      impact > 2.0 * sf ||                      // just fell in it
+      flipResidual > 1.05 * sf;                 // under/over-rotated the flip (~60°)
+    if (stomped && !bad) { Game.onStomp(); Cam.shake = Math.max(Cam.shake, 0.12); fx.puff(this.pos.x, this.groundY, this.pos.z, 1.3); }
 
     const oldYaw = this.yaw;
     if (!bad && travel > 1.5) {
@@ -5579,8 +5640,16 @@ class Player {
   }
 
   /* ---------------- wipeout ---------------- */
+  /* end a butter/press: clean (released, or popped off) or slipped (lost the balance) */
+  endPress(clean) {
+    const p = this.press; if (!p) return;
+    this.press = null;
+    Game.onPress(p.type, p.t, clean);
+  }
+
   crash(fx) {
     if (this.invuln > 0) return;
+    this.press = null;
     this.crashTimer = 1.75;
     this.invuln = 0.2;
     this.spin = 0;
@@ -5688,7 +5757,10 @@ class Player {
     // toe-side turns (lean > 0) press the chest forward over the toes; heel-side turns
     // (lean < 0) sit back over the heels — otherwise the constant forward bend
     // cancels most of a heel-side lean and the rider looks like they lean out
-    let bend = 0.22 + tuck * 0.40 + (grab ? 0.65 : 0) + Math.max(0, lean) * 0.15 + Math.min(0, lean) * 0.30;
+    // press: + = tail press (nose up), − = nose press
+    this.pressVis = damp(this.pressVis, this.press ? (this.press.type === 'tail' ? 1 : -1) : 0, 10, 1 / 60);
+    let bend = 0.22 + tuck * 0.40 + (grab ? 0.65 : 0) + Math.max(0, lean) * 0.15 + Math.min(0, lean) * 0.30
+      - this.pressVis * 0.28;                        // sit back over a tail press, lean out over a nose press
     if (crash) { bend += Math.sin(this.crashTimer * 7) * 0.7; open += Math.cos(this.crashTimer * 5) * 0.8; }
     const [TX, TY, TZ] = frame(open, bend, 0.40);
     const [PX, PY, PZ] = frame(open * 0.45, bend * 0.3, 0.25);
@@ -5792,6 +5864,22 @@ class Player {
 
     // flips: rotate board + rider together about the board's toe–heel axis,
     // pivoting at the rider's centre of mass (+ = nose up = backflip)
+    // butter / press: pitch board + rider up off the tail (or nose) contact point
+    const pv = this.pressVis;
+    if (Math.abs(pv) > 1e-3) {
+      const piv = local(-Math.sign(pv) * 0.70, 0, 0), k = right, a = pv * 0.21;
+      const c = Math.cos(a), sn = Math.sin(a), ic = 1 - c, R = this._m();
+      R[0] = c + k.x * k.x * ic;       R[1] = k.y * k.x * ic + k.z * sn; R[2] = k.z * k.x * ic - k.y * sn; R[3] = 0;
+      R[4] = k.x * k.y * ic - k.z * sn; R[5] = c + k.y * k.y * ic;      R[6] = k.z * k.y * ic + k.x * sn; R[7] = 0;
+      R[8] = k.x * k.z * ic + k.y * sn; R[9] = k.y * k.z * ic - k.x * sn; R[10] = c + k.z * k.z * ic;    R[11] = 0;
+      R[12] = piv.x - (R[0] * piv.x + R[4] * piv.y + R[8] * piv.z);
+      R[13] = piv.y - (R[1] * piv.x + R[5] * piv.y + R[9] * piv.z);
+      R[14] = piv.z - (R[2] * piv.x + R[6] * piv.y + R[10] * piv.z);
+      R[15] = 1;
+      m4mul(this.boardMat, R, this.boardMat);
+      for (const q of out) m4mul(q.mat, R, q.mat);
+    }
+
     const fv = this.flipVis;
     if (Math.abs(fv) > 1e-3) {
       const piv = local(0, 0.70 * crouch, 0);
@@ -5913,7 +6001,7 @@ const PAD_LEVELS = ['mountain', 'pipe', 'park', 'zen'];
 
 const Pad = {
   index: -1, prev: [], active: false,
-  steer: null, stickY: 0, lt: 0, rt: 0, grab: null,
+  steer: null, stickY: 0, lt: 0, rt: 0, grab: null, grabB: false, btnX: false, btnY: false,
   _jump: false, _cam: false, _navT: 0, _toastT: 0,
 
   init() {
@@ -5956,6 +6044,7 @@ const Pad = {
     if (this._jump) { Input.releaseJump(); Input.down.jump = false; this._jump = false; }
     if (this._cam) { Cam.dragging = false; Cam.releaseT = 1.0; this._cam = false; }
     this.steer = null; this.stickY = 0; this.lt = this.rt = 0; this.grab = null;
+    this.grabB = this.btnX = this.btnY = false;
   },
 
   rumble(strong, weak, ms) {
@@ -5999,7 +6088,9 @@ const Pad = {
       this.steer = lx ? lx : (now[14] ? -1 : now[15] ? 1 : null);
       this.stickY = ly || (now[12] ? -1 : now[13] ? 1 : 0);
       this.lt = lt; this.rt = rt;                               // triggers: brake / tuck (and flips in the air)
-      this.grab = now[2] ? 'Indy' : now[1] ? 'method' : now[3] ? 'stale' : (now[4] || now[5]) ? 'mute' : null;
+      // B = grab (stick picks which, in Input.sample); X / Y = the rider's chosen abilities; bumpers = mute grab
+      this.grabB = now[1]; this.btnX = now[2]; this.btnY = now[3];
+      this.grab = (now[4] || now[5]) ? 'mute' : null;
       // A = Space: hold to load, release to ollie
       if (now[0] && !this._jump && !this.prev[0]) {
         this._jump = true;
@@ -6068,6 +6159,41 @@ const Pad = {
 /* tiny DOM helper (used everywhere) */
 const $ = (id) => document.getElementById(id);
 
+/* ---------------- X / Y button abilities ----------------
+   Three abilities, two buttons — the rider picks which two (Controls editor:
+   tap X or Y to cycle). Keyboard has all three on E / Q / F.
+     butter : hold on the snow for a nose/tail press (stick keeps the balance)
+     pump   : press into a dip / transition / roller up-slope for speed
+     stomp  : press just before touchdown for a firmer, more forgiving landing */
+const ABILITIES = ['butter', 'pump', 'stomp'];
+const ABILITY_LABEL = { butter: 'press', pump: 'pump', stomp: 'stomp' };
+const Buttons = {
+  KEY: 'powderline.buttons',
+  map: { X: 'butter', Y: 'pump' },
+  load() {
+    try {
+      const m = JSON.parse(localStorage.getItem(this.KEY) || 'null');
+      if (m && ABILITIES.includes(m.X) && ABILITIES.includes(m.Y) && m.X !== m.Y) this.map = m;
+    } catch (e) { }
+    this.sync();
+  },
+  /* next ability on this button; if the other button has it, they swap */
+  cycle(btn) {
+    const other = btn === 'X' ? 'Y' : 'X';
+    const next = ABILITIES[(ABILITIES.indexOf(this.map[btn]) + 1) % ABILITIES.length];
+    if (next === this.map[other]) this.map[other] = this.map[btn];
+    this.map[btn] = next;
+    try { localStorage.setItem(this.KEY, JSON.stringify(this.map)); } catch (e) { }
+    this.sync();
+  },
+  sync() {
+    for (const b of ['X', 'Y']) {
+      const el = document.querySelector('#x' + b + ' small'); if (el) el.textContent = ABILITY_LABEL[this.map[b]];
+    }
+    for (const el of document.querySelectorAll('[data-ability]')) el.textContent = ABILITY_LABEL[this.map[el.dataset.ability]];
+  }
+};
+
 /* ---------------- input ---------------- */
 const Input = {
   down: {}, steer: 0, jumpEdge: false, grab: null,
@@ -6078,7 +6204,8 @@ const Input = {
       KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right',
       KeyS: 'brake', ArrowDown: 'brake', KeyW: 'tuck', ArrowUp: 'tuck',
       Space: 'jump', KeyR: 'restart', KeyP: 'pause', KeyM: 'mute',
-      KeyN: 'atmos', Backquote: 'debug', KeyJ: 'Indy', KeyK: 'method', KeyL: 'mutegrab', Semicolon: 'stale'
+      KeyN: 'atmos', Backquote: 'debug', KeyJ: 'Indy', KeyK: 'method', KeyL: 'mutegrab', Semicolon: 'stale',
+      KeyE: 'butter', KeyQ: 'pump', KeyF: 'stomp'
     };
     window.addEventListener('keydown', (e) => {
       if (e.repeat) return;
@@ -6232,7 +6359,8 @@ const Input = {
       el.addEventListener('lostpointercapture', off);
     };
     // virtual Xbox pad: A ollie, X/B/Y grabs (as on a real controller); tuck/brake live on the stick
-    hold('xA', 'jump'); hold('xX', 'Indy'); hold('xB', 'method'); hold('xY', 'stale');
+    hold('xA', 'jump'); hold('xB', 'grabB'); hold('xX', 'btnX'); hold('xY', 'btnY');
+    Buttons.load();
     const tap = (id, fn) => $(id).addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); fn(); });
     tap('tP', () => Game.togglePause());
     tap('tR', () => { if (Game.state === 'play' || Game.state === 'pause') Game.restart(true); });
@@ -6352,11 +6480,26 @@ const Input = {
     if (loading) this.chargeT += dt;
     this.brake = Math.max(this.down.brake ? 1 : 0, back);
     this.tuck = Math.max(this.down.tuck || loading ? 1 : 0, fwd);   // holding Space = tuck
+    // B (touch / controller): one grab button — the stick direction when you press it
+    // picks the grab: neutral or up = Indy, down = stale, left = method, right = mute
+    const grabB = !!this.down.grabB || Pad.grabB;
+    if (grabB && !this._grabB) {
+      const gx = this.touchSteer !== null ? this.touchSteer : (Pad.steer !== null ? Pad.steer : target);
+      this._grabType = Math.abs(gx) > 0.45 ? (gx < 0 ? 'method' : 'mute') : (sy > 0.4 ? 'stale' : 'Indy');
+    }
+    this._grabB = grabB;
     this.grab = this.down.method ? 'method' : this.down.Indy ? 'Indy'
-      : this.down.stale ? 'stale' : this.down.mutegrab ? 'mute' : Pad.grab;
+      : this.down.stale ? 'stale' : this.down.mutegrab ? 'mute' : grabB ? this._grabType : Pad.grab;
+    // X / Y abilities (whichever the rider assigned), plus their keyboard keys
+    const held = (ab) => !!this.down[ab] || ((this.down.btnX || Pad.btnX) && Buttons.map.X === ab)
+      || ((this.down.btnY || Pad.btnY) && Buttons.map.Y === ab);
+    const pumpNow = held('pump'), stompNow = held('stomp');
+    const pump = pumpNow && !this._pumpPrev, stomp = stompNow && !this._stompPrev;
+    this._pumpPrev = pumpNow; this._stompPrev = stompNow;
     const j = this.jumpRelease; this.jumpRelease = false;
     return { steer: this.steer, brake: this.brake, tuck: this.tuck, jump: j, charge: this.releaseCharge,
-             flipFwd: Math.max(this.down.tuck ? 1 : 0, fwd), flipBack: Math.max(this.down.brake ? 1 : 0, back), grab: this.grab };
+             flipFwd: Math.max(this.down.tuck ? 1 : 0, fwd), flipBack: Math.max(this.down.brake ? 1 : 0, back), grab: this.grab,
+             butter: held('butter'), pump, stomp };
   }
 };
 
@@ -6412,9 +6555,17 @@ const TouchLayout = {
 
   bind(g) {
     const grip = g.querySelector('.tgrip');
-    let id = null, timer = 0, moving = false, dx = 0, dy = 0, last = null;
-    const end = () => {
+    let id = null, timer = 0, moving = false, dx = 0, dy = 0, last = null, sx = 0, sy = 0, dragged = false;
+    const end = (e) => {
       clearTimeout(timer);
+      // editor: a tap that didn't drag, on X or Y, cycles that button's ability
+      if (Game.editingLayout && id !== null && !dragged && e && e.type === 'pointerup') {
+        for (const b of ['X', 'Y']) {
+          const r = $('x' + b).getBoundingClientRect();
+          if (e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom) { Buttons.cycle(b); break; }
+        }
+      }
+      dragged = false;
       if (moving && last) {
         const o = this.saved[this.orient()] || (this.saved[this.orient()] = {});
         o[g.id] = [last[0] / innerWidth, last[1] / innerHeight];
@@ -6429,11 +6580,14 @@ const TouchLayout = {
       e.preventDefault(); e.stopPropagation();
       try { g.setPointerCapture(e.pointerId); } catch (_) { }
       id = e.pointerId; moving = true; g.classList.add('moving');
+      sx = e.clientX; sy = e.clientY; dragged = false;
       const r = g.getBoundingClientRect();
       dx = e.clientX - (r.left + r.width / 2); dy = e.clientY - (r.top + r.height / 2);
     });
     g.addEventListener('pointermove', (e) => {
       if (!Game.editingLayout || e.pointerId !== id || !moving) return;
+      if (!dragged && Math.hypot(e.clientX - sx, e.clientY - sy) < 8) return;   // still a tap
+      dragged = true;
       last = this.place(g, e.clientX - dx, e.clientY - dy);
     });
     g.addEventListener('pointerup', end); g.addEventListener('pointercancel', end);
@@ -6699,6 +6853,26 @@ const Game = {
   recover() { this.desat = 0; },
   onPump() { this.score += 15 * this.combo; },
 
+  /* butter / press finished: a clean hold scores and feeds the combo; a slip breaks it */
+  onPress(type, t, clean) {
+    if (!clean) { this.msg('SLIPPED', 900); this.combo = 1; this.comboTimer = 0; Pad.rumble(0.5, 0.3, 140); return; }
+    if (t < 0.4) return;
+    const pts = Math.round((40 + t * 110) * this.combo);
+    this.score += pts;
+    this.bestHit = Math.max(this.bestHit, pts);
+    if (t >= 1) { this.combo = Math.min(this.combo + 1, 12); }
+    this.comboTimer = 5.5;
+    Audio.trick(1);
+    this.showTrick((type === 'nose' ? 'Nose' : 'Tail') + ' Press ' + t.toFixed(1) + 's', pts);
+  },
+
+  /* stomped landing: well-timed press just before touchdown */
+  onStomp() {
+    this.score += Math.round(50 * this.combo);
+    this.msg('STOMPED!', 900);
+    Pad.rumble(0.9, 0.5, 160);
+  },
+
   gameOver(finished) {
     this.state = 'over'; this.overAt = performance.now();
     $('overTitle').textContent = (finished ? 'Run complete · ' : 'Run over · ') + Level.cur.name;
@@ -6850,6 +7024,7 @@ const Game = {
     if (dz > 0) { this.distance += dz; this.score += dz * 0.6; }
     this.lastZ = P.pos.z;
     this.topSpeed = Math.max(this.topSpeed, P.speed);
+    if (P.press && this.comboTimer > 0) this.comboTimer = Math.max(this.comboTimer, 0.75);   // a press keeps the line alive
     if (this.comboTimer > 0) { this.comboTimer -= dt; if (this.comboTimer <= 0) this.combo = 1; }
     this.flash = damp(this.flash, 0, 4, dt);
     this.desat = damp(this.desat, 0, 2.2, dt);
@@ -6912,6 +7087,14 @@ const Game = {
     if (this._fill !== fill) { this._fill = fill; $('speedfill').style.width = fill; }
     $('combo').classList.toggle('on', this.combo > 1);
     if (this.combo > 1) this.put('combo', '\u00D7' + this.combo + ' COMBO');
+    // press balance meter
+    const pm = $('pressMeter');
+    pm.classList.toggle('on', !!P.press);
+    if (P.press) {
+      this.put('pressLabel', (P.press.type === 'nose' ? 'NOSE' : 'TAIL') + ' PRESS ' + P.press.t.toFixed(1) + 's');
+      $('pressNeedle').style.left = (50 + clamp(P.press.bal, -1, 1) * 46) + '%';
+      pm.classList.toggle('warn', Math.abs(P.press.bal) > 0.65);
+    }
     $('airtime').classList.toggle('on', P.airborne);
     if (P.airborne) this.put('airtime', P.airTime.toFixed(2) + ' s');
     if ($('debug').classList.contains('on')) {
