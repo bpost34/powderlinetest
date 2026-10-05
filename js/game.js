@@ -403,7 +403,7 @@ const Flick = {
     const el = $('styleBtn'); if (el) { el.textContent = 'Controls: ' + FLICK_LABEL[this.style()]; el.classList.toggle('on', this.on); }
     if (typeof Game !== 'undefined' && Game.P) Game.loadBest();      // Classic and Flick bests are separate
     const h = $('flickHint');
-    if (h) h.textContent = (this.on && this.steering !== 'auto' ? 'steer: stick / tilt · ' : '') + 'tap ollie / grab · flick before the jump: ↑↓ flip · ←→ spin';
+    if (h) h.textContent = (this.on && this.steering !== 'auto' ? 'steer: stick / tilt · ' : '') + 'tap ollie / grab · flick in the green: ↑↓ flip · ←→ spin';
   },
 
   /* snap a direction to 8-way (components 0 / ±1) */
@@ -491,12 +491,46 @@ const Flick = {
     }
     if (!P.airborne) this.airGrab = false;
     if (this.airGrab) inp.grab = inp.grab || 'Indy';
+    // auto grab: on any air with real hang time, grab after takeoff and let go just before
+    // touchdown (spins: Indy / mute by direction; flips: method front, stalefish back).
+    // Flips tuck on their own (the pose tucks with the flip rate).
+    if (P.airborne) {
+      if (this._airEst == null) this._airEst = P.airTime + P.timeToLand();
+      const left = this._airEst - P.airTime;
+      if (this._airEst > 1.0 && P.airTime > 0.15 && left > 0.3 && !inp.grab) {
+        const r = P.flickRot;
+        inp.grab = r && r.totS ? (r.totS < 0 ? 'Indy' : 'mute') : r && r.totF ? (r.totF < 0 ? 'method' : 'stale') : 'Indy';
+      }
+    } else this._airEst = null;
+    // launch meter: seconds to the next takeoff (pipe lip, ramp, table, kicker top)
+    Game.launchT = P.airborne ? null : Autopilot.nextLaunch(P);
   }
 };
 
 /* the autopilot line: gates on the mountain, features in the park, wall to wall in the pipe */
 const Autopilot = {
   side: 1, _lastKick: null,
+  /* predicted seconds to the next takeoff the rider is lined up for (null = none soon) */
+  nextLaunch(P) {
+    const lv = Level.cur.id, z = P.pos.z, vz = Math.max(P.vel.z, 1);
+    let best = null;
+    const take = (t) => { if (t > 0 && t < 2.5 && (best === null || t < best)) best = t; };
+    if (lv === 'pipe') {
+      const lip = PIPE.B + PIPE.R, out = Math.sign(P.pos.x) || 1, vOut = P.vel.x * out;
+      if (vOut > 1) take((lip - Math.abs(P.pos.x)) / (vOut * 0.8));      // slows as it climbs the wall
+    } else if (lv === 'park') {
+      for (const f of PARK_FEATURES) if (f.k === 'table' && Math.abs(P.pos.x - f.x) < f.w + 0.5) take((f.z + f.up - z) / vz);
+    } else if (lv === 'mountain' || lv === 'zen') {
+      const s0 = Math.floor((z + 40) / SEG);
+      for (let i = 0; i < 4; i++) {
+        const k = featureAt(s0 + i - 1);
+        if (!k) continue;
+        if (k.kind === 'ramp' && Math.abs(P.pos.x - k.x) < k.w) take((k.z - z) / vz);
+        if (k.kind === 'kicker' && Math.abs(P.pos.x - k.x) < k.rad * 0.7) take((k.z - 1.6 - z) / vz);
+      }
+    }
+    return best;
+  },
   /* on the mountain, ollie right at a natural kicker's top (rollers are absorbed otherwise) */
   atKickerTop(P) {
     const s0 = Math.floor((P.pos.z + 40) / SEG);
@@ -1191,6 +1225,16 @@ const Game = {
       pm.classList.toggle('warn', Math.abs(P.press.bal) > 0.65);
     }
     $('airtime').classList.toggle('on', P.airborne);
+    // flick mode launch meter: plan inside the green zone (0.25–0.9 s before takeoff)
+    const lm = $('launchMeter'), t = this.launchT;
+    const show = Flick.on && t !== null && t !== undefined;
+    lm.classList.toggle('on', show);
+    if (show) {
+      $('lmNeedle').style.left = (100 - clamp(t / 2.5, 0, 1) * 100) + '%';
+      const zone = t >= 0.25 && t <= 0.9;
+      lm.classList.toggle('go', zone); lm.classList.toggle('late', t < 0.25);
+      this.put('lmLabel', zone ? 'PLAN NOW' : t < 0.25 ? 'LAUNCH' : 'GET READY');
+    }
     if (P.airborne) this.put('airtime', P.airTime.toFixed(2) + ' s');
     if ($('debug').classList.contains('on')) {
       $('debug').innerHTML =

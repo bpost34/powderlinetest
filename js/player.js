@@ -402,16 +402,18 @@ class Player {
     // in the air you're committed: only a short window after takeoff to add to the trick
     if (input.flick) { if (this.airTime < 0.3) this.queueFlick(input.flick); else Game.onFlickTooLate(); }
     if (this.flickRot) {
+      // ANGULAR MOMENTUM: the rotation set at takeoff keeps turning all the way to the
+      // landing — no stopping in mid-air. Late in the air the rider opens up and slows
+      // (~35%) to spot the landing; past the planned time it carries on, fading.
       const q = this.flickRot;
-      const df = clamp(q.flip, -q.rf * dt, q.rf * dt), ds = clamp(q.spin, -q.rs * dt, q.rs * dt);
-      q.flip -= df; q.spin -= ds;
+      q.t += dt;
+      const x = q.t / q.dur;
+      const k = x < 1 ? 1 - 0.35 * sstep(0.7, 1, x) : 0.65 * Math.exp(-10 * (q.t - q.dur));
+      const df = q.f0 * k * dt, ds = q.s0 * k * dt;
+      q.doneF += df; q.doneS += ds;
       this.flip += df; this.flipRate = df / dt;
       this.yaw += ds; this.spin += ds;
       if (this.autoYaw) this.autoYaw.target += ds;
-      if (Math.abs(q.flip) < 1e-4 && Math.abs(q.spin) < 1e-4) {
-        this.flickRot = null; this.flipRate = 0;
-        if (q.exact !== false) this.flip = Math.round(this.flip / TAU) * TAU;   // only error-free rotations snap upright
-      }
     }
 
     // flips: W pitches forward = frontflip, S pulls back = backflip. Holding W/S
@@ -441,6 +443,7 @@ class Player {
   /* ---------------- touchdown ---------------- */
   land(fx) {
     this.autoYaw = null;
+    this.flickRot = null;         // whatever rotation was left is the landing's problem now
     this.coyote = 0;              // a crest's grace window must not survive into the next ollie
     const n = this.nrm;
     normalAt(this.pos.x, this.pos.z, n);
@@ -648,17 +651,21 @@ class Player {
     const gauss = () => Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(TAU * Math.random());
     const ef = nf ? gauss() * sigma : 0, es = ns ? gauss() * sigma : 0;
     nf += ef; ns += es;
-    const dur = clamp(0.85 * Math.max(1, Math.max(Math.abs(nf), Math.abs(ns)) / TAU), Math.min(need, avail), avail);
-    this.flickRot = { flip: nf, spin: ns, rf: Math.abs(nf) / dur, rs: Math.abs(ns) / dur, exact: false };
+    // spread the rotation over the whole air (finishing just before touchdown), at no less
+    // than the time the fastest allowed rotation would need. ∫ profile = 0.9475 × dur.
+    const tl = this.timeToLand();
+    const dur = clamp(tl * 0.99, Math.min(need, tl), Math.max(tl, need));
+    this.flickRot = { t: 0, dur, f0: nf / (dur * 0.9475), s0: ns / (dur * 0.9475), totF: nf, totS: ns, doneF: 0, doneS: 0 };
   }
 
   queueFlick(f) {
     const tLeft = this.timeToLand();
-    const q = this.flickRot || { flip: 0, spin: 0, rf: 0, rs: 0 };
+    const r = this.flickRot;
+    const remF = r ? r.totF - r.doneF : 0, remS = r ? r.totS - r.doneS : 0;   // rotation still to come
     const avail = tLeft * 0.9;
     if (avail < 0.42) { Game.onFlickTooLow(); return; }
-    const nf = q.flip + (Math.abs(f.y) > 0.38 ? (f.y < 0 ? -TAU : TAU) : 0);   // up = frontflip
-    const ns = q.spin + (Math.abs(f.x) > 0.38 ? (f.x > 0 ? -TAU : TAU) : 0);   // right = spin right
+    const nf = remF + (Math.abs(f.y) > 0.38 ? (f.y < 0 ? -TAU : TAU) : 0);   // up = frontflip
+    const ns = remS + (Math.abs(f.x) > 0.38 ? (f.x > 0 ? -TAU : TAU) : 0);   // right = spin right
     // finish the whole queue within the air left (snappy: ~0.85 s per rotation at most),
     // at no more than a real rider's rotation speed — flips ≤ ~315°/s, spins ≤ this
     // takeoff's spinCap. A flick that can't make it is refused (TOO LOW).
@@ -724,6 +731,13 @@ class Player {
       this.invuln = 1.1;
       this.lean = 0;
       this.vel.y = 0;
+      // get up pointing down the fall line with a push-off (a random tumble could leave the
+      // rider stalled facing across or up the slope, stuck at walking pace)
+      const oldYaw = this.yaw, off = angDelta(0, this.yaw);
+      this.yaw = clamp(off, -0.6, 0.6);
+      this.yawVis = angDelta(this.yaw, oldYaw);
+      const v = Math.max(Math.hypot(this.vel.x, this.vel.z), 3);
+      this.vel.x = Math.sin(this.yaw) * v; this.vel.z = Math.cos(this.yaw) * v;
       this.updateBasis();
       Game.recover();
     }
