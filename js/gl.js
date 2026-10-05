@@ -11,6 +11,7 @@ const GL = {
   shadowSize: 2048,
   time: 0,
   quality: 1,          // 1 = full, 0.75 = reduced
+  resScale: 1,         // dynamic resolution (1 = full pixel budget), lowered when frames run long
 
   /* ---------------- shader plumbing ---------------- */
   compile(type, src, name) {
@@ -288,6 +289,7 @@ const GL = {
     this.upload('lampHead', buildLampHead());
 
     this.instanceBuffer('props', 6000, 20);
+    this.instanceBuffer('shadowProps', 2500, 20);
     this.instanceBuffer('parts', 96, 20);
     this.instanceBuffer('particles', 3000, 8);
 
@@ -299,9 +301,17 @@ const GL = {
 
   resize() {
     const gl = this.gl;
-    const dpr = Math.min(window.devicePixelRatio || 1, this.maxDPR());
-    const w = Math.max(2, Math.floor(this.canvas.clientWidth * dpr));
-    const h = Math.max(2, Math.floor(this.canvas.clientHeight * dpr));
+    // Render at most ~pixelBudget pixels (× resScale² from the dynamic-resolution
+    // monitor) and let the browser upscale the canvas. A Retina laptop window is
+    // 5–6 MP at full density — several times a phone — and every one of those
+    // pixels runs the terrain noise and MSAA, so density is capped by area.
+    const cw = Math.max(1, this.canvas.clientWidth), ch = Math.max(1, this.canvas.clientHeight);
+    let dpr = Math.min(window.devicePixelRatio || 1, this.maxDPR());
+    const budget = (this.quality < 1 ? 1.0e6 : 2.2e6) * this.resScale * this.resScale;
+    if (cw * ch * dpr * dpr > budget) dpr = Math.sqrt(budget / (cw * ch));
+    dpr = Math.max(dpr, 0.45);
+    const w = Math.max(2, Math.floor(cw * dpr));
+    const h = Math.max(2, Math.floor(ch * dpr));
     if (w === this.w && h === this.h && this.vao.scene) return;
     this.w = w; this.h = h; this.dpr = dpr;
     this.canvas.width = w; this.canvas.height = h;
@@ -325,13 +335,19 @@ const GL = {
   },
   maxDPR() { return this.quality < 1 ? 1.0 : 1.75; },
 
-  /* called by the adaptive-quality monitor in game.js */
-  degrade(level) {
-    if (level >= 1) this.msaa = false;
-    if (level >= 2) { this.quality = 0.75; Render.TREE_LOD_DIST = 55; }
+  /* called by the frame-rate monitor in game.js when a run keeps missing ~55 fps:
+     shrink the render resolution first; at the floor, drop MSAA and the
+     costlier surface detail */
+  degrade() {
+    if (this.resScale > 0.62) this.resScale = Math.max(0.6, this.resScale * 0.85);
+    else if (this.msaa !== false) this.msaa = false;
+    else if (this.quality >= 1) { this.quality = 0.75; Render.TREE_LOD_DIST = 60; }
+    else return false;
     this.w = 0;                                   // force the targets to rebuild
     this.resize();
-    if (window.console) console.info('POWDER LINE: lowered graphics quality to step ' + level);
+    if (window.console) console.info('POWDER LINE: render ' + this.w + 'x' + this.h +
+      ' (scale ' + this.resScale.toFixed(2) + ', msaa ' + (this.msaa !== false) + ', quality ' + this.quality + ')');
+    return true;
   },
 
   /* chunk mesh → GPU, cached by chunk+lod identity */
@@ -411,6 +427,7 @@ const LIGHTING_GLSL = `
     float b = mix(mix(hash13(i+vec3(0,0,1)), hash13(i+vec3(1,0,1)), u.x), mix(hash13(i+vec3(0,1,1)), hash13(i+vec3(1,1,1)), u.x), u.y);
     return mix(a, b, u.z);
   }
+  float fbm2(vec2 p){ return vnoise(p) * 0.66 + vnoise(p * 2.03 + 5.7) * 0.34; }
   float fbm3(vec3 p){ return (vnoise3(p) * 0.5 + vnoise3(p * 2.03 + 7.1) * 0.25 + vnoise3(p * 4.1 + 3.3) * 0.125) / 0.875; }
 
   float shadowFactor(vec3 wp, float ndl){
@@ -507,10 +524,10 @@ GL.buildShaders = function () {
     out vec4 fragColor;
     // wind-packed snow relief: soft drifts plus sastrugi ripples (height in metres)
     float snowRelief(vec2 q){
-      float drift = fbm(q * 0.22) * 0.30;
-      float warp = fbm(q * 0.05) * 7.0;
+      float drift = fbm2(q * 0.22) * 0.30;
+      float warp = vnoise(q * 0.05) * 7.0;
       float rip = sin(dot(q, vec2(0.83, 0.55)) * 2.1 + warp) * 0.5 + 0.5;
-      rip = rip * rip * 0.035 * (0.4 + fbm(q * 0.11));
+      rip = rip * rip * 0.035 * (0.4 + vnoise(q * 0.11));
       return drift + rip + vnoise(q * 2.3) * 0.012;
     }
     void main(){
@@ -542,7 +559,7 @@ GL.buildShaders = function () {
       // as clumped dark crowns dusted with snow
       float fd = forest * smoothstep(60.0, 150.0, dist);
       if(fd > 0.0){
-        float clump = fbm3(vWorld * 0.42) + vnoise3(vWorld * 0.045) * 0.45;
+        float clump = vnoise3(vWorld * 0.42) * 0.66 + vnoise3(vWorld * 0.86 + 3.1) * 0.34 + vnoise3(vWorld * 0.045) * 0.45;
         float canopy = smoothstep(0.44, 0.62, clump) * fd;
         vec3 crown = mix(vec3(0.040, 0.068, 0.052), vec3(0.50, 0.55, 0.58), smoothstep(0.6, 0.9, vnoise3(vWorld * 1.1)) * 0.5);
         alb = mix(alb, crown, canopy * 0.92);

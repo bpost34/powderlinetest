@@ -229,8 +229,9 @@ const Render = {
     ip.use();
     Sun.setUniforms(ip);
     gl.uniformMatrix4fv(ip.uModel, false, IDENT);
-    const groups = this.fillTreeBuffer(P);
-    this.drawTrees(ip, groups, 'trunk');
+    this.fillTreeBuffer(P);                       // refreshes this.trees for this frame
+    const groups = this.fillShadowTrees();
+    this.drawTrees(ip, groups, 'trunk', 'shadowProps');
     const fp = GL.prog.shadowFol.use();
     Sun.setUniforms(fp);
     gl.uniformMatrix4fv(fp.uModel, false, IDENT);
@@ -238,7 +239,7 @@ const Render = {
     gl.uniform1i(fp.uNeedle, 2);
     gl.activeTexture(gl.TEXTURE0);
     gl.disable(gl.CULL_FACE);
-    this.drawTrees(fp, groups, 'shadow');
+    this.drawTrees(fp, groups, 'shadow', 'shadowProps');
     gl.enable(gl.CULL_FACE);
     gl.cullFace(gl.BACK);
   },
@@ -297,8 +298,47 @@ const Render = {
     return groups;
   },
 
+  /* Shadow casters: only trees inside the sun's shadow box (±Sun.radius in light
+     space) — the rest can't reach the map. All drawn with the lighter LOD crown,
+     which is plenty for a shadow. Groups come out as [s0 —, s0 lo, s1 —, s1 lo]. */
+  fillShadowTrees() {
+    const ib = GL.buf.shadowProps, d = ib.data, M = Sun.lightVP;
+    const lists = [[], []];
+    for (const t of this.trees) {
+      const y = t.y + 3;
+      const x = M[0] * t.x + M[4] * y + M[8] * t.z + M[12];
+      const yy = M[1] * t.x + M[5] * y + M[9] * t.z + M[13];
+      if (x < -1.08 || x > 1.08 || yy < -1.08 || yy > 1.08) continue;
+      lists[t.shape || 0].push(t);
+    }
+    const groups = [];
+    let n = 0;
+    for (let sh = 0; sh < 2; sh++) {
+      groups.push({ shape: sh, far: 0, first: n, count: 0 });
+      const first = n;
+      for (const t of lists[sh]) {
+        if (n >= ib.max) break;
+        const c = Math.cos(t.rot), s = Math.sin(t.rot), sc = t.sc, o = n * 20;
+        d[o] = c * sc;  d[o + 1] = 0; d[o + 2] = -s * sc; d[o + 3] = 0;
+        d[o + 4] = 0;   d[o + 5] = sc * (t.tall || 1); d[o + 6] = 0; d[o + 7] = 0;
+        d[o + 8] = s * sc; d[o + 9] = 0; d[o + 10] = c * sc; d[o + 11] = 0;
+        d[o + 12] = t.x; d[o + 13] = t.y - 0.1; d[o + 14] = t.z; d[o + 15] = 1;
+        d[o + 16] = d[o + 17] = d[o + 18] = d[o + 19] = 1;
+        n++;
+      }
+      groups.push({ shape: sh, far: 1, first, count: n - first });
+    }
+    if (n) {
+      const gl = GL.gl;
+      gl.bindBuffer(gl.ARRAY_BUFFER, ib.buf);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, d, 0, n * 20);
+    }
+    this.shadowCasters = n;
+    return groups;
+  },
+
   /* what: 'trunk' (opaque trunks), 'foliage' / 'shadow' (needle cards) */
-  drawTrees(prog, groups, what) {
+  drawTrees(prog, groups, what, buf = 'props') {
     const gl = GL.gl;
     for (let sh = 0; sh < FIR_SHAPES.length; sh++) {
       if (what === 'trunk') {
@@ -307,7 +347,7 @@ const Render = {
         if (!cnt) continue;
         const m = GL.mesh['firTrunk' + sh];
         gl.bindVertexArray(m.vao);
-        GL.bindInstancing(prog, 'props', 3, 20, g0.first);
+        GL.bindInstancing(prog, buf, 3, 20, g0.first);
         gl.drawElementsInstanced(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0, cnt);
         continue;
       }
@@ -316,7 +356,7 @@ const Render = {
         if (!g.count) continue;
         const m = GL.mesh[(far ? 'firFolLo' : 'firFol') + sh];
         gl.bindVertexArray(m.vao);
-        GL.bindInstancing(prog, 'props', 3, 20, g.first);
+        GL.bindInstancing(prog, buf, 3, 20, g.first);
         gl.drawElementsInstanced(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0, g.count);
       }
     }

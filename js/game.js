@@ -287,7 +287,7 @@ const Game = {
   air: { t: 0, spin: 0, flip: 0, grab: null, grabT: 0 },
   lastZ: 0, startY: 0, t: 0, frames: 0, fps: 60, _fpsT: 0, _mt: 0,
   menuAt: -1e9,                  // when the menu last opened (swallows that tap's trailing click)
-  perf: { t: 0, n: 0, warm: 0, level: 0 },   // adaptive-quality frame-rate monitor
+  perf: { t: 0, n: 0, warm: 0, low: 0 },     // dynamic-resolution frame-rate monitor
   frameNo: 0,                    // monotonic; never reset (chunk cache ages on it)
 
   boot() {
@@ -370,7 +370,7 @@ const Game = {
 
   start() {
     Audio.init(); Audio.resume();
-    this.perf.t = 0; this.perf.n = 0; this.perf.warm = 0;     // first window is shader warm-up
+    this.perf.t = 0; this.perf.n = 0; this.perf.warm = 0; this.perf.low = 0;   // first window is shader warm-up
     $('menu').classList.add('hide');
     this.restart(true);
     Input.jumpHeld = false; Input.jumpRelease = false;   // the key that dropped us in is not an ollie
@@ -692,14 +692,18 @@ const Game = {
     requestAnimationFrame(frame);
     let dt = (now - last) / 1000; last = now;
     if (!(dt > 0)) return;
-    // adaptive quality: a run that holds under ~45 fps sheds the costliest effects
-    // (step 1: MSAA; step 2: render scale, surface detail, nearer tree LOD)
+    // dynamic resolution: two consecutive 2-second windows under ~55 fps during a
+    // run step the render size down (then MSAA, then detail). One slow window
+    // (a GC pause, a tab switch) isn't enough on its own.
     if (Game.state === 'play' && !document.hidden && dt < 0.5) {
       const pf = Game.perf;
       pf.t += dt; pf.n++;
-      if (pf.t > 3) {
+      if (pf.t > 2) {
         const fps = pf.n / pf.t; pf.t = 0; pf.n = 0;
-        if (pf.warm++ >= 1 && fps < 45 && pf.level < 2) GL.degrade(++pf.level);
+        if (pf.warm++ >= 1) {
+          pf.low = fps < 55 ? pf.low + 1 : 0;
+          if (pf.low >= 2) { pf.low = 0; GL.degrade(); }
+        }
       }
     }
     dt = Math.min(dt, 1 / 30);
