@@ -18,6 +18,8 @@ const BOARD_L = 1.60;
 const RIDE_H = 0.12;          // rider origin height above the board base
 /* fastest flip rotation (rad/s ≈ 430°/s): a double cork fits a big pipe air or a ramp
    (real ones take ~1.5–1.9 s), a flat ollie can't fit even a single */
+const PUMP_TOP = 26.5, SPEED_SOFT = 23.5;   // m/s: pump gain fades to zero at ~95 km/h; soft top speed from ~85 km/h
+const PLAN_OPEN = 1.6, PLAN_CLOSE = 0.12;   // flick planning window: seconds before takeoff
 const FLIP_MAX = 7.5;
 /* fastest spin (rad/s ≈ 600°/s): a 1080 fits a full pipe air (real ones take ~1.2–1.9 s);
    at the ~7.7 m ceiling the biggest combo that fits is a triple cork 1440 — the hardest
@@ -87,8 +89,8 @@ class Player {
     this.grind = null;
     // nothing from before the reset carries over (turn momentum, landing settle, skid pose, buffered jumps)
     this.turnRate = 0; this.yawVis = 0; this.brakeVis = 0; this.jumpBuffer = 0; this.coyote = 0;
-    this.press = null; this.pressVis = 0; this.pumpBuf = 0; this.stompAt = -1;
-    this.flickRot = null; this.stance = 0; this.stanceVis = 0; this.plan = null;
+    this.press = null; this.pressVis = 0; this.pumpBuf = 0; this.pumpPop = 0; this.stompAt = -1;
+    this.flickRot = null; this.stance = 0; this.stanceVis = 0; this.plan = null; this.planWin = null;
     this.updateBasis();
   }
 
@@ -134,6 +136,7 @@ class Player {
 
     if (this.jumpBuffer > 0) this.jumpBuffer -= dt;
     if (this.pumpCooldown > 0) this.pumpCooldown -= dt;
+    if (this.pumpPop > 0) this.pumpPop -= dt;
     if (input.jump) { this.jumpBuffer = 0.14; this.jumpCharge = input.charge !== undefined ? input.charge : 0.3; }
 
     this.updateBasis();
@@ -245,7 +248,8 @@ class Player {
     // ---- flick mode on the snow: flicks PLAN the trick (a rider commits before the lip);
     //      it launches with the next takeoff, or — if no jump comes — a spin becomes a ground 180 ----
     if (input.flick) this.planAdd(input.flick);
-    if (this.plan && (this.plan.t += dt) > 1.5) this.planExpire();
+    // (no expiry while a takeoff is lined up — planWin is set by the flick autopilot)
+    if (this.plan && (this.plan.t += dt) > (this.planWin != null ? 4 : 1.5)) this.planExpire();
 
     // ---- butter / press: hold the button on the snow; the stick (up/down) keeps the balance ----
     const sFwd = +input.flipFwd || 0, sBack = +input.flipBack || 0;
@@ -278,30 +282,29 @@ class Player {
     if (this.pumpBuf > 0) {
       this.pumpBuf -= dt;
       if (this.pumpCooldown <= 0 && this.load > 1.08) {
-        vFwd += Math.min(1.2 + (this.load - 1) * 5.5, input.pumpMax === undefined ? Infinity : input.pumpMax);
+        // diminishing returns: full gain from a standstill, fading to nothing at top speed
+        // (spamming it used to stack to 400+ km/h)
+        const gain = Math.min(1.2 + (this.load - 1) * 5.5, input.pumpMax === undefined ? Infinity : input.pumpMax);
+        const eff = clamp(1 - (sp / (Level.cur.pumpTop || PUMP_TOP)) ** 2, 0, 1);
+        vFwd += gain * eff;
         this.pumpCooldown = 0.3; this.pumpBuf = 0;
         fx.puff(this.pos.x, this.groundY, this.pos.z, 0.45);
         Audio.ollie();
-        Game.onPump();
+        this.pumpPop = 0.35;                                                 // an ollie straight out of a pump pops higher
+        if (eff > 0.15) Game.onPump();                                      // no points for pumps that do nothing
       }
     }
 
-    // ---- jump: pump a compression, or ollie ----
-    if (this.jumpBuffer > 0 && this.pumpCooldown <= 0) {
-      if (this.load > 1.28 && gFwd > 0.02) {
-        // PUMP: convert the compression into speed
-        vFwd += 2.2 + (this.load - 1) * 5.2;
-        this.pumpCooldown = 0.26;
-        this.jumpBuffer = 0;
-        fx.puff(this.pos.x, this.groundY, this.pos.z, 0.45);
-        Audio.ollie();
-        Game.onPump();
-      } else {
-        // OLLIE
+    // ---- jump: releasing always ollies (it used to turn into a pump on a downhill
+    //      compression, or get dropped during a pump's cooldown — "the release didn't register") ----
+    if (this.jumpBuffer > 0) {
+      {
         this._takeoff();
         this.vel.x = fX * vFwd + rX * vSide;
         this.vel.z = fZ * vFwd + rZ * vSide;
-        this.vel.y = this.popSpeed(sp) * (0.80 + Math.max(this.load, 1) * 0.24);   // a crest never weakens the pop
+        this.vel.y = this.popSpeed(sp) * (0.80 + Math.max(this.load, 1) * 0.24)    // a crest never weakens the pop
+                   * (this.pumpPop > 0 ? 1.08 : 1);                                // pumped into it: ~15% more height
+        this.pumpPop = 0;
         this.jumpBuffer = 0; this.pumpCooldown = 0.26;
         fx.puff(this.pos.x, this.groundY, this.pos.z, 0.7 + this.load * 0.3);
         Audio.ollie();
@@ -312,7 +315,9 @@ class Player {
 
     // ---- longitudinal forces ----
     const dragCoef = lerp(0.0075, 0.0030, this.tuck) + this.braking * 0.02;
-    const cd = dragCoef * sp * sp;
+    // past ~85 km/h chatter, edge slip and the rider's own nerve bite hard: a straight-lined
+    // tuck tops out near 95 km/h (fast freeride / boardercross pace), not 100+ off a long slope
+    const cd = dragCoef * sp * sp + 0.09 * Math.max(0, sp - SPEED_SOFT) ** 2;
     const roll = 0.40 + this.braking * 3.4 + edge * 0.5 * (1 - smoothstep(0, 1, sp / 6));
     // levels with walls (pipes) make climbing a bit cheaper so airs are reachable
     const climb = gFwd < 0 && Level.cur.wallAssist ? Level.cur.wallAssist : 1;
@@ -360,7 +365,7 @@ class Player {
   }
 
   stepAir(dt, input, fx) {
-    if (input.stomp && this.stompAt < 0) this.stompAt = this.airTime;   // one stomp per air: timing is the skill
+    if (input.pump && this.stompAt < 0) this.stompAt = this.airTime;    // pump in the air = stomp; one per air: timing is the skill
     // "coyote time": a bump or lip launched us a moment before the jump was
     // released — still give the full ollie pop (plus some of the lip's own lift)
     if (this.coyote > 0) {
@@ -452,7 +457,8 @@ class Player {
     // touching down on a downslope that matches your arc is soft, flat-to-flat is not
     const vN = this.vel.x * n.x + this.vel.y * n.y + this.vel.z * n.z;
     const impact = clamp(-vN / 12, 0.05, 2.4);
-    // STOMP: pressed in the last ~0.22 s before touchdown → firmer, more forgiving landing
+    // STOMP (pump in the air): pressed in the last ~0.22 s before touchdown → firmer, more
+    // forgiving landing, and the legs drive the impact into speed
     const stomped = this.stompAt >= 0 && this.airTime > 0.35 && this.airTime - this.stompAt <= 0.22;
     const sf = stomped ? 1.2 : 1;
     this.stompAt = -1;
@@ -487,7 +493,6 @@ class Player {
       (overLean > 0.85 && impact > 0.8 * sf) || // edge catch
       impact > 2.0 * sf ||                      // just fell in it
       flipResidual > 1.05 * sf;                 // under/over-rotated the flip (~60°)
-    if (stomped && !bad) { Game.onStomp(); Cam.shake = Math.max(Cam.shake, 0.12); fx.puff(this.pos.x, this.groundY, this.pos.z, 1.3); }
 
     const oldYaw = this.yaw;
     if (!bad && travel > 1.5) {
@@ -515,6 +520,14 @@ class Player {
     Cam.shake = Math.max(Cam.shake, clamp(impact * 0.30, 0.02, 0.42));
     Audio.land(impact * (bad ? 1.6 : 1));
 
+    if (stomped && !bad) {
+      // same diminishing returns as a pump: big at low speed, nothing at top speed
+      const sp = Math.hypot(this.vel.x, this.vel.z);
+      const boost = sp > 1 ? (1.0 + Math.min(impact, 1.5) * 1.6) * clamp(1 - (sp / (Level.cur.pumpTop || PUMP_TOP)) ** 2, 0, 1) : 0;
+      if (boost > 0) { const k = (sp + boost) / sp; this.vel.x *= k; this.vel.z *= k; }
+      this.pumpPop = 0.35;                       // and an ollie straight out of it pops higher
+      Game.onStomp(boost); Cam.shake = Math.max(Cam.shake, 0.12); fx.puff(this.pos.x, this.groundY, this.pos.z, 1.3);
+    }
     if (bad) { this.crash(fx); this.landedClean = false; }
     else { this.landedClean = true; this.chop = 0.4; }
   }
@@ -633,11 +646,13 @@ class Player {
     }
     if (!nf && !ns) { Game.onFlickTooLow(); return; }
     const need = needOf();
-    // TIMING: a rider sets the trick just before the lip. Plan finished 0.25–0.9 s
-    // before takeoff = perfect; flicked right at the lip = rushed; long before = hesitant.
-    const lead = p.t;
-    const q = lead < 0.25 ? lerp(0.45, 1, lead / 0.25) : lead > 0.9 ? lerp(1, 0.7, clamp((lead - 0.9) / 0.6, 0, 1)) : 1;
-    Game.onPlanTiming(q, lead < 0.25);
+    // TIMING: a rider sets the trick on the approach. Last flick inside the planning window
+    // (from PLAN_OPEN s before takeoff — the centre line in the pipe — until PLAN_CLOSE s
+    // before the lip) = perfect; flicked right at the lip = rushed; long before = hesitant.
+    const lead = p.t, open = this.planWin != null ? this.planWin : PLAN_OPEN;
+    const q = lead < PLAN_CLOSE ? lerp(0.45, 1, lead / PLAN_CLOSE)
+            : lead > open + 0.3 ? lerp(1, 0.7, clamp((lead - open - 0.3) / 0.8, 0, 1)) : 1;
+    Game.onPlanTiming(q, lead < PLAN_CLOSE);
     this.startRotation(nf, ns, need, avail, q);
   }
 
@@ -684,9 +699,12 @@ class Player {
       // anything else is a sideways slip (combo gone, but no crash)
       const a = Math.abs(angDelta(p.head, this.yaw));
       if (Math.min(a, Math.PI - a) > 0.6) clean = false;
-      const oldYaw = this.yaw;
-      this.yaw = p.head;                                     // ride out nose-first
-      this.yawVis = angDelta(this.yaw, oldYaw);              // …easing round from switch if needed
+      const oldYaw = this.yaw, oldVis = this.stanceVis;
+      this.yaw = p.head;                                     // physics rides on along the travel line
+      // finished turned round (≈180°): the rider now rides SWITCH (render-only stance, as
+      // the flick-mode ground 180) instead of the board swinging back to regular
+      if (a > Math.PI / 2) { this.stance = this.stance ? 0 : Math.PI; this.stanceVis = this.stance; }
+      this.yawVis = angDelta(this.yaw + this.stanceVis, oldYaw + oldVis);   // ease only the leftover angle
       this.updateBasis();
     }
     Game.onPress(p.type, p.t, clean, Math.floor((Math.abs(p.spin) + 0.6) / Math.PI) * 180);   // completed half-turns (same ±35° as a clean ride-out)

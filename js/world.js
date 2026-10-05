@@ -44,7 +44,10 @@ let _cxZ = NaN, _cxV = 0;
 function mtnCenterX(z) {
   if (z === _cxZ) return _cxV;
   _cxZ = z;
-  return _cxV = (z * 0.11) * Math.sin(z * 0.0032) +
+  // the big meander's amplitude grows with distance, but levels off after ~1.2 km —
+  // unbounded, the 5 km course ran 55–64° across the fall line near the bottom
+  const amp = z <= 1200 ? z * 0.11 : 132 + 22 * Math.tanh((z - 1200) * 0.11 / 22);
+  return _cxV = amp * Math.sin(z * 0.0032) +
          Math.sin(z * 0.0071) * 34 +
          Math.sin(z * 0.0019 + 1.7) * 58 +
          (fbm(0.5, z * 0.0022, 3, 31) - 0.5) * 40;

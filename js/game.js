@@ -7,20 +7,28 @@
 const $ = (id) => document.getElementById(id);
 
 /* ---------------- X / Y button abilities ----------------
-   Three abilities, two buttons — the rider picks which two (Controls editor:
-   tap X or Y to cycle). Keyboard has all three on E / Q / F.
+   Two abilities on X / Y — the rider picks which button gets which (Controls
+   editor: tap X or Y to swap). Keyboard: E press, Q (or F) pump.
      butter : hold on the snow for a nose/tail press (stick keeps the balance)
-     pump   : press into a dip / transition / roller up-slope for speed
-     stomp  : press just before touchdown for a firmer, more forgiving landing */
-const ABILITIES = ['butter', 'pump', 'stomp'];
-const ABILITY_LABEL = { butter: 'press', pump: 'pump', stomp: 'stomp' };
+     pump   : on the snow, press into a dip / transition / roller for speed (diminishing
+              returns toward top speed; an ollie straight out of a pump pops higher);
+              in the air, press just before touchdown to STOMP it — a firmer, more
+              forgiving landing that drives the impact into speed */
+const ABILITIES = ['butter', 'pump'];
+const ABILITY_LABEL = { butter: 'press', pump: 'pump' };
 const Buttons = {
   KEY: 'powderline.buttons',
   map: { X: 'butter', Y: 'pump' },
   load() {
     try {
       const m = JSON.parse(localStorage.getItem(this.KEY) || 'null');
+      // (older saves could hold 'stomp' — now part of pump; keep the pump button where it was)
       if (m && ABILITIES.includes(m.X) && ABILITIES.includes(m.Y) && m.X !== m.Y) this.map = m;
+      else if (m && (m.X === 'stomp' || m.Y === 'stomp')) {
+        const keep = m.X === 'stomp' ? m.Y : m.X, other = ABILITIES.find(a => a !== keep) || 'pump';
+        this.map = m.X === 'stomp' ? { X: other, Y: keep } : { X: keep, Y: other };
+        if (this.map.X === this.map.Y) this.map = { X: 'butter', Y: 'pump' };
+      }
     } catch (e) { }
     this.sync();
   },
@@ -52,7 +60,7 @@ const Input = {
       KeyS: 'brake', ArrowDown: 'brake', KeyW: 'tuck', ArrowUp: 'tuck',
       Space: 'jump', KeyR: 'restart', KeyP: 'pause', KeyM: 'mute',
       KeyN: 'atmos', Backquote: 'debug', KeyJ: 'Indy', KeyK: 'method', KeyL: 'mutegrab', Semicolon: 'stale',
-      KeyE: 'butter', KeyQ: 'pump', KeyF: 'stomp'
+      KeyE: 'butter', KeyQ: 'pump', KeyF: 'pump'
     };
     window.addEventListener('keydown', (e) => {
       if (e.repeat) return;
@@ -351,13 +359,13 @@ const Input = {
     // X / Y abilities (whichever the rider assigned), plus their keyboard keys
     const held = (ab) => !!this.down[ab] || ((this.down.btnX || Pad.btnX) && Buttons.map.X === ab)
       || ((this.down.btnY || Pad.btnY) && Buttons.map.Y === ab);
-    const pumpNow = held('pump'), stompNow = held('stomp');
-    const pump = pumpNow && !this._pumpPrev, stomp = stompNow && !this._stompPrev;
-    this._pumpPrev = pumpNow; this._stompPrev = stompNow;
+    const pumpNow = held('pump');
+    const pump = pumpNow && !this._pumpPrev;            // (in the air the same press is the stomp)
+    this._pumpPrev = pumpNow;
     const j = this.jumpRelease; this.jumpRelease = false;
     return { steer: this.steer, brake: this.brake, tuck: this.tuck, jump: j, charge: this.releaseCharge,
              flipFwd: Math.max(this.down.tuck ? 1 : 0, fwd), flipBack: Math.max(this.down.brake ? 1 : 0, back), grab: this.grab,
-             butter: held('butter'), pump, stomp };
+             butter: held('butter'), pump };
   }
 };
 
@@ -457,11 +465,14 @@ const Flick = {
     else if (Pad.rx || Pad.ry) this.pad(Pad.rx || 0, Pad.ry || 0); else this._padArmed = true;
     // steering: inp.steer arrives as the rider's own (stick / tilt / keys)
     const user = inp.steer || 0;
-    if (P.airborne) { inp.steer = 0; P.lean = 0; }          // flick mode: spins only come from flicks
+    if (P.airborne) {                                          // flick mode: spins only come from flicks
+      inp.steer = 0; P.lean = 0;
+      if (this.steering !== 'manual') Autopilot.airLine(P);
+    }
     else if (this.steering === 'auto') inp.steer = Autopilot.steer(P);
     else if (this.steering === 'assist') inp.steer = clamp(Autopilot.steer(P) * 0.6 + user * 0.8, -1, 1);
     else inp.steer = user;
-    inp.tuck = 0; inp.flipFwd = 0; inp.flipBack = 0; inp.butter = false; inp.pump = false; inp.stomp = false;
+    inp.tuck = 0; inp.flipFwd = 0; inp.flipBack = 0; inp.butter = false; inp.pump = false;
     inp.brake = 0;
     // ---- easy speed + air: tuck to a cruising speed, pump every compression,
     //      and pop an ollie off every launch (lips, ramps, rails, kicker tops) ----
@@ -503,21 +514,55 @@ const Flick = {
       }
     } else this._airEst = null;
     // launch meter: seconds to the next takeoff (pipe lip, ramp, table, kicker top)
-    Game.launchT = P.airborne ? null : Autopilot.nextLaunch(P);
+    if (!P.airborne) {
+      Game.launchT = Autopilot.nextLaunch(P);
+      P.planWin = Game.launchT === null ? null : Autopilot.tOpen;   // when the planning window opened
+    } else Game.launchT = null;
   }
 };
 
 /* the autopilot line: gates on the mountain, features in the park, wall to wall in the pipe */
 const Autopilot = {
-  side: 1, _lastKick: null,
+  side: 1, _lastKick: null, _nT: [], _nR: [],
+  tOpen: PLAN_OPEN,          // seconds before takeoff the planning window opens (pipe: at the centre line)
+  /* in the air (auto / assist): bend the flight line gently toward the next gate, or at
+     least back inside the piste — a long kicker air taken mid-carve used to sail 40 m
+     sideways into the trees, or past a gate. Accessibility help, capped at ~5 m/s². */
+  airLine(P) {
+    const lv = Level.cur;
+    if (lv.id === 'pipe' || P.vel.z < 2 || P.crashTimer > 0) return;
+    const tl = Math.max(P.timeToLand(), 0.2), z = P.pos.z, vz = P.vel.z;
+    const landZ = z + vz * tl;
+    let want = null, t = tl, at = P.pos.x + P.vel.x * tl;
+    const g = lv.gates ? Gates.upcoming() : null;
+    if (g && g.z > z && g.z < landZ + 15) {
+      t = Math.max((g.z - z) / vz, 0.25); at = P.pos.x + P.vel.x * t;
+      const half = g.w * 0.5 - 2;
+      want = clamp(at, g.x - half, g.x + half);
+    } else if (lv.id !== 'park') {
+      const c = centerX(landZ), lim = (lv.clearHalf || PISTE_HALF) - 6;
+      want = clamp(at, c - lim, c + lim);
+    }
+    if (want === null || Math.abs(want - at) < 0.05) return;
+    const dt = 1 / 60, need = 2 * (want - at) / (t * t);          // constant accel that lands on the line
+    P.vel.x += clamp(need, -5, 5) * dt;
+  },
   /* predicted seconds to the next takeoff the rider is lined up for (null = none soon) */
   nextLaunch(P) {
     const lv = Level.cur.id, z = P.pos.z, vz = Math.max(P.vel.z, 1);
     let best = null;
     const take = (t) => { if (t > 0 && t < 2.5 && (best === null || t < best)) best = t; };
+    this.tOpen = PLAN_OPEN;
     if (lv === 'pipe') {
-      const lip = PIPE.B + PIPE.R, out = Math.sign(P.pos.x) || 1, vOut = P.vel.x * out;
-      if (vOut > 1) take((lip - Math.abs(P.pos.x)) / (vOut * 0.8));      // slows as it climbs the wall
+      // heading out from the centre line = lined up for the next wall: plan from halfway across
+      // (fitted to logged runs: the launch triggers ~0.3 m short of the lip, and the climb
+      //  averages ~0.875 of the current outward speed)
+      const lip = PIPE.B + PIPE.R - 0.3, out = Math.sign(P.pos.x) || 1, vOut = P.vel.x * out;
+      if (vOut > 1) {
+        const v = vOut * 0.875;
+        this.tOpen = lip / v;
+        return Math.max(0, (lip - Math.abs(P.pos.x)) / v);
+      }
     } else if (lv === 'park') {
       for (const f of PARK_FEATURES) if (f.k === 'table' && Math.abs(P.pos.x - f.x) < f.w + 0.5) take((f.z + f.up - z) / vz);
     } else if (lv === 'mountain' || lv === 'zen') {
@@ -559,6 +604,21 @@ const Autopilot = {
       else tx = centerX(tz) + Math.sin(z * 0.045) * 7;                    // easy S-carves down the fall line
       const c = centerX(tz), lim = (lv.clearHalf || PISTE_HALF) - 6;     // stay inside the tree line
       tx = clamp(tx, c - lim, c + lim);
+      // swing round rocks / trees on the line ahead (aim to pass beside the nearest one)
+      World.propsNear(P.pos.x, z + 20, 20, this._nT, this._nR);
+      let near = null, nd = 1e9;
+      const chk = (o, rad) => {
+        const dz = o.z - z; if (dz < 2 || dz > 38 || dz >= nd) return;
+        const px = P.pos.x + (tx - P.pos.x) * Math.min(1, dz / Math.max(tz - z, 1));   // line's x there
+        const clear = rad + 1.6;
+        if (Math.abs(px - o.x) < clear) { nd = dz; near = { o, px, clear }; }
+      };
+      for (const t of this._nT) chk(t, 0.6 * t.sc);
+      for (const r of this._nR) chk(r, 0.75 * r.sc);
+      if (near) {
+        const side = Math.sign(near.px - near.o.x) || (near.o.x > c ? -1 : 1);
+        tx = near.o.x + side * (near.clear + 1.2); tz = near.o.z;
+      }
     }
     // don't cut more than ~55° off the fall line (keeps the speed up on the mountain)
     const fall = Math.atan2(centerX(z + 30) - centerX(z), 30);
@@ -858,6 +918,8 @@ const Game = {
     return (d.id === 'mountain' ? 'powderline.best' : 'powderline.best.' + d.id) + fl;
   },
   modeTag() { return Flick.on ? 'FLICK' : 'CLASSIC'; },
+  parTime() { return (Level.cur.finishZ || 0) / (60 / 3.6); },
+  fmtTime(t) { const m = Math.floor(t / 60), s = t - m * 60; return m + ':' + (s < 10 ? '0' : '') + s.toFixed(1); },
   loadBest() {
     let saved = 0;
     try { saved = +(localStorage.getItem(this.bestKey()) || 0); } catch (e) { saved = 0; }
@@ -906,7 +968,7 @@ const Game = {
     this.perf.t = 0; this.perf.n = 0; this.perf.warm = 0; this.perf.low = 0;   // first window is shader warm-up
     this.onPlan(null);                                     // no stale flick plan from the last run
     Input.jumpHeld = false; Input.jumpRelease = false;   // a key held into the run is not an ollie
-    this.score = 0; this.distance = 0; this.topSpeed = 0; this.totalAir = 0;
+    this.score = 0; this.distance = 0; this.topSpeed = 0; this.totalAir = 0; this.runT = 0; this.timeBonus = 0;
     this.lands = 0; this.bestHit = 0; this.combo = 1; this.comboTimer = 0;
     this.flash = 0; this.desat = 0; this.hintTimer = 14;
     this._deadTimer = 0;              // cancel any pending game-over countdown
@@ -946,10 +1008,10 @@ const Game = {
   },
 
   /* ---------------- callbacks from player.js ---------------- */
-  onCrash() {
+  onCrash(why) {
     this.combo = 1; this.comboTimer = 0;
-    this.flash = 0.45; this.desat = 1;
-    this.msg('WIPEOUT', 1200);
+    this.flash = 0.45; this.desat = why ? 0.6 : 1;          // (a gate miss has no tumble; it just fades)
+    this.msg(why ? why + ' · −1 LIFE' : 'WIPEOUT', 1200);
     Pad.rumble(1.0, 0.8, 380);
     if (Level.cur.zen) return;                 // zen: brush it off and keep riding
     this.setLives(Math.max(0, this.lives - 1));
@@ -992,10 +1054,10 @@ const Game = {
     this.showTrick((type === 'nose' ? 'Nose' : 'Tail') + ' Press' + (spin ? ' ' + spin : '') + ' ' + t.toFixed(1) + 's', pts);
   },
 
-  /* stomped landing: well-timed press just before touchdown */
-  onStomp() {
+  /* stomped landing: pump pressed just before touchdown */
+  onStomp(boost) {
     this.score += Math.round(50 * this.combo);
-    this.msg('STOMPED!', 900);
+    this.msg(boost > 0.3 ? 'STOMPED! +' + Math.round(boost * 3.6) + ' km/h' : 'STOMPED!', 900);
     Pad.rumble(0.9, 0.5, 160);
   },
 
@@ -1013,6 +1075,17 @@ const Game = {
     $('sTrick').textContent = Math.round(this.bestHit).toLocaleString();
     $('sAir').textContent = this.totalAir.toFixed(1) + ' s';
     $('sLands').textContent = this.lands;
+    // gate courses: finish time, with its own best (per level / length / mode)
+    const timed = finished && Level.cur.gates;
+    $('sTimeBox').style.display = timed ? '' : 'none';
+    if (timed) {
+      const k = this.bestKey() + '.time';
+      let bt = 0; try { bt = +(localStorage.getItem(k) || 0); } catch (e) { }
+      const pb = !bt || this.runT < bt;
+      if (pb) { try { localStorage.setItem(k, this.runT.toFixed(2)); } catch (e) { } }
+      $('sTime').textContent = this.fmtTime(this.runT);
+      $('sTimeSub').textContent = (pb ? '★ best time' : 'best ' + this.fmtTime(bt)) + (this.timeBonus ? ' · +' + this.timeBonus.toLocaleString() + ' pts' : '');
+    }
     if (s > this.best) {
       this.best = s;
       try { localStorage.setItem(this.bestKey(), String(s)); } catch (e) { }
@@ -1090,6 +1163,9 @@ const Game = {
     let dx = P.pos.x - o.x, dz = P.pos.z - o.z;
     const d = Math.hypot(dx, dz) || 1; dx /= d; dz /= d;
     P.pos.x = o.x + dx * (rad + 0.3); P.pos.z = o.z + dz * (rad + 0.3);
+    // end up BESIDE it, not uphill of it: recovery points down the fall line, which would
+    // ride straight back into the same rock
+    if (dz < 0.5) { const sx = Math.sign(dx) || 1; P.pos.x = o.x + sx * (rad + 1.0); P.pos.z = o.z + Math.max(dz, 0) * rad; dx = sx; dz = 0.3; }
     const sp = Math.max(3, P.speed * 0.35);
     P.vel.x = dx * sp; P.vel.z = dz * sp;
     P.crash(this.fx);
@@ -1108,8 +1184,10 @@ const Game = {
         Audio.gate();
         this.showTrick('GATE', pts);
       } else {
-        g.missed = true; this.combo = 1; this.comboTimer = 0;
-        this.msg('GATE MISSED'); Audio.miss();
+        // a missed gate costs a life like a wipeout, but the rider rides on at full speed
+        g.missed = true;
+        Audio.miss();
+        this.onCrash('GATE MISSED');
       }
     }
   },
@@ -1126,6 +1204,7 @@ const Game = {
     }
 
     P.step(dt, inp, this.fx);
+    this.runT += dt;
     this.collide();
     Scenery.update(dt, P);
     this.fx.spray(P, dt);
@@ -1143,7 +1222,10 @@ const Game = {
     World.update(P.pos.x, P.pos.z);
     // built courses end at a finish line
     if (Level.cur.finishZ && P.pos.z > Level.cur.finishZ && !(this._deadTimer > 0)) {
-      this.score += 500; this.gameOver(true); return;
+      this.score += 500;
+      // gate courses are races too: beat par (an average of 60 km/h) for a time bonus
+      if (Level.cur.gates) { this.timeBonus = Math.round(Math.max(0, this.parTime() - this.runT) * 120); this.score += this.timeBonus; }
+      this.gameOver(true); return;
     }
     Gates.ensure(P.pos.z + 400);
     Gates.trim(P.pos.z);
@@ -1209,7 +1291,8 @@ const Game = {
     const P = this.P;
     this.gateMarker();
     this.put('dist', Math.round(this.distance) + '<span class="unit">m</span>', true);
-    this.put('drop', '\u25BC ' + Math.round(Math.max(0, this.startY - P.pos.y)) + ' m drop');
+    this.put('drop', (Level.cur.gates && Level.cur.finishZ ? '\u23F1 ' + this.fmtTime(this.runT) + ' \u00B7 ' : '')
+      + '\u25BC ' + Math.round(Math.max(0, this.startY - P.pos.y)) + ' m drop');
     this.put('score', Math.round(this.score).toLocaleString());
     this.put('speed', Math.round(P.speed * 3.6) + '<span class="unit">km/h</span>', true);
     const fill = Math.round(clamp(P.speed / 30 * 100, 0, 100)) + '%';
@@ -1225,15 +1308,20 @@ const Game = {
       pm.classList.toggle('warn', Math.abs(P.press.bal) > 0.65);
     }
     $('airtime').classList.toggle('on', P.airborne);
-    // flick mode launch meter: plan inside the green zone (0.25–0.9 s before takeoff)
+    // flick mode launch meter: the green zone is the planning window (opens PLAN_OPEN s
+    // before takeoff — at the centre line in the pipe — and closes PLAN_CLOSE s before it)
     const lm = $('launchMeter'), t = this.launchT;
     const show = Flick.on && t !== null && t !== undefined;
     lm.classList.toggle('on', show);
     if (show) {
-      $('lmNeedle').style.left = (100 - clamp(t / 2.5, 0, 1) * 100) + '%';
-      const zone = t >= 0.25 && t <= 0.9;
-      lm.classList.toggle('go', zone); lm.classList.toggle('late', t < 0.25);
-      this.put('lmLabel', zone ? 'PLAN NOW' : t < 0.25 ? 'LAUNCH' : 'GET READY');
+      const open = Autopilot.tOpen, H = Math.max(2, open + 0.3);
+      const pct = (s) => (100 - clamp(s / H, 0, 1) * 100);
+      $('lmNeedle').style.left = pct(t) + '%';
+      const zs = $('lmZone').style;
+      zs.left = pct(open) + '%'; zs.width = (pct(PLAN_CLOSE) - pct(open)) + '%';
+      const zone = t >= PLAN_CLOSE && t <= open;
+      lm.classList.toggle('go', zone); lm.classList.toggle('late', t < PLAN_CLOSE);
+      this.put('lmLabel', zone ? 'PLAN NOW' : t < PLAN_CLOSE ? 'LAUNCH' : 'GET READY');
     }
     if (P.airborne) this.put('airtime', P.airTime.toFixed(2) + ' s');
     if ($('debug').classList.contains('on')) {
