@@ -142,6 +142,17 @@ const Input = {
     window.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') this.enableTouchUI(); }, true);
     // iOS only unlocks Web Audio from touchend/click
     window.addEventListener('touchend', () => { Audio.init(); Audio.resume(); }, { passive: true });
+    // No browser zoom while playing. iOS Safari ignores user-scalable=no, so a thumb on
+    // the stick plus one on a button can read as a pinch; Safari's own gesture events
+    // can be cancelled (Apple, Safari Web Content Guide), and so can stray touch drags
+    // (except inside the rider panel, which scrolls). Double-tap zoom is blocked too.
+    const noZoom = (e) => e.preventDefault();
+    for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, noZoom, { passive: false });
+    document.addEventListener('touchmove', (e) => {
+      if (e.target.closest && e.target.closest('.rscroll')) return;
+      if (e.cancelable) e.preventDefault();
+    }, { passive: false });
+    document.addEventListener('dblclick', noZoom, { passive: false });
 
     // buttons: hold-to-act, multi-touch safe (each button captures its own finger)
     const hold = (id, k) => {

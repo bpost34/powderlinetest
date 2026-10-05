@@ -244,6 +244,15 @@
   #tR{margin-left:-84px}
   #tM{margin-left:-130px}
   /* ---- portrait phones (the expected way to hold it) ---- */
+  /* ---- landscape phones: the middle of the screen is the rider — keep combo /
+     air-time readouts and messages up top, out of the line of sight ---- */
+  @media (orientation:landscape){
+    body.touch #center{bottom:auto;top:calc(max(12px,env(safe-area-inset-top)) + 54px)}
+    body.touch #combo{font-size:20px}
+    body.touch #airtime{font-size:13px;margin-top:4px}
+    body.touch #msg{top:30%}
+    body.touch #trick{top:31%}
+  }
   @media (orientation:portrait){
     /* buttons stack down the right edge, under the score */
     body.touch #tP.sbtn, body.touch #tR.sbtn, body.touch #tM.sbtn, body.touch.playing #muteBtn, body.touch.playing #atmosBtn{
@@ -494,19 +503,19 @@
 
 <div id="fatal"></div>
 
-<script src="js/math.js?v=20261010c"></script>
-<script src="js/world.js?v=20261010c"></script>
-<script src="js/meshes.js?v=20261010c"></script>
-<script src="js/outfit.js?v=20261010c"></script>
-<script src="js/levels.js?v=20261010c"></script>
-<script src="js/gl.js?v=20261010c"></script>
-<script src="js/render.js?v=20261010c"></script>
-<script src="js/scenery.js?v=20261010c"></script>
-<script src="js/atmos.js?v=20261010c"></script>
-<script src="js/fx.js?v=20261010c"></script>
-<script src="js/audio.js?v=20261010c"></script>
-<script src="js/player.js?v=20261010c"></script>
-<script src="js/pad.js?v=20261010c"></script>
-<script src="js/game.js?v=20261010c"></script>
+<script src="js/math.js?v=20261011a"></script>
+<script src="js/world.js?v=20261011a"></script>
+<script src="js/meshes.js?v=20261011a"></script>
+<script src="js/outfit.js?v=20261011a"></script>
+<script src="js/levels.js?v=20261011a"></script>
+<script src="js/gl.js?v=20261011a"></script>
+<script src="js/render.js?v=20261011a"></script>
+<script src="js/scenery.js?v=20261011a"></script>
+<script src="js/atmos.js?v=20261011a"></script>
+<script src="js/fx.js?v=20261011a"></script>
+<script src="js/audio.js?v=20261011a"></script>
+<script src="js/player.js?v=20261011a"></script>
+<script src="js/pad.js?v=20261011a"></script>
+<script src="js/game.js?v=20261011a"></script>
 </body>
 </html>
