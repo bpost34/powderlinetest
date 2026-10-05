@@ -221,7 +221,11 @@ class Player {
     if (this.press) {
       // butter spin: the stick spins the flat board on the snow; no carving while pressed
       this.turnRate = damp(this.turnRate, 0, 12, dt);
-      const spin = clamp(-this.lean * 4.6, -4.6, 4.6);
+      // only a deliberate sideways push spins it: a dead zone (thumb drift, phone tilt)
+      // and an axis lock (balancing up / down never spins you by accident)
+      const sy = Math.max(+input.flipFwd || 0, +input.flipBack || 0);
+      const lock = Math.abs(steer) < 0.35 || (sy > 0.2 && Math.abs(steer) < sy * 0.6);
+      const spin = lock ? 0 : clamp(-this.lean * 4.6, -4.6, 4.6);
       this.yaw += spin * dt; this.press.spin += spin * dt;
     } else {
       this.turnRate = damp(this.turnRate, turn, 12, dt);
@@ -265,11 +269,12 @@ class Player {
       else {
         p.t += dt;
         // the press wants to tip further the longer you hold it; the stick fights back
-        // (tail press: push up to come forward; nose press: pull back)
-        const k = 1.3 + p.t * 0.35;
+        // (tail press: push up to come forward; nose press: pull back). On the HUD the
+        // needle moves the way you push the stick — keep it in the middle.
+        const k = 0.75 + p.t * 0.22;
         const wobble = Math.sin(p.nz + p.t * 2.3) * 0.6 + Math.sin(p.nz * 1.7 + p.t * 3.9) * 0.4;
-        const fix = (p.type === 'tail' ? sFwd - sBack : sBack - sFwd) * 2.6;
-        p.bal += (p.bal * k + wobble * 0.55 - fix) * dt;
+        const fix = (p.type === 'tail' ? sFwd - sBack : sBack - sFwd) * 1.9;
+        p.bal += (p.bal * k + wobble * 0.45 - fix) * dt;
         if (Math.abs(p.bal) > 1) { this.endPress(false); this.pressLock = true; }
       }
     }

@@ -1305,7 +1305,9 @@ const Game = {
     pm.classList.toggle('on', !!P.press);
     if (P.press) {
       this.put('pressLabel', (P.press.type === 'nose' ? 'NOSE' : 'TAIL') + ' PRESS ' + P.press.t.toFixed(1) + 's');
-      $('pressNeedle').style.left = (50 + clamp(P.press.bal, -1, 1) * 46) + '%';
+      // vertical, like the stick: pushing up moves the needle up (tail: + bal = sinking back)
+      const v = clamp(P.press.type === 'tail' ? -P.press.bal : P.press.bal, -1, 1);
+      $('pressNeedle').style.top = (50 - v * 46) + '%';
       pm.classList.toggle('warn', Math.abs(P.press.bal) > 0.65);
     }
     $('airtime').classList.toggle('on', P.airborne);
