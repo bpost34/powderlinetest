@@ -315,12 +315,15 @@ class Player {
 
     // flips: W pitches forward = frontflip, S pulls back = backflip. Holding W/S
     // through the takeoff (tucking for speed) doesn't count — the key has to
-    // be pressed fresh once airborne, so crest launches never flip you by accident.
+    // be pressed fresh once airborne (or a grab held), so crest launches never
+    // flip you by accident.
     // (flip keys are W/S only — holding Space to load an ollie must never flip you)
     // (analog 0..1 from the touch joystick: a half push flips at half speed)
     const fF = +(input.flipFwd !== undefined ? input.flipFwd : input.tuck) || 0;
     const fB = +(input.flipBack !== undefined ? input.flipBack : input.brake) || 0;
-    if (fF < 0.1 && fB < 0.1) this.flipArmed = true;
+    // a held grab is deliberate trick intent: flips are free immediately, even if
+    // the stick was already pushed through the takeoff
+    if ((fF < 0.1 && fB < 0.1) || input.grab) this.flipArmed = true;
     const want = this.flipArmed ? fB - fF : 0;                        // + = nose up = backflip
     this.flipRate = damp(this.flipRate, want * 4.2, 9, dt);
     this.flip += this.flipRate * dt;
