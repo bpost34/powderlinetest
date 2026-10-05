@@ -123,7 +123,9 @@ const Pad = {
       const nav = (left || right) && this._navT <= 0 ? (left ? -1 : 1) : 0;
       if (!left && !right) this._navT = 0;
       if (nav) this._navT = 0.28;
-      if (st === 'menu' && Game.customizing) {
+      if (st === 'menu' && Game.editingLayout) {
+        if (edge(1) || edge(9) || edge(0)) TouchLayout.closeEditor();
+      } else if (st === 'menu' && Game.customizing) {
         if (edge(1) || edge(9)) Customize.close();
         else if (edge(2)) { Outfit.randomize(); Customize.sync(); }
         else if (edge(4) || edge(5)) this.cyclePreset(edge(5) ? 1 : -1);

@@ -212,7 +212,7 @@
   body.touch #speed{font-size:36px}
   body.touch #speedbar{width:120px}
   body.touch #center{bottom:140px}
-  #tiltBtn{padding:10px 18px;border-radius:22px;border:1.5px solid rgba(190,225,255,.4);
+  #tiltBtn,#ctrlBtn{padding:10px 18px;border-radius:22px;border:1.5px solid rgba(190,225,255,.4);
     background:rgba(10,22,38,.45);color:#eaf6ff;font:800 11px/1 inherit;font-family:inherit;letter-spacing:.16em;
     text-transform:uppercase;touch-action:manipulation}
   #tiltBtn.on{border-color:var(--accent);color:var(--accent)}
@@ -303,7 +303,20 @@
 
   /* ---------- rider customisation ---------- */
   #mbtns{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-items:center;margin-top:16px}
-  #mbtns #tiltBtn{margin:0;min-height:42px}
+  #mbtns #tiltBtn,#mbtns #ctrlBtn{margin:0;min-height:42px}
+  /* control-layout editor (from the menu): drag the clusters directly */
+  #layoutBar{position:fixed;left:50%;top:max(14px,env(safe-area-inset-top));transform:translateX(-50%);z-index:8;
+    display:none;align-items:center;gap:10px;padding:8px 8px 8px 16px;border-radius:24px;max-width:calc(100vw - 32px);
+    background:rgba(10,22,38,.78);border:1.5px solid rgba(190,225,255,.35);color:#eaf6ff;font-size:12px;font-weight:700;letter-spacing:.04em}
+  #layoutBar span{flex:1;min-width:0;white-space:nowrap}
+  #layoutBar button{min-height:40px;padding:0 16px;border-radius:20px;border:1.5px solid rgba(190,225,255,.4);background:rgba(10,22,38,.5);
+    color:#eaf6ff;font:800 11px/1 inherit;font-family:inherit;letter-spacing:.14em;text-transform:uppercase;touch-action:manipulation}
+  #layoutBar #lDone{border-color:var(--accent);color:var(--accent)}
+  body.editLayout #layoutBar{display:flex}
+  body.editLayout #touch{display:block}
+  body.editLayout #menu, body.editLayout #muteBtn, body.editLayout #atmosBtn, body.editLayout .tbtn.sbtn{display:none!important}
+  body.editLayout .tgroup{pointer-events:auto;cursor:grab;border-radius:24px;outline:2px dashed rgba(95,226,255,.55);outline-offset:8px}
+  body.editLayout .tgroup *{pointer-events:none!important}   /* the stick's own id rule would win otherwise */
   #riderBtn{display:inline-flex;align-items:center;gap:10px;padding:7px 18px 7px 7px;min-height:42px;
     border-radius:24px;border:1.5px solid rgba(190,225,255,.4);background:rgba(10,22,38,.45);color:#eaf6ff;
     font:800 12px/1 inherit;font-family:inherit;letter-spacing:.16em;text-transform:uppercase;cursor:pointer;
@@ -420,6 +433,7 @@
 </div>
 
 <div id="padToast"></div>
+<div id="layoutBar"><span>Drag to arrange</span><button type="button" id="lReset">Reset</button><button type="button" id="lDone">Done</button></div>
 <div class="screen" id="menu">
   <div class="eyebrow">WebGL2 · no engine · no assets</div>
   <h1>POWDER<br>LINE</h1>
@@ -459,6 +473,7 @@
   <div id="mbtns">
     <button id="riderBtn" type="button"><span class="dots"><i></i><i></i></span>Rider<i class="key kb-only">C</i></button>
     <button id="tiltBtn" class="touch-only" type="button">Tilt steering: OFF</button>
+    <button id="ctrlBtn" class="touch-only" type="button">⠿ Controls</button>
   </div>
 </div>
 
@@ -518,19 +533,19 @@
 
 <div id="fatal"></div>
 
-<script src="js/math.js?v=20261011b"></script>
-<script src="js/world.js?v=20261011b"></script>
-<script src="js/meshes.js?v=20261011b"></script>
-<script src="js/outfit.js?v=20261011b"></script>
-<script src="js/levels.js?v=20261011b"></script>
-<script src="js/gl.js?v=20261011b"></script>
-<script src="js/render.js?v=20261011b"></script>
-<script src="js/scenery.js?v=20261011b"></script>
-<script src="js/atmos.js?v=20261011b"></script>
-<script src="js/fx.js?v=20261011b"></script>
-<script src="js/audio.js?v=20261011b"></script>
-<script src="js/player.js?v=20261011b"></script>
-<script src="js/pad.js?v=20261011b"></script>
-<script src="js/game.js?v=20261011b"></script>
+<script src="js/math.js?v=20261011c"></script>
+<script src="js/world.js?v=20261011c"></script>
+<script src="js/meshes.js?v=20261011c"></script>
+<script src="js/outfit.js?v=20261011c"></script>
+<script src="js/levels.js?v=20261011c"></script>
+<script src="js/gl.js?v=20261011c"></script>
+<script src="js/render.js?v=20261011c"></script>
+<script src="js/scenery.js?v=20261011c"></script>
+<script src="js/atmos.js?v=20261011c"></script>
+<script src="js/fx.js?v=20261011c"></script>
+<script src="js/audio.js?v=20261011c"></script>
+<script src="js/player.js?v=20261011c"></script>
+<script src="js/pad.js?v=20261011c"></script>
+<script src="js/game.js?v=20261011c"></script>
 </body>
 </html>

@@ -212,7 +212,7 @@
   body.touch #speed{font-size:36px}
   body.touch #speedbar{width:120px}
   body.touch #center{bottom:140px}
-  #tiltBtn{padding:10px 18px;border-radius:22px;border:1.5px solid rgba(190,225,255,.4);
+  #tiltBtn,#ctrlBtn{padding:10px 18px;border-radius:22px;border:1.5px solid rgba(190,225,255,.4);
     background:rgba(10,22,38,.45);color:#eaf6ff;font:800 11px/1 inherit;font-family:inherit;letter-spacing:.16em;
     text-transform:uppercase;touch-action:manipulation}
   #tiltBtn.on{border-color:var(--accent);color:var(--accent)}
@@ -303,7 +303,20 @@
 
   /* ---------- rider customisation ---------- */
   #mbtns{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-items:center;margin-top:16px}
-  #mbtns #tiltBtn{margin:0;min-height:42px}
+  #mbtns #tiltBtn,#mbtns #ctrlBtn{margin:0;min-height:42px}
+  /* control-layout editor (from the menu): drag the clusters directly */
+  #layoutBar{position:fixed;left:50%;top:max(14px,env(safe-area-inset-top));transform:translateX(-50%);z-index:8;
+    display:none;align-items:center;gap:10px;padding:8px 8px 8px 16px;border-radius:24px;max-width:calc(100vw - 32px);
+    background:rgba(10,22,38,.78);border:1.5px solid rgba(190,225,255,.35);color:#eaf6ff;font-size:12px;font-weight:700;letter-spacing:.04em}
+  #layoutBar span{flex:1;min-width:0;white-space:nowrap}
+  #layoutBar button{min-height:40px;padding:0 16px;border-radius:20px;border:1.5px solid rgba(190,225,255,.4);background:rgba(10,22,38,.5);
+    color:#eaf6ff;font:800 11px/1 inherit;font-family:inherit;letter-spacing:.14em;text-transform:uppercase;touch-action:manipulation}
+  #layoutBar #lDone{border-color:var(--accent);color:var(--accent)}
+  body.editLayout #layoutBar{display:flex}
+  body.editLayout #touch{display:block}
+  body.editLayout #menu, body.editLayout #muteBtn, body.editLayout #atmosBtn, body.editLayout .tbtn.sbtn{display:none!important}
+  body.editLayout .tgroup{pointer-events:auto;cursor:grab;border-radius:24px;outline:2px dashed rgba(95,226,255,.55);outline-offset:8px}
+  body.editLayout .tgroup *{pointer-events:none!important}   /* the stick's own id rule would win otherwise */
   #riderBtn{display:inline-flex;align-items:center;gap:10px;padding:7px 18px 7px 7px;min-height:42px;
     border-radius:24px;border:1.5px solid rgba(190,225,255,.4);background:rgba(10,22,38,.45);color:#eaf6ff;
     font:800 12px/1 inherit;font-family:inherit;letter-spacing:.16em;text-transform:uppercase;cursor:pointer;
@@ -420,6 +433,7 @@
 </div>
 
 <div id="padToast"></div>
+<div id="layoutBar"><span>Drag to arrange</span><button type="button" id="lReset">Reset</button><button type="button" id="lDone">Done</button></div>
 <div class="screen" id="menu">
   <div class="eyebrow">WebGL2 · no engine · no assets</div>
   <h1>POWDER<br>LINE</h1>
@@ -459,6 +473,7 @@
   <div id="mbtns">
     <button id="riderBtn" type="button"><span class="dots"><i></i><i></i></span>Rider<i class="key kb-only">C</i></button>
     <button id="tiltBtn" class="touch-only" type="button">Tilt steering: OFF</button>
+    <button id="ctrlBtn" class="touch-only" type="button">⠿ Controls</button>
   </div>
 </div>
 
@@ -6006,7 +6021,9 @@ const Pad = {
       const nav = (left || right) && this._navT <= 0 ? (left ? -1 : 1) : 0;
       if (!left && !right) this._navT = 0;
       if (nav) this._navT = 0.28;
-      if (st === 'menu' && Game.customizing) {
+      if (st === 'menu' && Game.editingLayout) {
+        if (edge(1) || edge(9) || edge(0)) TouchLayout.closeEditor();
+      } else if (st === 'menu' && Game.customizing) {
         if (edge(1) || edge(9)) Customize.close();
         else if (edge(2)) { Outfit.randomize(); Customize.sync(); }
         else if (edge(4) || edge(5)) this.cyclePreset(edge(5) ? 1 : -1);
@@ -6072,6 +6089,7 @@ const Input = {
       // customise panel: its own keys only (Esc closes); nothing reaches the game,
       // and Space/arrows keep their normal meaning (press a button, scroll the panel)
       if (Game.customizing) { if (e.code === 'Escape') Customize.close(); return; }
+      if (Game.editingLayout) { if (e.code === 'Escape') TouchLayout.closeEditor(); return; }
       if (e.code === 'Space' || e.code.indexOf('Arrow') === 0) e.preventDefault();
       // shortcuts / app switching (Cmd-Tab, Ctrl-…, a bare Shift) never drop you into a run
       if (e.metaKey || e.ctrlKey || e.altKey || /^(Meta|Control|Alt|Shift|Tab|CapsLock|Escape)/.test(e.code)) {
@@ -6357,6 +6375,13 @@ const TouchLayout = {
     try { this.saved = JSON.parse(localStorage.getItem(this.KEY) || '{}') || {}; } catch (e) { this.saved = {}; }
     for (const id of ['gStick', 'gAbxy']) this.bind($(id));
     window.addEventListener('resize', () => this.apply());
+    // menu → "Controls": arrange the clusters before riding
+    const stop = (el) => { for (const t of ['pointerdown', 'click', 'touchstart', 'mousedown']) el.addEventListener(t, (e) => e.stopPropagation()); };
+    const cb = $('ctrlBtn');
+    stop(cb); cb.addEventListener('click', () => { this.openEditor(); cb.blur(); });
+    stop($('layoutBar'));
+    $('lDone').addEventListener('click', () => this.closeEditor());
+    $('lReset').addEventListener('click', () => this.reset());
     const rb = $('pLayout');
     rb.addEventListener('pointerdown', (e) => e.stopPropagation());
     rb.addEventListener('click', (e) => { e.stopPropagation(); this.reset(); rb.blur(); });
@@ -6365,7 +6390,8 @@ const TouchLayout = {
 
   /* place every group: saved centre (fractions of the screen) or the CSS default */
   apply() {
-    if (!document.body.classList.contains('playing')) return;      // hidden: nothing to measure yet
+    const b = document.body.classList;
+    if (!b.contains('playing') && !b.contains('editLayout')) return;   // hidden: nothing to measure yet
     const o = this.saved[this.orient()] || {};
     for (const id of ['gStick', 'gAbxy']) {
       const g = $(id), c = o[id];
@@ -6397,7 +6423,22 @@ const TouchLayout = {
       id = null; moving = false; last = null;
       grip.classList.remove('armed'); g.classList.remove('moving');
     };
+    // editor: grab the whole cluster straight away (no hold needed)
+    g.addEventListener('pointerdown', (e) => {
+      if (!Game.editingLayout) return;
+      e.preventDefault(); e.stopPropagation();
+      try { g.setPointerCapture(e.pointerId); } catch (_) { }
+      id = e.pointerId; moving = true; g.classList.add('moving');
+      const r = g.getBoundingClientRect();
+      dx = e.clientX - (r.left + r.width / 2); dy = e.clientY - (r.top + r.height / 2);
+    });
+    g.addEventListener('pointermove', (e) => {
+      if (!Game.editingLayout || e.pointerId !== id || !moving) return;
+      last = this.place(g, e.clientX - dx, e.clientY - dy);
+    });
+    g.addEventListener('pointerup', end); g.addEventListener('pointercancel', end);
     grip.addEventListener('pointerdown', (e) => {
+      if (Game.editingLayout) return;               // the group handler takes it
       e.preventDefault(); e.stopPropagation();
       try { grip.setPointerCapture(e.pointerId); } catch (_) { }
       id = e.pointerId;
@@ -6412,6 +6453,18 @@ const TouchLayout = {
     });
     grip.addEventListener('pointerup', end); grip.addEventListener('pointercancel', end);
     grip.addEventListener('lostpointercapture', end);
+  },
+
+  openEditor() {
+    if (Game.state !== 'menu' || Game.customizing) return;
+    Game.editingLayout = true;
+    document.body.classList.add('editLayout');
+    this.apply();
+  },
+  closeEditor() {
+    Game.editingLayout = false;
+    document.body.classList.remove('editLayout');
+    Game.menuAt = performance.now();               // the Done tap mustn't start a run
   },
 
   reset() {
@@ -6500,7 +6553,8 @@ const Game = {
   lastZ: 0, startY: 0, frames: 0, fps: 60, _fpsT: 0, _mt: 0,
   menuAt: -1e9,                  // when the menu last opened (swallows that tap's trailing click)
   overAt: -1e9,                  // when the results screen appeared (tap guard)
-  customizing: false,            // rider colour panel open (menu only; render.js frames the rider)
+  customizing: false,
+  editingLayout: false,          // touch-control layout editor open (menu only)            // rider colour panel open (menu only; render.js frames the rider)
   perf: { t: 0, n: 0, warm: 0, low: 0 },     // dynamic-resolution frame-rate monitor
   frameNo: 0,                    // monotonic; never reset (chunk cache ages on it)
 
@@ -6948,7 +7002,7 @@ const Game = {
       Pad.poll(dt);
       if (Game.state !== 'play') Audio.quiet();        // no carve/wind hiss off the snow
       if (Game.state === 'menu') {
-        if (Input.anyKey) { Input.anyKey = false; if (!Game.customizing) Game.start(); }
+        if (Input.anyKey) { Input.anyKey = false; if (!Game.customizing && !Game.editingLayout) Game.start(); }
         // idle: drift down the mountain so the menu has a live backdrop
         Game.P.pos.z += dt * 7;
         if (Level.cur.finishZ && Game.P.pos.z > Level.cur.finishZ) Game.P.pos.z = Game.spawnZ();

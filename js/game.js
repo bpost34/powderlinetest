@@ -27,6 +27,7 @@ const Input = {
       // customise panel: its own keys only (Esc closes); nothing reaches the game,
       // and Space/arrows keep their normal meaning (press a button, scroll the panel)
       if (Game.customizing) { if (e.code === 'Escape') Customize.close(); return; }
+      if (Game.editingLayout) { if (e.code === 'Escape') TouchLayout.closeEditor(); return; }
       if (e.code === 'Space' || e.code.indexOf('Arrow') === 0) e.preventDefault();
       // shortcuts / app switching (Cmd-Tab, Ctrl-…, a bare Shift) never drop you into a run
       if (e.metaKey || e.ctrlKey || e.altKey || /^(Meta|Control|Alt|Shift|Tab|CapsLock|Escape)/.test(e.code)) {
@@ -312,6 +313,13 @@ const TouchLayout = {
     try { this.saved = JSON.parse(localStorage.getItem(this.KEY) || '{}') || {}; } catch (e) { this.saved = {}; }
     for (const id of ['gStick', 'gAbxy']) this.bind($(id));
     window.addEventListener('resize', () => this.apply());
+    // menu → "Controls": arrange the clusters before riding
+    const stop = (el) => { for (const t of ['pointerdown', 'click', 'touchstart', 'mousedown']) el.addEventListener(t, (e) => e.stopPropagation()); };
+    const cb = $('ctrlBtn');
+    stop(cb); cb.addEventListener('click', () => { this.openEditor(); cb.blur(); });
+    stop($('layoutBar'));
+    $('lDone').addEventListener('click', () => this.closeEditor());
+    $('lReset').addEventListener('click', () => this.reset());
     const rb = $('pLayout');
     rb.addEventListener('pointerdown', (e) => e.stopPropagation());
     rb.addEventListener('click', (e) => { e.stopPropagation(); this.reset(); rb.blur(); });
@@ -320,7 +328,8 @@ const TouchLayout = {
 
   /* place every group: saved centre (fractions of the screen) or the CSS default */
   apply() {
-    if (!document.body.classList.contains('playing')) return;      // hidden: nothing to measure yet
+    const b = document.body.classList;
+    if (!b.contains('playing') && !b.contains('editLayout')) return;   // hidden: nothing to measure yet
     const o = this.saved[this.orient()] || {};
     for (const id of ['gStick', 'gAbxy']) {
       const g = $(id), c = o[id];
@@ -352,7 +361,22 @@ const TouchLayout = {
       id = null; moving = false; last = null;
       grip.classList.remove('armed'); g.classList.remove('moving');
     };
+    // editor: grab the whole cluster straight away (no hold needed)
+    g.addEventListener('pointerdown', (e) => {
+      if (!Game.editingLayout) return;
+      e.preventDefault(); e.stopPropagation();
+      try { g.setPointerCapture(e.pointerId); } catch (_) { }
+      id = e.pointerId; moving = true; g.classList.add('moving');
+      const r = g.getBoundingClientRect();
+      dx = e.clientX - (r.left + r.width / 2); dy = e.clientY - (r.top + r.height / 2);
+    });
+    g.addEventListener('pointermove', (e) => {
+      if (!Game.editingLayout || e.pointerId !== id || !moving) return;
+      last = this.place(g, e.clientX - dx, e.clientY - dy);
+    });
+    g.addEventListener('pointerup', end); g.addEventListener('pointercancel', end);
     grip.addEventListener('pointerdown', (e) => {
+      if (Game.editingLayout) return;               // the group handler takes it
       e.preventDefault(); e.stopPropagation();
       try { grip.setPointerCapture(e.pointerId); } catch (_) { }
       id = e.pointerId;
@@ -367,6 +391,18 @@ const TouchLayout = {
     });
     grip.addEventListener('pointerup', end); grip.addEventListener('pointercancel', end);
     grip.addEventListener('lostpointercapture', end);
+  },
+
+  openEditor() {
+    if (Game.state !== 'menu' || Game.customizing) return;
+    Game.editingLayout = true;
+    document.body.classList.add('editLayout');
+    this.apply();
+  },
+  closeEditor() {
+    Game.editingLayout = false;
+    document.body.classList.remove('editLayout');
+    Game.menuAt = performance.now();               // the Done tap mustn't start a run
   },
 
   reset() {
@@ -455,7 +491,8 @@ const Game = {
   lastZ: 0, startY: 0, frames: 0, fps: 60, _fpsT: 0, _mt: 0,
   menuAt: -1e9,                  // when the menu last opened (swallows that tap's trailing click)
   overAt: -1e9,                  // when the results screen appeared (tap guard)
-  customizing: false,            // rider colour panel open (menu only; render.js frames the rider)
+  customizing: false,
+  editingLayout: false,          // touch-control layout editor open (menu only)            // rider colour panel open (menu only; render.js frames the rider)
   perf: { t: 0, n: 0, warm: 0, low: 0 },     // dynamic-resolution frame-rate monitor
   frameNo: 0,                    // monotonic; never reset (chunk cache ages on it)
 
@@ -903,7 +940,7 @@ const Game = {
       Pad.poll(dt);
       if (Game.state !== 'play') Audio.quiet();        // no carve/wind hiss off the snow
       if (Game.state === 'menu') {
-        if (Input.anyKey) { Input.anyKey = false; if (!Game.customizing) Game.start(); }
+        if (Input.anyKey) { Input.anyKey = false; if (!Game.customizing && !Game.editingLayout) Game.start(); }
         // idle: drift down the mountain so the menu has a live backdrop
         Game.P.pos.z += dt * 7;
         if (Level.cur.finishZ && Game.P.pos.z > Level.cur.finishZ) Game.P.pos.z = Game.spawnZ();
