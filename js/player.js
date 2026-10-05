@@ -19,6 +19,10 @@ const RIDE_H = 0.12;          // rider origin height above the board base
 /* fastest flip rotation (rad/s ≈ 430°/s): a double cork fits a big pipe air or a ramp
    (real ones take ~1.5–1.9 s), a flat ollie can't fit even a single */
 const FLIP_MAX = 7.5;
+/* fastest spin (rad/s ≈ 600°/s): a 1080 fits a full pipe air (real ones take ~1.2–1.9 s);
+   at the ~7.7 m ceiling the biggest combo that fits is a triple cork 1440 — the hardest
+   pipe trick landed in competition */
+const SPIN_MAX = 10.6;
 const LEAN_VIS = 1;           // visual lean direction (board tilt + body). Set to -1 to reverse. Physics unaffected.
 
 class Player {
@@ -84,7 +88,7 @@ class Player {
     // nothing from before the reset carries over (turn momentum, landing settle, skid pose, buffered jumps)
     this.turnRate = 0; this.yawVis = 0; this.brakeVis = 0; this.jumpBuffer = 0; this.coyote = 0;
     this.press = null; this.pressVis = 0; this.pumpBuf = 0; this.stompAt = -1;
-    this.flickRot = null; this.stance = 0; this.stanceVis = 0;
+    this.flickRot = null; this.stance = 0; this.stanceVis = 0; this.plan = null;
     this.updateBasis();
   }
 
@@ -238,11 +242,10 @@ class Player {
     const centripetal = sp * sp * curv;
     this.load = clamp(1 + centripetal / G, 0, 3.4);
 
-    // ---- flick mode on the snow: ←/→ spins the board 180 to switch stance ----
-    if (input.flick && Math.abs(input.flick.x) > 0.5 && Math.abs(input.flick.y) < 0.5) {
-      this.stance = this.stance ? 0 : Math.PI;
-      Game.onSwitch(this.stance !== 0);
-    }
+    // ---- flick mode on the snow: flicks PLAN the trick (a rider commits before the lip);
+    //      it launches with the next takeoff, or — if no jump comes — a spin becomes a ground 180 ----
+    if (input.flick) this.planAdd(input.flick);
+    if (this.plan && (this.plan.t += dt) > 1.5) this.planExpire();
 
     // ---- butter / press: hold the button on the snow; the stick (up/down) keeps the balance ----
     const sFwd = +input.flipFwd || 0, sBack = +input.flipBack || 0;
@@ -381,8 +384,11 @@ class Player {
     // up to ~710°/s: a full-amplitude pipe air (~1.9 s) fits a 1080, a big-air jump a 1440
     // (real 1080s happen in ~1.2–1.9 s of air — PMC IMU study of competitive pipe riders).
     // How fast you can spin depends on the takeoff: a flat ollie only has the pop for ~400°/s.
-    if (this.spinCap == null) this.spinCap = clamp(4 + Math.max(0, this.vel.y) * 0.85, 6.5, 12.4);   // first air frame
-    const cap = this.spinCap || 12.4;
+    if (this.spinCap == null) {                                     // first air frame
+      this.spinCap = clamp(4 + Math.max(0, this.vel.y) * 0.85, 6.5, SPIN_MAX);
+      if (this.plan) this.planLaunch();                              // flick mode: the committed trick
+    }
+    const cap = this.spinCap || SPIN_MAX;
     const spinRate = clamp(-this.lean * 13.5, -cap, cap);
     this.yaw += spinRate * dt;
     this.spin += spinRate * dt;
@@ -393,7 +399,8 @@ class Player {
     this.lean = damp(this.lean, input.steer * 0.92, 6, dt);
 
     // ---- flick mode: a flick queues a whole rotation that finishes before touchdown ----
-    if (input.flick) this.queueFlick(input.flick);
+    // in the air you're committed: only a short window after takeoff to add to the trick
+    if (input.flick) { if (this.airTime < 0.3) this.queueFlick(input.flick); else Game.onFlickTooLate(); }
     if (this.flickRot) {
       const q = this.flickRot;
       const df = clamp(q.flip, -q.rf * dt, q.rf * dt), ds = clamp(q.spin, -q.rs * dt, q.rs * dt);
@@ -403,7 +410,7 @@ class Player {
       if (this.autoYaw) this.autoYaw.target += ds;
       if (Math.abs(q.flip) < 1e-4 && Math.abs(q.spin) < 1e-4) {
         this.flickRot = null; this.flipRate = 0;
-        this.flip = Math.round(this.flip / TAU) * TAU;        // land exactly upright
+        if (q.exact !== false) this.flip = Math.round(this.flip / TAU) * TAU;   // only error-free rotations snap upright
       }
     }
 
@@ -598,6 +605,53 @@ class Player {
     return 6;
   }
 
+  planAdd(f) {
+    const p = this.plan || { flip: 0, spin: 0, t: 0 };
+    if (Math.abs(f.y) > 0.38) p.flip = clamp(p.flip + (f.y < 0 ? -TAU : TAU), -3 * TAU, 3 * TAU);   // up = frontflip
+    if (Math.abs(f.x) > 0.38) p.spin = clamp(p.spin + (f.x > 0 ? -TAU : TAU), -5 * TAU, 5 * TAU);   // right = spin right
+    p.t = 0;
+    this.plan = p;
+    Game.onPlan(p);
+  }
+  planExpire() {
+    const p = this.plan; this.plan = null;
+    if (p && p.spin) { this.stance = this.stance ? 0 : Math.PI; Game.onSwitch(this.stance !== 0); }
+    Game.onPlan(null);
+  }
+  /* takeoff with a plan: run it with the whole air; if it can't fit, drop rotations
+     (the bigger component first) until it does */
+  planLaunch() {
+    const p = this.plan; this.plan = null; Game.onPlan(null);
+    let nf = p.flip, ns = p.spin;
+    const avail = this.timeToLand() * 0.9, cap = this.spinCap || SPIN_MAX;
+    const needOf = () => Math.max(Math.abs(nf) / FLIP_MAX, Math.abs(ns) / cap);
+    while ((nf || ns) && needOf() > avail) {
+      if (Math.abs(nf) / FLIP_MAX >= Math.abs(ns) / cap) nf -= Math.sign(nf) * TAU; else ns -= Math.sign(ns) * TAU;
+    }
+    if (!nf && !ns) { Game.onFlickTooLow(); return; }
+    const need = needOf();
+    // TIMING: a rider sets the trick just before the lip. Plan finished 0.25–0.9 s
+    // before takeoff = perfect; flicked right at the lip = rushed; long before = hesitant.
+    const lead = p.t;
+    const q = lead < 0.25 ? lerp(0.45, 1, lead / 0.25) : lead > 0.9 ? lerp(1, 0.7, clamp((lead - 0.9) / 0.6, 0, 1)) : 1;
+    Game.onPlanTiming(q, lead < 0.25);
+    this.startRotation(nf, ns, need, avail, q);
+  }
+
+  /* run a committed rotation. EXECUTION isn't perfect: the closer the trick is to the
+     limit of the air (need/avail) and the worse the timing, the more it ends over- or
+     under-rotated — past the landing tolerance that's a crash. A 360 is basically
+     automatic; a triple cork 1440 at the 7.7 m ceiling lands roughly 2 times in 3. */
+  startRotation(nf, ns, need, avail, q) {
+    const u = need / Math.max(avail, 1e-3);                             // 0 easy … 1 at the limit
+    const sigma = (0.08 + 2.4 * Math.pow(Math.max(0, u - 0.4), 1.5)) * (1 + 1.3 * (1 - q));
+    const gauss = () => Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(TAU * Math.random());
+    const ef = nf ? gauss() * sigma : 0, es = ns ? gauss() * sigma : 0;
+    nf += ef; ns += es;
+    const dur = clamp(0.85 * Math.max(1, Math.max(Math.abs(nf), Math.abs(ns)) / TAU), Math.min(need, avail), avail);
+    this.flickRot = { flip: nf, spin: ns, rf: Math.abs(nf) / dur, rs: Math.abs(ns) / dur, exact: false };
+  }
+
   queueFlick(f) {
     const tLeft = this.timeToLand();
     const q = this.flickRot || { flip: 0, spin: 0, rf: 0, rs: 0 };
@@ -608,12 +662,10 @@ class Player {
     // finish the whole queue within the air left (snappy: ~0.85 s per rotation at most),
     // at no more than a real rider's rotation speed — flips ≤ ~315°/s, spins ≤ this
     // takeoff's spinCap. A flick that can't make it is refused (TOO LOW).
-    const need = Math.max(Math.abs(nf) / FLIP_MAX, Math.abs(ns) / (this.spinCap || 12.4));   // fastest possible
+    const need = Math.max(Math.abs(nf) / FLIP_MAX, Math.abs(ns) / (this.spinCap || SPIN_MAX));   // fastest possible
     if (need > avail) { Game.onFlickTooLow(); return; }
-    const dur = clamp(0.85 * Math.max(1, Math.max(Math.abs(nf), Math.abs(ns)) / TAU), need, avail);
-    const rf = Math.abs(nf) / dur, rs = Math.abs(ns) / dur;
-    q.flip = nf; q.spin = ns; q.rf = rf; q.rs = rs;
-    this.flickRot = q;
+    // added after takeoff: late, so it's executed sloppily
+    this.startRotation(nf, ns, need, avail, 0.45);
   }
 
   /* end a butter/press: clean (released, or popped off) or slipped (lost the balance) */

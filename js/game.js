@@ -403,7 +403,7 @@ const Flick = {
     const el = $('styleBtn'); if (el) { el.textContent = 'Controls: ' + FLICK_LABEL[this.style()]; el.classList.toggle('on', this.on); }
     if (typeof Game !== 'undefined' && Game.P) Game.loadBest();      // Classic and Flick bests are separate
     const h = $('flickHint');
-    if (h) h.textContent = (this.on && this.steering !== 'auto' ? 'steer: stick / tilt · ' : '') + 'tap ollie / grab · flick ↑↓ flip · ←→ spin (on snow: switch)';
+    if (h) h.textContent = (this.on && this.steering !== 'auto' ? 'steer: stick / tilt · ' : '') + 'tap ollie / grab · flick before the jump: ↑↓ flip · ←→ spin';
   },
 
   /* snap a direction to 8-way (components 0 / ±1) */
@@ -465,7 +465,10 @@ const Flick = {
     inp.brake = 0;
     // ---- easy speed + air: tuck to a cruising speed, pump every compression,
     //      and pop an ollie off every launch (lips, ramps, rails, kicker tops) ----
-    const lv = Level.cur.id, cap = lv === 'pipe' ? 15.5 : lv === 'park' ? 19 : 23;   // m/s: pipe ~56 km/h, park ~68, mountain ~83
+    // m/s: park ~68 km/h, mountain ~83. The pipe builds: clean landings carry more speed
+    // each wall, so airs grow from ~4.5 m to the ~7.7 m ceiling about ¾ of the way down
+    const lv = Level.cur.id;
+    const cap = lv === 'pipe' ? lerp(13.5, 18.5, clamp(P.pos.z / (PIPE.LEN * 0.9), 0, 1)) : lv === 'park' ? 19 : 23;
     if (!P.airborne) {
       this._popped = false;
       inp.tuck = P.speed < cap ? 1 : 0;
@@ -480,7 +483,6 @@ const Flick = {
       if (lv !== 'pipe') { inp.jump = true; inp.charge = 0.12; }   // the pipe's height comes from the speed
     }
     let f = this.pending; this.pending = null;
-    if (f && !P.airborne && f.y < 0 && !f.x) { inp.jump = true; inp.charge = 0.6; f = null; }    // flick up on snow = ollie
     if (f && !f.x && !f.y) f = null;
     inp.flick = f;
     if (this.tap) {
@@ -868,6 +870,7 @@ const Game = {
 
   restart() {
     this.perf.t = 0; this.perf.n = 0; this.perf.warm = 0; this.perf.low = 0;   // first window is shader warm-up
+    this.onPlan(null);                                     // no stale flick plan from the last run
     Input.jumpHeld = false; Input.jumpRelease = false;   // a key held into the run is not an ollie
     this.score = 0; this.distance = 0; this.topSpeed = 0; this.totalAir = 0;
     this.lands = 0; this.bestHit = 0; this.combo = 1; this.comboTimer = 0;
@@ -928,6 +931,19 @@ const Game = {
     this.showTrick(sw ? 'Ground 180 · switch' : 'Ground 180 · regular', pts);
   },
   onFlickTooLow() { this.msg('TOO LOW', 500); },
+  onFlickTooLate() { this.msg('TOO LATE — COMMITTED', 500); },
+  onPlanTiming(q, rushed) { this.msg(q > 0.97 ? 'PERFECT TIMING' : rushed ? 'RUSHED' : 'HESITANT', 600); },
+  /* flick mode: the trick being planned on the approach (null = cleared / launched) */
+  onPlan(p) {
+    const el = $('planHud'); if (!el) return;
+    if (!p) { el.classList.remove('on'); return; }
+    const flips = Math.round(Math.abs(p.flip) / (Math.PI * 2)), spins = Math.round(Math.abs(p.spin) / (Math.PI * 2));
+    const parts = [];
+    if (spins) parts.push(spins * 360);
+    if (flips) parts.push((['', '', 'Double ', 'Triple '][flips] || '') + (p.flip > 0 ? 'Backflip' : 'Frontflip'));
+    el.textContent = 'PLAN · ' + parts.join(' · ');
+    el.classList.add('on');
+  },
 
   /* butter / press finished: a clean hold scores and feeds the combo; a slip breaks it */
   onPress(type, t, clean, spin) {
@@ -977,7 +993,7 @@ const Game = {
   /* ---------------- tricks ---------------- */
   evalTrick() {
     const a = this.air;
-    const rot = Math.floor(Math.abs(a.spin) / Math.PI + 0.18);
+    const rot = Math.floor(Math.abs(a.spin) / Math.PI + 0.35);   // nearest 180 (a slightly short 1440 is still a 1440)
     const flips = Math.floor(Math.abs(a.flip) / (Math.PI * 2) + 0.12);
     const heldGrab = a.grab && a.grabT > Math.max(0.25, a.t * 0.45);
     if (rot < 1 && flips < 1 && a.t < (Level.cur.airMin || 1.25)) return;
