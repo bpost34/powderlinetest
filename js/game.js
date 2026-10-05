@@ -157,9 +157,8 @@ const Input = {
       el.addEventListener('pointerup', off); el.addEventListener('pointercancel', off);
       el.addEventListener('lostpointercapture', off);
     };
-    // virtual Xbox pad — same mapping as a real controller (pad.js)
-    hold('xA', 'jump'); hold('xRT', 'tuck'); hold('xLT', 'brake');
-    hold('xX', 'Indy'); hold('xB', 'method'); hold('xY', 'stale'); hold('xRB', 'mutegrab');
+    // virtual Xbox pad: A ollie, X/B/Y grabs (as on a real controller); tuck/brake live on the stick
+    hold('xA', 'jump'); hold('xX', 'Indy'); hold('xB', 'method'); hold('xY', 'stale');
     const tap = (id, fn) => $(id).addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); fn(); });
     tap('tP', () => Game.togglePause());
     tap('tR', () => { if (Game.state === 'play' || Game.state === 'pause') Game.restart(true); });

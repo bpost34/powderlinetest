@@ -165,7 +165,7 @@
     transition:transform .06s,background .06s;touch-action:none}
   .tbtn small{font-size:7.5px;letter-spacing:.14em;color:var(--dim);margin-top:3px;font-weight:700}
   .tbtn.held{background:rgba(95,226,255,.32);transform:scale(.93)}
-  /* ---- virtual Xbox controller: left stick, A/B/X/Y diamond, LT / RT / RB shoulders ---- */
+  /* ---- virtual Xbox controller: left stick (steer / tuck / brake) + A/B/X/Y diamond ---- */
   #touch{--gx:max(18px,env(safe-area-inset-right));--gl:max(18px,env(safe-area-inset-left));
     --gb:max(20px,env(safe-area-inset-bottom));--stick:min(150px,37vw);--dia:min(172px,44vw);--fb:calc(var(--dia) * .34)}
   #abxy{position:absolute;right:var(--gx);bottom:var(--gb);width:var(--dia);height:var(--dia);pointer-events:none}
@@ -179,14 +179,6 @@
   #xY{--xc:#f5c638;left:50%;top:0;margin-left:calc(var(--fb) / -2)}
   #xX{--xc:#4c9bff;left:0;top:50%;margin-top:calc(var(--fb) / -2)}
   #xB{--xc:#ff5a4c;right:0;top:50%;margin-top:calc(var(--fb) / -2)}
-  .xsh{height:36px;border-radius:12px 12px 8px 8px;width:78px;padding:0;flex-direction:row;gap:6px;
-    background:linear-gradient(rgba(48,52,62,.62),rgba(14,16,22,.62));border:1.5px solid rgba(255,255,255,.16)}
-  .xsh b{font-size:12px;font-weight:900;letter-spacing:.04em;color:#eaf6ff}
-  .xsh small{margin:0;font-size:7.5px}
-  .xsh.held{background:rgba(95,226,255,.32);border-color:rgba(95,226,255,.8)}
-  #xLT{left:var(--gl);bottom:calc(var(--gb) + var(--stick) + 14px)}
-  #xRT{right:var(--gx);bottom:calc(var(--gb) + var(--dia) + 12px)}
-  #xRB{right:calc(var(--gx) + 88px);bottom:calc(var(--gb) + var(--dia) + 12px);border-radius:10px}
   #steerPad{position:absolute;left:var(--gl);bottom:var(--gb);
     width:var(--stick);height:var(--stick);border-radius:50%;border:1.5px solid rgba(255,255,255,.14);
     background:radial-gradient(circle,rgba(14,16,22,.30) 0 55%,rgba(14,16,22,.55) 100%);
@@ -261,7 +253,7 @@
     body.touch #tM.sbtn{top:calc(max(12px,env(safe-area-inset-top)) + 198px)}
     body.touch.playing #muteBtn{top:calc(max(12px,env(safe-area-inset-top)) + 244px)}
     body.touch.playing #atmosBtn{top:calc(max(12px,env(safe-area-inset-top)) + 290px)}
-    body.touch #center{bottom:calc(max(20px,env(safe-area-inset-bottom)) + 280px)}
+    body.touch #center{bottom:calc(max(20px,env(safe-area-inset-bottom)) + 250px)}
     body.touch #lives{top:calc(max(12px,env(safe-area-inset-top)) + 14px)}
     body.touch .corner.tl, body.touch .corner.tr{padding-top:max(16px,env(safe-area-inset-top))}
     /* menu: level cards two-up */
@@ -425,8 +417,7 @@
   <div class="keys touch-only">
     <div><i class="key">L stick</i></div><div>◀ ▶ carve (spin in air) · ▲ tuck / front flip · ▼ brake / back flip</div>
     <div><i class="key">A</i></div><div>Hold to tuck &amp; load · release to ollie</div>
-    <div><i class="key">RT</i> <i class="key">LT</i></div><div>Tuck · brake (front / back flip in the air)</div>
-    <div><i class="key">X</i> <i class="key">B</i> <i class="key">Y</i> <i class="key">RB</i></div><div>Grabs (hold in air)</div>
+    <div><i class="key">X</i> <i class="key">B</i> <i class="key">Y</i></div><div>Grabs (hold in air)</div>
     <div><i class="key">drag</i></div><div>Swipe open screen to look around</div>
   </div>
   <div class="keys pad-only">
@@ -490,9 +481,6 @@
 
 <div id="touch">
   <div id="steerPad"><span class="arr l">◀</span><span class="arr r">▶</span><span class="arr u">▲<small>tuck · front</small></span><span class="arr d"><small>brake · back</small>▼</span><div id="steerKnob"></div></div>
-  <div class="tbtn xsh" id="xLT"><b>LT</b><small>brake</small></div>
-  <div class="tbtn xsh" id="xRB"><b>RB</b><small>grab</small></div>
-  <div class="tbtn xsh" id="xRT"><b>RT</b><small>tuck</small></div>
   <div id="abxy">
     <div class="tbtn xbtn" id="xY"><b>Y</b><small>grab</small></div>
     <div class="tbtn xbtn" id="xX"><b>X</b><small>grab</small></div>
@@ -6187,9 +6175,8 @@ const Input = {
       el.addEventListener('pointerup', off); el.addEventListener('pointercancel', off);
       el.addEventListener('lostpointercapture', off);
     };
-    // virtual Xbox pad — same mapping as a real controller (pad.js)
-    hold('xA', 'jump'); hold('xRT', 'tuck'); hold('xLT', 'brake');
-    hold('xX', 'Indy'); hold('xB', 'method'); hold('xY', 'stale'); hold('xRB', 'mutegrab');
+    // virtual Xbox pad: A ollie, X/B/Y grabs (as on a real controller); tuck/brake live on the stick
+    hold('xA', 'jump'); hold('xX', 'Indy'); hold('xB', 'method'); hold('xY', 'stale');
     const tap = (id, fn) => $(id).addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); fn(); });
     tap('tP', () => Game.togglePause());
     tap('tR', () => { if (Game.state === 'play' || Game.state === 'pause') Game.restart(true); });
