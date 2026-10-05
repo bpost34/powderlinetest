@@ -6,13 +6,32 @@
 
 const STRIDE = 9;
 
+/* ---------------- rider palette slots ----------------
+   Rider and board meshes carry a second vertex stream, aux = (slot, ao, v):
+     slot : which outfit item the vertex belongs to (RS.*). The rider shader
+            looks the colour up in Outfit.palette[slot] and the material
+            (cloth / gloss / lens) in its per-slot table, so recolouring the
+            outfit is just a uniform update, never a mesh rebuild.
+     ao   : baked ambient occlusion, 0..1 (1 = open)
+     v    : distance along the part's main axis in metres (seams, quilting)
+   The vertex colour is then a multiplier on the palette colour (white = as is,
+   darker = a fixed shade detail such as a seam or a sole).                  */
+const RS = {
+  JACKET: 0, ACCENT: 1, PANTS: 2, GLOVES: 3, HELMET: 4, LENS: 5,
+  BOOTS: 6, BOARD_TOP: 7, BOARD_BASE: 8, BINDING: 9, TRIM: 10, MASK: 11
+};
+const RS_COUNT = 12;
+
 /* ---------------- primitive builders ---------------- */
-function Geo() {
-  return { v: [], i: [] };
+/* Geo({ aux: true }) also records the aux stream: set g.slot / g.ao / g.vv
+   before emitting vertices (they apply to every vertex until changed). */
+function Geo(opts) {
+  return { v: [], i: [], aux: opts && opts.aux ? [] : null, slot: 0, ao: 1, vv: 0 };
 }
 function geoVert(g, x, y, z, nx, ny, nz, r, gg, b) {
   const o = g.v.length;
   g.v.push(x, y, z, nx, ny, nz, r, gg, b);
+  if (g.aux) g.aux.push(g.slot, g.ao, g.vv);
   return o / STRIDE;
 }
 function geoTri(g, a, b, c) { g.i.push(a, b, c); }
@@ -96,17 +115,172 @@ function geoCyl(g, cx, cy0, cz, r0, r1, y1, col, seg = 10, capTop = true, capBot
   }
 }
 
+/* ---------------- rider / board surface helpers ----------------
+   Rider and board parts are lofts, grids and thin shells with smooth numeric
+   normals. Triangles are wound to agree with their vertex normals, so a
+   builder never has to care which way a strip runs. Points are [x, y, z]. */
+const p3sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const p3cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const p3dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const p3norm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+
+// triangle wound so its face normal agrees with the summed vertex normals; slivers are dropped
+function geoTriN(g, a, b, c) {
+  const V = g.v, A = a * STRIDE, B = b * STRIDE, C = c * STRIDE;
+  const ux = V[B] - V[A], uy = V[B + 1] - V[A + 1], uz = V[B + 2] - V[A + 2];
+  const wx = V[C] - V[A], wy = V[C + 1] - V[A + 1], wz = V[C + 2] - V[A + 2];
+  const fx = uy * wz - uz * wy, fy = uz * wx - ux * wz, fz = ux * wy - uy * wx;
+  if (fx * fx + fy * fy + fz * fz < 1e-16) return;
+  const d = fx * (V[A + 3] + V[B + 3] + V[C + 3]) + fy * (V[A + 4] + V[B + 4] + V[C + 4]) + fz * (V[A + 5] + V[B + 5] + V[C + 5]);
+  if (d < 0) g.i.push(a, c, b); else g.i.push(a, b, c);
+}
+
+/* local frame {o, X, Y, Z}: Y along `y`, Z as close to `z` as possible */
+function geoFrame(o, y, z) {
+  const Y = p3norm(y), Z = p3norm(p3sub(z, Y.map(v => v * p3dot(z, Y))));
+  return { o, X: p3cross(Y, Z), Y, Z };
+}
+
+/* Grid surface. P[row][col] = point, A[row] = { s: slot, c: colour multiplier
+   (number or rgb), ao, v }. A row whose slot differs from the row below (or
+   flagged `hard`) is emitted twice so each band keeps its own attributes.
+   o.wrap closes the columns into a ring; o.hint(p, j, i) is a rough outward
+   direction that only picks the normal's sign; o.M = frame applied at the end. */
+function geoSurf(g, P, A, o) {
+  const R = P.length, C = P[0].length, wrap = !!o.wrap, M = o.M;
+  const cen = (j) => { const s = [0, 0, 0]; for (const p of P[j]) { s[0] += p[0]; s[1] += p[1]; s[2] += p[2]; } return s.map(v => v / C); };
+  const axis = p3norm(p3sub(cen(R - 1), cen(0)));
+  const N = [];
+  let sgn = 0;
+  for (let j = 0; j < R; j++) {
+    N.push([]);
+    for (let i = 0; i < C; i++) {
+      const il = wrap ? (i + C - 1) % C : Math.max(0, i - 1), ir = wrap ? (i + 1) % C : Math.min(C - 1, i + 1);
+      const du = p3sub(P[j][ir], P[j][il]);
+      const dv = p3sub(P[Math.min(R - 1, j + 1)][i], P[Math.max(0, j - 1)][i]);
+      const n = p3cross(dv, du);
+      if (Math.hypot(n[0], n[1], n[2]) < 1e-12) { N[j].push(null); continue; }   // pole
+      sgn += p3dot(p3norm(n), o.hint ? o.hint(P[j][i], j, i) : [0, 0, 0]);
+      N[j].push(p3norm(n));
+    }
+  }
+  for (let j = 0; j < R; j++) for (let i = 0; i < C; i++) {
+    if (!N[j][i]) N[j][i] = axis.map(v => v * (j === 0 ? -1 : 1));
+    else if (sgn < 0) N[j][i] = N[j][i].map(v => -v);
+  }
+  const emit = (j, at) => {
+    g.slot = at.s; g.ao = at.ao; g.vv = at.v;
+    const c = typeof at.c === 'number' ? [at.c, at.c, at.c] : at.c, ids = [];
+    for (let i = 0; i < C; i++) {
+      let p = P[j][i], n = N[j][i];
+      if (M) {
+        p = [M.o[0] + M.X[0] * p[0] + M.Y[0] * p[1] + M.Z[0] * p[2], M.o[1] + M.X[1] * p[0] + M.Y[1] * p[1] + M.Z[1] * p[2], M.o[2] + M.X[2] * p[0] + M.Y[2] * p[1] + M.Z[2] * p[2]];
+        n = p3norm([M.X[0] * n[0] + M.Y[0] * n[1] + M.Z[0] * n[2], M.X[1] * n[0] + M.Y[1] * n[1] + M.Z[1] * n[2], M.X[2] * n[0] + M.Y[2] * n[1] + M.Z[2] * n[2]]);
+      }
+      ids.push(geoVert(g, p[0], p[1], p[2], n[0], n[1], n[2], c[0], c[1], c[2]));
+    }
+    return ids;
+  };
+  const lo = [], hi = [];                          // row as the bottom / top edge of a band
+  for (let j = 0; j < R; j++) {
+    const a = A[j], b = A[j - 1];
+    if (j > 0 && (a.hard || a.s !== b.s)) { hi[j] = emit(j, Object.assign({}, b, { v: a.v })); lo[j] = emit(j, a); }
+    else hi[j] = lo[j] = emit(j, a);
+  }
+  for (let j = 0; j < R - 1; j++) for (let i = 0; i < (wrap ? C : C - 1); i++) {
+    const i1 = (i + 1) % C, a = lo[j][i], b = lo[j][i1], c = hi[j + 1][i], d = hi[j + 1][i1];
+    geoTriN(g, a, c, b); geoTriN(g, b, c, d);
+  }
+}
+
+/* Elliptic loft along +Y. rings = [{ y, a (half X), b (half Z, default a),
+   x, z (centre), s, c, ao, v, hard }]; s is inherited down the list. A ring
+   with a = 0 closes the end. o.warp(p, t, ring, j) may move points; o.M frame. */
+function rLoft(g, rings, seg, o = {}) {
+  const P = [], A = [];
+  let s = o.s !== undefined ? o.s : g.slot;
+  rings.forEach((r, j) => {
+    if (r.s !== undefined) s = r.s;
+    const row = [], b = r.b !== undefined ? r.b : r.a;
+    for (let i = 0; i < seg; i++) {
+      const t = i / seg * TAU;
+      let p = [(r.x || 0) + Math.cos(t) * r.a, r.y, (r.z || 0) + Math.sin(t) * b];
+      if (o.warp) p = o.warp(p, t, r, j);
+      row.push(p);
+    }
+    P.push(row);
+    A.push({ s, c: r.c !== undefined ? r.c : 1, ao: r.ao !== undefined ? r.ao : 1, v: r.v !== undefined ? r.v : r.y, hard: !!r.hard });
+  });
+  geoSurf(g, P, A, { wrap: true, M: o.M, hint: (p, j) => [p[0] - (rings[j].x || 0), 0, p[2] - (rings[j].z || 0)] });
+}
+
+/* round tube along +Y for the m4limb parts: prof = [[y, radius, extra], ...];
+   len = the part's length in metres, so vv comes out in metres */
+function rTube(g, prof, seg, len, v0 = 0) {
+  rLoft(g, prof.map(([y, r, e]) => Object.assign({ y, a: r, v: (y - v0) * len }, e)), seg);
+}
+
+/* Thin closed slab between an outer and an inner grid of the same shape:
+   both faces plus the four edge walls (attributes from A, one per row). */
+function geoShell(g, Po, Pi, A, M) {
+  const R = Po.length, C = Po[0].length;
+  geoSurf(g, Po, A, { M, hint: (p, j, i) => p3sub(Po[j][i], Pi[j][i]) });
+  geoSurf(g, Pi, A, { M, hint: (p, j, i) => p3sub(Pi[j][i], Po[j][i]) });
+  const wall = (pts, outs, at) => geoSurf(g, [pts.map(q => q[0]), pts.map(q => q[1])], [at, at],
+    { M, hint: (p, j, i) => outs[i] });
+  for (const j of [0, R - 1]) {
+    const jn = j ? j - 1 : 1;
+    wall(Po[j].map((p, i) => [Pi[j][i], p]), Po[j].map((p, i) => p3sub(p, Po[jn][i])), A[j]);
+  }
+  for (const i of [0, C - 1]) {
+    const inn = i ? i - 1 : 1;
+    const pts = [], outs = [];
+    for (let j = 0; j < R; j++) { pts.push([Pi[j][i], Po[j][i]]); outs.push(p3sub(Po[j][i], Po[j][inn])); }
+    // walls run along the rows here, so attributes are constant per wall
+    geoSurf(g, [pts.map(q => q[0]), pts.map(q => q[1])], [A[0], A[0]], { M, hint: (p, jj, ii) => outs[ii] });
+  }
+}
+
+/* multiply the baked AO of vertices [from, end) by fn(x, y, z) */
+function bakeAO(g, from, fn) {
+  for (let k = from, n = g.v.length / STRIDE; k < n; k++)
+    g.aux[k * 3 + 1] *= fn(g.v[k * STRIDE], g.v[k * STRIDE + 1], g.v[k * STRIDE + 2]);
+}
+
+/* ---------------- boot shape (shared by the boot mesh and the binding straps) ----------------
+   Boot frame: +X = board nose, +Y = up, +Z = toes, origin at the sole.
+   Rows: [y, half X, half Z, centre Z]. The toe box is a long low ellipse, the
+   shaft a short round one, so the lofted rings give a soft-boot instep. */
+const BOOT_SECT = [
+  [0.000, 0.050, 0.136, 0.026], [0.014, 0.058, 0.149, 0.026], [0.032, 0.061, 0.152, 0.025],
+  [0.062, 0.063, 0.143, 0.022], [0.092, 0.063, 0.118, 0.010], [0.122, 0.062, 0.092, -0.004],
+  [0.155, 0.062, 0.080, -0.012], [0.195, 0.064, 0.075, -0.015], [0.232, 0.067, 0.077, -0.015]
+];
+function bootSect(y) {
+  const S = BOOT_SECT;
+  let k = 0;
+  while (k < S.length - 2 && S[k + 1][0] < y) k++;
+  const u = clamp((y - S[k][0]) / (S[k + 1][0] - S[k][0]), 0, 1);
+  return [lerp(S[k][1], S[k + 1][1], u), lerp(S[k][2], S[k + 1][2], u), lerp(S[k][3], S[k + 1][3], u)];
+}
+// point on the boot surface at height y, angle t (0 = +X, π/2 = toes), pushed out by `off`
+function bootPt(y, t, off) {
+  const [a, b, z] = bootSect(y), c = Math.cos(t), s = Math.sin(t);
+  const n = p3norm([c / a, 0, s / b]);
+  return [c * a + n[0] * off, y, z + s * b + n[2] * off];
+}
+
 /* ---------------- the snowboard ---------------- */
-/* Local space: +X = nose, +Y = up from base, +Z = right edge. Length 3.05 */
+/* Local space: +X = nose, +Y = up from base, +Z = right edge. Length 1.60 */
 function buildBoard() {
-  const g = Geo();
+  const g = Geo({ aux: true });
   const L = 1.60, W = 0.15, T = 0.03;     // a real board: 160 cm, ~25 cm waist
   /* Outline: a sidecut body (widest at the contact points, narrower at the waist)
      closed by elliptical nose and tail caps, so the ends are round, not pointed.
      Samples are listed along x; caps get extra samples for a smooth curve. */
   const E = 0.17;                                  // cap length (nose/tail curve)
   const xs = [], ws = [];
-  const CAP = 10, BODY = 22, xT = -L / 2 + E, xN = L / 2 - E;
+  const CAP = 10, BODY = 28, xT = -L / 2 + E, xN = L / 2 - E;
   for (let k = CAP; k >= 1; k--) {                 // tail cap: tip → contact point
     const ph = k / CAP * Math.PI / 2;
     xs.push(xT - E * Math.sin(ph)); ws.push(W * Math.cos(ph));
@@ -126,12 +300,36 @@ function buildBoard() {
     const rock = 0.05 * Math.pow(sstep(0.82, 1, t), 2) + 0.045 * Math.pow(sstep(0.18, 0, t), 2);
     return c + rock;
   };
-  const TOPC = [0.06, 0.62, 0.74], BOTC = [0.96, 0.94, 0.90], EDGE = [0.10, 0.11, 0.15];
-  const top = [], bot = [];
+  /* top graphic as a shade multiplier on the BOARD_TOP colour: a light centre
+     stripe nose to tail, a chevron near each end pointing at the nose, and
+     darker tips. f = position across the board, -1..1 */
+  const graphic = (x, f) => {
+    const xn = x / (L / 2), af = Math.abs(f);
+    let k = 0.56;
+    k = lerp(k, 1.0, 1 - sstep(0.16, 0.30, af));
+    for (const c of [0.50, -0.62]) k = lerp(k, 1.0, 1 - sstep(0.05, 0.10, Math.abs(xn - c + 0.32 * af)));
+    k = lerp(k, 0.48, sstep(0.80, 0.92, Math.abs(xn)));
+    return k;
+  };
+  const COLS = 7;                                  // top-surface vertices across the width
+  const nearBinding = (x) => 1 - 0.18 * Math.max(sstep(0.16, 0.08, Math.abs(x - 0.27)), sstep(0.16, 0.08, Math.abs(x + 0.27)));
+  g.slot = RS.BOARD_TOP; g.ao = 1;
+  const top = [];
   for (let i = 0; i < n; i++) {
-    const x = xs[i], w = ws[i], y = baseY(x);
-    top.push([geoVert(g, x, y + T, -w, 0, 1, 0, ...TOPC), geoVert(g, x, y + T, w, 0, 1, 0, ...TOPC)]);
-    bot.push([geoVert(g, x, y, -w, 0, -1, 0, ...BOTC), geoVert(g, x, y, w, 0, -1, 0, ...BOTC)]);
+    const x = xs[i], w = ws[i], y = baseY(x), row = [];
+    g.vv = x;
+    for (let c = 0; c < COLS; c++) {
+      const f = c / (COLS - 1) * 2 - 1, k = graphic(x, f);
+      g.ao = nearBinding(x);
+      row.push(geoVert(g, x, y + T, f * w, 0, 1, 0, k, k, k));
+    }
+    top.push(row);
+  }
+  g.slot = RS.BOARD_BASE; g.ao = 1;
+  const bot = [];
+  for (let i = 0; i < n; i++) {
+    g.vv = xs[i];
+    bot.push([geoVert(g, xs[i], baseY(xs[i]), -ws[i], 0, -1, 0, 1, 1, 1), geoVert(g, xs[i], baseY(xs[i]), ws[i], 0, -1, 0, 1, 1, 1)]);
   }
   // rail normal at sample i: outward from the outline z = ±w(x), i.e. (-dw/dx, 0, ±1)
   const slope = (i) => {
@@ -140,25 +338,67 @@ function buildBoard() {
   };
   for (let i = 0; i < n - 1; i++) {
     // top surface / bottom surface (winding flipped)
-    geoQuad(g, top[i][0], top[i][1], top[i + 1][1], top[i + 1][0]);
+    for (let c = 0; c < COLS - 1; c++) geoQuad(g, top[i][c], top[i][c + 1], top[i + 1][c + 1], top[i + 1][c]);
     geoQuad(g, bot[i][0], bot[i + 1][0], bot[i + 1][1], bot[i][1]);
+  }
+  g.slot = RS.TRIM; g.ao = 1;
+  for (let i = 0; i < n - 1; i++) {
     // rails
     const xA = xs[i], xB = xs[i + 1], wA = ws[i], wB = ws[i + 1];
     const yA = baseY(xA), yB = baseY(xB), sA = slope(i), sB = slope(i + 1);
     for (const sgn of [-1, 1]) {
       const nA = V3.norm(V3(), V3(-sA, 0, sgn)), nB = V3.norm(V3(), V3(-sB, 0, sgn));
-      const a = geoVert(g, xA, yA + T, sgn * wA, nA.x, 0.3, nA.z, ...EDGE);
-      const b = geoVert(g, xA, yA, sgn * wA, nA.x, -0.3, nA.z, ...EDGE);
-      const c = geoVert(g, xB, yB, sgn * wB, nB.x, -0.3, nB.z, ...EDGE);
-      const d = geoVert(g, xB, yB + T, sgn * wB, nB.x, 0.3, nB.z, ...EDGE);
+      const a = geoVert(g, xA, yA + T, sgn * wA, nA.x, 0.3, nA.z, 1, 1, 1);
+      const b = geoVert(g, xA, yA, sgn * wA, nA.x, -0.3, nA.z, 0.8, 0.8, 0.8);
+      const c = geoVert(g, xB, yB, sgn * wB, nB.x, -0.3, nB.z, 0.8, 0.8, 0.8);
+      const d = geoVert(g, xB, yB + T, sgn * wB, nB.x, 0.3, nB.z, 1, 1, 1);
       if (sgn < 0) geoQuad(g, a, d, c, b); else geoQuad(g, a, b, c, d);
     }
   }
-  // bindings
+  // bindings: base plate + disc, curved highback, ankle and toe straps hugging the boot
   for (const bx of [-0.27, 0.27]) {
     const y0 = baseY(bx) + T;
-    geoBox(g, bx, y0 + 0.012, 0.01, 0.20, 0.024, W * 1.75, [0.10, 0.11, 0.14]);   // base plate
-    geoBox(g, bx, y0 + 0.10, -0.125, 0.17, 0.17, 0.03, [0.10, 0.11, 0.14]);       // highback (heel side)
+    const M = { o: [bx, 0.03, 0], X: [1, 0, 0], Y: [0, 1, 0], Z: [0, 0, 1] };   // the boot frame (player.js puts boots at y = 0.03)
+    g.slot = RS.TRIM; g.ao = 0.8; g.vv = 0;
+    geoCyl(g, bx, y0, 0.02, 0.085, 0.085, y0 + 0.008, [1, 1, 1], 14, true, false);    // mounting disc
+    g.slot = RS.BINDING; g.ao = 0.85;
+    geoBox(g, bx, y0 + 0.014, 0.015, 0.15, 0.016, 0.33, [1, 1, 1]);                  // base plate
+    const A = (c, ao) => ({ s: RS.BINDING, c, ao, v: 0 });
+    // highback: wraps the heel from side to side, tallest behind the calf
+    const HB = 7, HR = 4, Po = [], Pi = [], Ah = [];
+    for (let r = 0; r <= HR; r++) {
+      const ro = [], ri = [];
+      for (let k = 0; k <= HB; k++) {
+        const t = -Math.PI / 2 + (k / HB - 0.5) * 2.5;          // centred on -Z (the heel)
+        const h = 0.07 + 0.17 * Math.pow(Math.cos((k / HB - 0.5) * Math.PI), 1.4);
+        const y = 0.012 + h * r / HR;
+        const lean = y * 0.10;                                   // forward lean against the calf
+        const po = bootPt(y, t, 0.024), pi = bootPt(y, t, 0.008);
+        po[2] -= lean * 0.2; pi[2] -= lean * 0.2;
+        ro.push(po); ri.push(pi);
+      }
+      Po.push(ro); Pi.push(ri); Ah.push(A(r === HR ? 0.8 : 1, lerp(0.7, 1, r / HR)));
+    }
+    geoShell(g, Po, Pi, Ah, M);
+    // straps: bands around the front of the boot, low at the sides, high over the top
+    const strap = (yS, yT, wid, t0, t1) => {
+      const K = 7, So = [], Si = [];
+      for (const e of [-0.5, 0.5]) {
+        const ro = [], ri = [];
+        for (let k = 0; k <= K; k++) {
+          const t = lerp(t0, t1, k / K), y = lerp(yS, yT, Math.pow(Math.sin(t), 2)) + e * wid;
+          ro.push(bootPt(y, t, 0.014)); ri.push(bootPt(y, t, 0.002));
+        }
+        So.push(ro); Si.push(ri);
+      }
+      geoShell(g, So, Si, [A(1, 1), A(1, 1)], M);
+      g.slot = RS.TRIM;                                          // buckle on the toe-edge-facing side
+      const bp = bootPt(lerp(yS, yT, 0.5), (t0 + t1) / 2 - 0.55, 0.018);
+      geoBox(g, bx + bp[0], 0.03 + bp[1], bp[2], 0.012, 0.022, 0.03, [1, 1, 1]);
+      g.slot = RS.BINDING;
+    };
+    strap(0.10, 0.165, 0.045, 0.15, Math.PI - 0.15);           // ankle strap over the instep
+    strap(0.035, 0.075, 0.03, 0.35, Math.PI - 0.35);           // toe cap strap
   }
   return g;
 }
@@ -168,100 +408,242 @@ function buildBoard() {
      torso / pelvis / head : +Y up, +Z = the way the chest/face points,
                              +X = the lead shoulder side.  Origin at the base.
      limb meshes           : unit radius, unit length along +Y (m4limb scales them).
-     boot                  : +X = board nose, +Z = toes, origin at the sole.       */
+     mitten                : origin at the wrist, +Y up the forearm, +X = thumb side.
+     boot                  : +X = board nose, +Z = toes, origin at the sole.
+     scarf                 : unit strip along +Y, width on X, thickness on Z.
+   Colours come from the outfit palette per slot (RS.*); the vertex colour is
+   only a shade multiplier, using these greys for fixed details.             */
 const RiderGeo = {};
 const RIDER_COL = {
-  jacket: [0.96, 0.40, 0.10], accent: [1.00, 0.84, 0.22], pants: [0.11, 0.14, 0.24],
-  glove: [0.08, 0.08, 0.10], helmet: [0.17, 0.18, 0.22], lens: [1.00, 0.55, 0.12],
-  skin: [0.86, 0.64, 0.50], boot: [0.20, 0.20, 0.24]
+  base: 1.0, seam: 0.62, edge: 0.55, under: 0.42, inner: 0.30, sole: 0.34
 };
-
-/* ellipse loft along +Y: rings = [[y, halfX, halfZ, colour], ...], closed top/bottom */
-function geoLoft(g, rings, seg, cx = 0, cz = 0) {
-  const base = g.v.length / STRIDE;
-  for (let j = 0; j < rings.length; j++) {
-    const [y, a, b, col] = rings[j];
-    const jp = rings[Math.max(0, j - 1)], jn = rings[Math.min(rings.length - 1, j + 1)];
-    const dy = (jn[0] - jp[0]) || 1, da = (jn[1] - jp[1]) / dy, db = (jn[2] - jp[2]) / dy;
-    for (let i = 0; i <= seg; i++) {
-      const t = i / seg * TAU, c = Math.cos(t), sn = Math.sin(t);
-      // outward normal of an elliptic section, tilted by the taper
-      let nx = c / Math.max(a, 1e-3), nz = sn / Math.max(b, 1e-3);
-      const nl = Math.hypot(nx, nz); nx /= nl; nz /= nl;
-      const ny = -(da * Math.abs(c) + db * Math.abs(sn));
-      const l = Math.hypot(nx, ny, nz);
-      geoVert(g, cx + c * a, y, cz + sn * b, nx / l, ny / l, nz / l, col[0], col[1], col[2]);
-    }
-  }
-  const w = seg + 1;
-  for (let j = 0; j < rings.length - 1; j++) for (let i = 0; i < seg; i++) {
-    const a = base + j * w + i, b = a + 1, c = a + w, d = c + 1;
-    geoTri(g, a, c, b); geoTri(g, b, c, d);
-  }
-  // caps
-  const top = rings[rings.length - 1], bot = rings[0];
-  const ct = geoVert(g, cx, top[0], cz, 0, 1, 0, top[3][0], top[3][1], top[3][2]);
-  const tb = g.v.length / STRIDE;
-  for (let i = 0; i <= seg; i++) { const t = i / seg * TAU; geoVert(g, cx + Math.cos(t) * top[1], top[0], cz + Math.sin(t) * top[2], 0, 1, 0, top[3][0], top[3][1], top[3][2]); }
-  for (let i = 0; i < seg; i++) geoTri(g, ct, tb + i + 1, tb + i);
-  const cb = geoVert(g, cx, bot[0], cz, 0, -1, 0, bot[3][0], bot[3][1], bot[3][2]);
-  const bb = g.v.length / STRIDE;
-  for (let i = 0; i <= seg; i++) { const t = i / seg * TAU; geoVert(g, cx + Math.cos(t) * bot[1], bot[0], cz + Math.sin(t) * bot[2], 0, -1, 0, bot[3][0], bot[3][1], bot[3][2]); }
-  for (let i = 0; i < seg; i++) geoTri(g, cb, bb + i, bb + i + 1);
-}
 
 function buildRider() {
   const C = RIDER_COL;
-  // jacket: hem → waist → chest → broad shoulders → collar. Wide across X, shallow in Z.
-  const t = Geo();
-  geoLoft(t, [
-    [0.00, 0.165, 0.125, C.jacket], [0.08, 0.160, 0.120, C.jacket], [0.22, 0.175, 0.125, C.jacket],
-    [0.36, 0.205, 0.135, C.jacket], [0.44, 0.225, 0.135, C.accent], [0.47, 0.225, 0.130, C.accent],
-    [0.52, 0.215, 0.120, C.jacket], [0.57, 0.150, 0.095, C.jacket], [0.60, 0.075, 0.070, C.jacket]
-  ], 14);
-  geoSphere(t, 0.205, 0.50, 0, 0.085, C.jacket, 10, 6);                 // shoulder caps
-  geoSphere(t, -0.205, 0.50, 0, 0.085, C.jacket, 10, 6);
-  geoBox(t, 0, 0.30, 0.128, 0.025, 0.42, 0.012, C.glove);                // front zip
+  const SEG = 12;
+
+  /* jacket: puffy A-line torso, wider than deep. From the bottom: inside of the
+     hem (dark), the hem lip that hangs over the pants, an accent hem band, the
+     quilted body, an accent shoulder yoke, the collar. vv = height, for the
+     shader's quilting baffles. */
+  const t = Geo({ aux: true });
+  const J = RS.JACKET, AC = RS.ACCENT;
+  const TORSO = [
+    { y: 0.020, a: 0, s: J, c: C.inner, ao: 0.25 },
+    { y: -0.030, a: 0.150, b: 0.112, c: C.inner, ao: 0.3 },
+    { y: -0.068, a: 0.182, b: 0.140, c: C.under, ao: 0.42 },
+    { y: -0.078, a: 0.194, b: 0.151, c: C.edge, ao: 0.6 },
+    { y: -0.066, a: 0.199, b: 0.156, s: AC, ao: 0.85 },
+    { y: -0.026, a: 0.197, b: 0.154, ao: 0.9 },
+    { y: -0.014, a: 0.195, b: 0.152, s: J, ao: 0.9 },
+    { y: 0.060, a: 0.188, b: 0.146 },
+    { y: 0.150, a: 0.186, b: 0.144 },
+    { y: 0.250, a: 0.199, b: 0.153 },
+    { y: 0.340, a: 0.215, b: 0.163, z: 0.006 },
+    { y: 0.410, a: 0.226, b: 0.164, z: 0.006 },
+    { y: 0.462, a: 0.230, b: 0.157, z: 0.003, s: AC },
+    { y: 0.490, a: 0.230, b: 0.150 },
+    { y: 0.535, a: 0.210, b: 0.132 },
+    { y: 0.572, a: 0.162, b: 0.110 },
+    { y: 0.598, a: 0.112, b: 0.098 },
+    { y: 0.614, a: 0.094, b: 0.092, s: J },
+    { y: 0.668, a: 0.090, b: 0.090 },
+    { y: 0.692, a: 0.086, b: 0.086, c: C.edge },
+    { y: 0.684, a: 0.068, b: 0.068, c: C.inner, ao: 0.3 },
+    { y: 0.640, a: 0, c: C.inner, ao: 0.3 }
+  ];
+  rLoft(t, TORSO, 16);
+  // armpits and the small of the back sit in the shade of the arms / bend
+  bakeAO(t, 0, (x, y, z) => 1 - 0.35 * sstep(0.15, 0.21, Math.abs(x)) * sstep(0.18, 0.30, y) * (1 - sstep(0.40, 0.48, y)));
+  // padded shoulder caps (part of the yoke); their lower half hides inside the sleeve top
+  let v0 = t.v.length / STRIDE;
+  t.slot = AC; t.ao = 1; t.vv = 0.48;
+  geoSphere(t, 0.198, 0.492, 0.0, 0.080, [1, 1, 1], 10, 6, [1.0, 0.85, 0.95]);
+  geoSphere(t, -0.198, 0.492, 0.0, 0.080, [1, 1, 1], 10, 6, [1.0, 0.85, 0.95]);
+  bakeAO(t, v0, (x, y) => lerp(0.6, 1, sstep(0.44, 0.50, y)));
+  // hood rolled up behind the collar: two squashed lumps, shaded underneath
+  v0 = t.v.length / STRIDE;
+  t.slot = J; t.vv = 0.60;
+  geoSphere(t, 0, 0.630, -0.092, 0.125, [1, 1, 1], 10, 5, [1.0, 0.48, 0.55]);
+  geoSphere(t, 0, 0.600, -0.122, 0.095, [1, 1, 1], 8, 5, [1.0, 0.55, 0.50]);
+  bakeAO(t, v0, (x, y) => lerp(0.45, 1, sstep(0.56, 0.66, y)));
+  // front zip: a thin dark slab following the chest profile
+  {
+    const zr = TORSO.slice(4, 18).filter(r => r.a > 0), Zo = [], Zi = [], Az = [];
+    for (const r of zr) {
+      const zf = (r.z || 0) + r.b;
+      Zo.push([[-0.008, r.y, zf + 0.004], [0.008, r.y, zf + 0.004]]);
+      Zi.push([[-0.008, r.y, zf - 0.004], [0.008, r.y, zf - 0.004]]);
+      Az.push({ s: RS.TRIM, c: 1, ao: 1, v: r.y });
+    }
+    geoShell(t, Zo, Zi, Az);
+  }
   RiderGeo.torso = t;
 
-  // pelvis / seat of the pants, belt on top
-  const pv = Geo();
-  geoLoft(pv, [
-    [-0.17, 0.150, 0.115, C.pants], [-0.06, 0.165, 0.125, C.pants],
-    [0.00, 0.165, 0.125, C.glove], [0.03, 0.160, 0.122, C.glove]
+  // seat of the baggy pants (the jacket hem covers the top)
+  const pv = Geo({ aux: true });
+  rLoft(pv, [
+    { y: -0.215, a: 0, s: RS.PANTS, ao: 0.5 },
+    { y: -0.205, a: 0.085, b: 0.072, ao: 0.55 },
+    { y: -0.170, a: 0.140, b: 0.112, ao: 0.75 },
+    { y: -0.110, a: 0.172, b: 0.134 },
+    { y: -0.040, a: 0.175, b: 0.136, ao: 0.8 },
+    { y: 0.020, a: 0.167, b: 0.129, ao: 0.5 },
+    { y: 0.050, a: 0.130, b: 0.100, ao: 0.4 },
+    { y: 0.060, a: 0, ao: 0.4 }
   ], 14);
   RiderGeo.pelvis = pv;
 
-  // limbs: unit-radius tapered tubes, scaled per part
-  const limb = (col, r1) => { const g = Geo(); geoCyl(g, 0, 0, 0, 1, r1, 1, col, 10, true, true); return g; };
-  RiderGeo.thigh = limb(C.pants, 0.85);
-  RiderGeo.shin = limb(C.pants, 0.80);
-  RiderGeo.uparm = limb(C.jacket, 0.85);
-  RiderGeo.forearm = limb(C.jacket, 0.80);
-  // knee + elbow joints so bent limbs don't show gaps
-  RiderGeo.knee = Geo(); geoSphere(RiderGeo.knee, 0, 0, 0, 1, C.pants, 10, 6);
-  RiderGeo.elbow = Geo(); geoSphere(RiderGeo.elbow, 0, 0, 0, 1, C.jacket, 10, 6);
+  /* limbs: unit-radius tubes along +Y (y = 0 at the upper joint), scaled per
+     part by m4limb. Profiles bulge, bunch into soft fold ripples near the
+     joints (shaded troughs) and flare at the cuffs. */
+  const P_ = { s: RS.PANTS }, J_ = { s: RS.JACKET };
+  const fold = { ao: 0.74, c: 0.92 };
+  RiderGeo.thigh = Geo({ aux: true });
+  rTube(RiderGeo.thigh, [
+    [-0.03, 0, Object.assign({ ao: 0.6 }, P_)], [0.0, 1.06, { ao: 0.7 }], [0.12, 1.17], [0.45, 1.22],
+    [0.70, 1.27], [0.78, 1.17, fold], [0.84, 1.27], [0.905, 1.15, fold], [0.96, 1.21], [1.03, 1.10, { ao: 0.8 }], [1.07, 0, { ao: 0.8 }]
+  ], SEG, 0.45);
+  // shin: knee → ankle. Bunches where it stacks on the boot, then a wide cuff
+  // that hangs over the boot with a dark underside.
+  RiderGeo.shin = Geo({ aux: true });
+  rTube(RiderGeo.shin, [
+    [-0.06, 0, Object.assign({ ao: 0.8 }, P_)], [-0.03, 1.16], [0.03, 1.32], [0.09, 1.20, fold], [0.15, 1.33],
+    [0.22, 1.24, { ao: 0.82, c: 0.9 }], [0.42, 1.30], [0.63, 1.37], [0.71, 1.48], [0.765, 1.36, fold],
+    [0.82, 1.52], [0.87, 1.42, fold], [0.93, 1.57], [1.00, 1.61], [1.045, 1.60, { c: C.edge, ao: 0.6 }],
+    [1.035, 1.36, { c: C.inner, ao: 0.3 }], [0.95, 0, { c: C.inner, ao: 0.25 }]
+  ], SEG, 0.45);
+  RiderGeo.uparm = Geo({ aux: true });
+  rTube(RiderGeo.uparm, [
+    [-0.08, 0, { s: RS.ACCENT }], [-0.05, 1.16], [0.05, 1.38], [0.13, 1.36], [0.15, 1.35, J_], [0.25, 1.33], [0.55, 1.27],
+    [0.78, 1.24], [0.86, 1.10, fold], [0.93, 1.21], [1.03, 1.12, { ao: 0.85 }], [1.08, 0, { ao: 0.85 }]
+  ], SEG, 0.30, 1);   // v = 0 at the elbow, like the forearm, so the baffles line up
+  // forearm: elbow → wrist, accent cuff with a dark opening the mitten sits in
+  RiderGeo.forearm = Geo({ aux: true });
+  rTube(RiderGeo.forearm, [
+    [-0.06, 0, Object.assign({ ao: 0.85 }, J_)], [-0.03, 1.15], [0.05, 1.28], [0.12, 1.15, fold], [0.20, 1.32],
+    [0.55, 1.34], [0.76, 1.38], [0.82, 1.46, { s: RS.ACCENT }], [0.97, 1.50], [1.0, 1.43, { c: C.edge, ao: 0.6 }],
+    [0.99, 1.10, { c: C.inner, ao: 0.3 }], [0.90, 0, { c: C.inner, ao: 0.3 }]
+  ], SEG, 0.28);
+  // knee + elbow joints fill the gap on the outside of a bent limb
+  RiderGeo.knee = Geo({ aux: true });
+  RiderGeo.knee.slot = RS.PANTS;
+  geoSphere(RiderGeo.knee, 0, 0, 0, 1, [1, 1, 1], 10, 6);
+  RiderGeo.elbow = Geo({ aux: true });
+  RiderGeo.elbow.slot = RS.JACKET;
+  RiderGeo.elbow.vv = 0.05;                        // mid-baffle: no quilting seam across the joint
+  geoSphere(RiderGeo.elbow, 0, 0, 0, 1, [1, 1, 1], 8, 5);
 
-  // head: chin/face, full helmet, goggle strap + big lens facing +Z
-  const hd = Geo();
-  geoSphere(hd, 0, 0.05, 0.035, 0.105, C.skin, 12, 8, [0.95, 1.0, 0.9]);                 // face / chin
-  geoSphere(hd, 0, 0.115, 0, 0.150, C.helmet, 14, 9, [0.98, 0.90, 1.08]);                // helmet shell
-  geoCyl(hd, 0, 0.075, 0, 0.152, 0.150, 0.125, C.glove, 16, false, false);              // strap band
-  geoSphere(hd, 0, 0.10, 0.125, 0.085, C.lens, 12, 7, [1.25, 0.55, 0.45]);              // goggle lens
-  geoCyl(hd, 0, -0.08, -0.01, 0.055, 0.06, 0.02, C.skin, 8, false, false);              // neck
+  /* head: no face. Glossy helmet shell with a brim lip over the goggles and a
+     lower back, ear pads, big goggles (lens on a dark frame + strap), and a
+     neck gaiter covering the lower face and neck. */
+  const hd = Geo({ aux: true });
+  const HC = [0, 0.115, -0.006], HR = [0.150, 0.140, 0.166];
+  const helm = [];
+  const lat = (deg, e) => {
+    const f = deg * Math.PI / 180;
+    return Object.assign({ y: HC[1] + HR[1] * Math.sin(f), a: HR[0] * Math.cos(f), b: HR[2] * Math.cos(f), z: HC[2] }, e);
+  };
+  helm.push({ y: 0.095, a: 0, s: RS.HELMET, c: C.inner, ao: 0.3, z: HC[2] });
+  helm.push(lat(-24, { a: HR[0] * 0.86, b: HR[2] * 0.86, c: C.inner, ao: 0.35, drop: 1 }));
+  helm.push(lat(-24, { c: C.edge, ao: 0.75, drop: 1 }));
+  for (const [d, lip] of [[-12, 0], [2, 0], [12, 0], [17, 0.020], [22, 0.018], [27, 0], [40, 0], [55, 0], [70, 0], [82, 0]])
+    helm.push(lat(d, { lip, drop: d < 0 ? 0.5 : 0 }));
+  helm.push({ y: HC[1] + HR[1], a: 0, z: HC[2] });
+  rLoft(hd, helm, 14, {
+    warp(p, t, r) {
+      const s = Math.sin(t), c = Math.cos(t);
+      if (r.drop) p[1] -= r.drop * 0.045 * (Math.pow(Math.max(0, -s), 1.5) + 0.35 * c * c);   // lower at the back / over the ears
+      if (r.lip) { const k = r.lip * Math.pow(Math.max(0, s), 3); p[0] += c * k; p[2] += s * k; }
+      return p;
+    }
+  });
+  // ear pads
+  hd.slot = RS.TRIM; hd.ao = 0.85; hd.vv = 0;
+  geoSphere(hd, 0.143, 0.060, -0.010, 0.054, [1, 1, 1], 8, 5, [0.42, 1.0, 1.0]);
+  geoSphere(hd, -0.143, 0.060, -0.010, 0.054, [1, 1, 1], 8, 5, [0.42, 1.0, 1.0]);
+  // helmet surface point at height y, angle t, pushed out by `off` (for the goggles)
+  const helmPt = (y, t, off) => {
+    const k = Math.sqrt(Math.max(0.05, 1 - Math.pow((y - HC[1]) / HR[1], 2)));
+    const a = HR[0] * k, b = HR[2] * k, c = Math.cos(t), s = Math.sin(t);
+    const n = p3norm([c / a, 0, s / b]);
+    return [c * a + n[0] * off, y, HC[2] + s * b + n[2] * off];
+  };
+  const band = (y0, y1, t0, t1, oIn, oOut, slot, bulge, K = 12, Rw = 3) => {
+    const Po = [], Pi = [], A = [];
+    for (let r = 0; r <= Rw; r++) {
+      const y = lerp(y0, y1, r / Rw), ro = [], ri = [];
+      for (let k = 0; k <= K; k++) {
+        const t = lerp(t0, t1, k / K);
+        const b = bulge ? bulge * Math.sin((k / K) * Math.PI) * Math.sin((r / Rw) * Math.PI) : 0;
+        ro.push(helmPt(y, t, oOut + b)); ri.push(helmPt(y, t, oIn + b));
+      }
+      Po.push(ro); Pi.push(ri); A.push({ s: slot, c: 1, ao: 1, v: y });
+    }
+    geoShell(hd, Po, Pi, A);
+  };
+  band(0.060, 0.146, 0.33, Math.PI - 0.33, -0.006, 0.016, RS.TRIM, 0, 12, 2);       // goggle frame
+  band(0.070, 0.137, 0.42, Math.PI - 0.42, 0.012, 0.024, RS.LENS, 0.006, 12, 2);    // lens, slightly domed
+  band(0.084, 0.120, Math.PI - 0.36, TAU + 0.36, 0.0, 0.006, RS.TRIM, 0, 14, 1);   // strap round the back
+  // neck gaiter / face mask: neck → jaw → under the goggles, with a nose bump
+  rLoft(hd, [
+    { y: -0.140, a: 0, z: -0.010, s: RS.MASK, ao: 0.4 },
+    { y: -0.130, a: 0.062, z: -0.010, ao: 0.5 },
+    { y: -0.085, a: 0.068, b: 0.070, z: -0.004, ao: 0.7 },
+    { y: -0.055, a: 0.075, b: 0.080, ao: 0.8, c: 0.85 },
+    { y: -0.025, a: 0.090, b: 0.096, z: 0.012 },
+    { y: 0.012, a: 0.108, b: 0.113, z: 0.020 },
+    { y: 0.045, a: 0.121, b: 0.126, z: 0.022 },
+    { y: 0.072, a: 0.126, b: 0.131, z: 0.018, ao: 0.6 },
+    { y: 0.092, a: 0.110, b: 0.114, z: 0.014, ao: 0.4 },
+    { y: 0.100, a: 0, z: 0.014, ao: 0.4 }
+  ], 12, {
+    warp(p, t) {
+      const f = Math.pow(Math.max(0, Math.sin(t)), 6) * Math.exp(-Math.pow((p[1] - 0.045) / 0.03, 2));
+      p[2] += 0.016 * f;
+      return p;
+    }
+  });
   RiderGeo.head = hd;
 
-  const ha = Geo();
-  geoSphere(ha, 0, 0, 0, 0.065, C.glove, 10, 7, [1.0, 0.9, 1.25]);
-  geoCyl(ha, 0, 0.03, 0, 0.055, 0.06, 0.10, C.glove, 8, false, false);                  // cuff
-  RiderGeo.hand = ha;
+  /* mitten: gauntlet cuff tapering up into the sleeve, a flattened mitten body
+     (palm normal on Z) and a thumb on the +X side. */
+  const mt = Geo({ aux: true });
+  mt.slot = RS.GLOVES;
+  rLoft(mt, [
+    { y: 0.100, a: 0, ao: 0.4 }, { y: 0.095, a: 0.042, b: 0.040, ao: 0.5 }, { y: 0.040, a: 0.052, b: 0.048, ao: 0.8 },
+    { y: 0.006, a: 0.060, b: 0.055 }, { y: -0.002, a: 0.057, b: 0.051, c: C.edge, ao: 0.7 },
+    { y: -0.008, a: 0.047, b: 0.040, c: C.seam, ao: 0.6 }, { y: -0.035, a: 0.058, b: 0.044 },
+    { y: -0.070, a: 0.061, b: 0.045 }, { y: -0.100, a: 0.057, b: 0.042 }, { y: -0.122, a: 0.041, b: 0.033 },
+    { y: -0.136, a: 0.022, b: 0.019 }, { y: -0.141, a: 0 }
+  ], 10);
+  rLoft(mt, [
+    { y: -0.004, a: 0, ao: 0.7 }, { y: 0.0, a: 0.019, b: 0.017, ao: 0.75 }, { y: 0.030, a: 0.019, b: 0.017 },
+    { y: 0.050, a: 0.016, b: 0.014 }, { y: 0.060, a: 0.009, b: 0.008 }, { y: 0.064, a: 0 }
+  ], 8, { M: geoFrame([0.036, -0.030, 0.004], [0.62, -0.78, 0.12], [0, 0, 1]) });
+  RiderGeo.mitten = mt;
 
-  // boot: long axis across the board (+Z = toes)
-  const bt = Geo();
-  geoBox(bt, 0, 0.05, 0.025, 0.115, 0.10, 0.30, C.boot);
-  geoBox(bt, 0, 0.15, -0.015, 0.115, 0.12, 0.17, C.boot);
-  geoBox(bt, 0, 0.06, 0.10, 0.12, 0.035, 0.06, C.glove);                                // toe strap
+  /* boot: a soft lofted boot with a dark sole, a seam line at the welt and a
+     padded collar the pants cuff stacks on. */
+  const bt = Geo({ aux: true });
+  const S = BOOT_SECT, BR = [];
+  BR.push({ y: 0, a: 0, z: S[0][3], s: RS.BOOTS, c: C.sole, ao: 0.6 });
+  S.forEach(([y, a, b, z], k) => BR.push({ y, a, b, z, c: k < 2 ? C.sole : (k === 2 ? C.seam : 1), hard: k === 2, ao: k < 2 ? 0.7 : 1 }));
+  BR.push({ y: 0.240, a: 0.070, b: 0.080, z: -0.015, c: C.seam });
+  BR.push({ y: 0.236, a: 0.052, b: 0.060, z: -0.015, c: C.inner, ao: 0.3 });
+  BR.push({ y: 0.200, a: 0, z: -0.015, c: C.inner, ao: 0.3 });
+  rLoft(bt, BR, 12);
   RiderGeo.boot = bt;
+
+  /* scarf segment: a flattened tube, unit length along +Y. Full width reaches
+     back over the previous segment's end so the joints never pinch; the far
+     end tapers inside the next segment. v sits mid-baffle (no quilting seam). */
+  const sc = Geo({ aux: true });
+  rLoft(sc, [
+    { y: -0.16, a: 0, s: RS.ACCENT, v: 0.05 }, { y: -0.14, a: 0.5, b: 0.42, v: 0.05 },
+    { y: 1.0, a: 0.5, b: 0.42, v: 0.05 }, { y: 1.03, a: 0.3, b: 0.25, v: 0.05 }, { y: 1.04, a: 0, v: 0.05 }
+  ], 6);
+  RiderGeo.scarf = sc;
 }
 
 /* ---------------- vegetation + rocks (instanced) ---------------- */

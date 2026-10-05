@@ -123,6 +123,16 @@
     background:#04060b;font-size:14px;line-height:1.7;color:#cfe6ff;text-align:center}
 
   /* mute toggle: top centre, right of the lives (and of the pause button on touch) */
+  /* game controller: its own help, no touch overlay while it's in use */
+  .pad-only{display:none}
+  body.pad .keys.pad-only{display:grid}
+  body.pad .keys.kb-only, body.pad .keys.touch-only, body.pad #hint{display:none!important}
+  body.pad #touch{display:none!important}
+  #padToast{position:fixed;left:50%;bottom:max(24px,env(safe-area-inset-bottom));transform:translate(-50%,20px);z-index:20;
+    padding:10px 18px;border-radius:22px;background:rgba(10,22,38,.78);border:1.5px solid rgba(95,226,255,.55);
+    color:#eaf6ff;font-size:13px;font-weight:700;letter-spacing:.06em;opacity:0;pointer-events:none;
+    transition:opacity .25s,transform .25s;white-space:nowrap;max-width:calc(100vw - 32px);overflow:hidden;text-overflow:ellipsis}
+  #padToast.on{opacity:1;transform:translate(-50%,0)}
   #muteBtn{position:fixed;top:max(12px,env(safe-area-inset-top));left:50%;margin-left:46px;width:38px;height:38px;
     border-radius:50%;border:1.5px solid rgba(190,225,255,.35);background:rgba(10,22,38,.38);color:#eaf6ff;
     display:flex;align-items:center;justify-content:center;padding:0;z-index:6;cursor:pointer;
@@ -264,6 +274,84 @@
     body.touch .keys.touch-only{grid-template-columns:auto auto auto auto!important;gap:6px 14px}
     .eyebrow{margin-bottom:8px}
     #tiltBtn{margin-top:10px}
+    #mbtns{margin-top:10px}
+  }
+
+  /* ---------- rider customisation ---------- */
+  #mbtns{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-items:center;margin-top:16px}
+  #mbtns #tiltBtn{margin:0;min-height:42px}
+  #riderBtn{display:inline-flex;align-items:center;gap:10px;padding:7px 18px 7px 7px;min-height:42px;
+    border-radius:24px;border:1.5px solid rgba(190,225,255,.4);background:rgba(10,22,38,.45);color:#eaf6ff;
+    font:800 12px/1 inherit;font-family:inherit;letter-spacing:.16em;text-transform:uppercase;cursor:pointer;
+    touch-action:manipulation;transition:border-color .15s,background .15s}
+  #riderBtn:hover{border-color:var(--accent)}
+  #riderBtn .dots{display:flex}
+  #riderBtn .dots i{width:16px;height:26px;border:1.5px solid rgba(255,255,255,.55)}
+  #riderBtn .dots i:first-child{border-radius:13px 0 0 13px;border-right:0}
+  #riderBtn .dots i:last-child{border-radius:0 13px 13px 0;border-left:0}
+  #riderBtn .key{margin-left:2px;padding:2px 6px;letter-spacing:0}
+  #rider{position:fixed;z-index:7;top:max(16px,env(safe-area-inset-top));right:max(16px,env(safe-area-inset-right));
+    max-height:calc(100% - max(16px,env(safe-area-inset-top)) - max(16px,env(safe-area-inset-bottom)));
+    width:min(372px,calc(100vw - 32px));display:flex;flex-direction:column;
+    border-radius:18px;border:1.5px solid rgba(190,225,255,.24);background:rgba(7,15,27,.74);color:#eaf6ff;
+    box-shadow:0 20px 60px rgba(0,4,12,.5);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    transition:opacity .28s ease,transform .28s ease,visibility 0s;outline:none;overflow:hidden}
+  #rider.hide{opacity:0;transform:translateX(26px);pointer-events:none;visibility:hidden;
+    transition:opacity .28s ease,transform .28s ease,visibility 0s linear .28s}
+  .rhead{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:16px 18px 10px}
+  .rhead .eyebrow{margin-bottom:5px;font-size:9.5px}
+  .rhead b{display:block;font-size:20px;font-weight:850;letter-spacing:.01em}
+  .rhead .key{font-style:normal;color:var(--dim)}
+  .rscroll{flex:1;min-height:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y;padding:2px 18px 12px;
+    -webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:rgba(190,225,255,.25) transparent}
+  .rscroll .label{margin:10px 0 8px;text-shadow:none}
+  #rPresets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+  .rpre{display:flex;align-items:center;gap:7px;min-height:40px;padding:5px 8px 5px 5px;border-radius:21px;
+    border:1.5px solid rgba(190,225,255,.22);background:rgba(10,22,38,.5);color:#eaf6ff;font:800 10px/1.1 inherit;
+    font-family:inherit;letter-spacing:.08em;text-transform:uppercase;text-align:left;cursor:pointer;touch-action:manipulation}
+  .rpre i{flex:none;width:26px;height:26px;border-radius:50%;border:1.5px solid rgba(255,255,255,.4)}
+  .rpre:hover{border-color:rgba(190,225,255,.55)}
+  .rpre.sel{border-color:var(--accent);color:var(--accent);background:rgba(20,60,90,.55)}
+  #rItems{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+  .ritem{display:flex;align-items:center;gap:10px;min-height:48px;padding:4px 10px 4px 4px;border-radius:25px;
+    border:1px solid var(--line);background:rgba(10,22,38,.45);cursor:pointer;font-size:10.5px;font-weight:800;
+    letter-spacing:.12em;text-transform:uppercase;color:rgba(234,246,255,.9);transition:border-color .15s}
+  .ritem:hover,.ritem:focus-within{border-color:rgba(190,225,255,.55)}
+  .ritem input{flex:none;-webkit-appearance:none;appearance:none;width:40px;height:40px;padding:0;border:0;border-radius:50%;
+    background:none;cursor:pointer;box-shadow:0 0 0 1.5px rgba(255,255,255,.45),0 2px 8px rgba(0,0,0,.35)}
+  .ritem input::-webkit-color-swatch-wrapper{padding:0}
+  .ritem input::-webkit-color-swatch{border:0;border-radius:50%}
+  .ritem input::-moz-color-swatch{border:0;border-radius:50%}
+  .ritem input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .rfoot{display:flex;gap:8px;padding:12px 18px 16px;border-top:1px solid var(--line)}
+  .rfoot button{flex:1;min-height:42px;padding:0 10px;border-radius:22px;border:1.5px solid rgba(190,225,255,.4);
+    background:rgba(10,22,38,.45);color:#eaf6ff;font:800 11px/1 inherit;font-family:inherit;letter-spacing:.14em;
+    text-transform:uppercase;cursor:pointer;touch-action:manipulation;white-space:nowrap}
+  .rfoot button:hover{border-color:rgba(190,225,255,.7)}
+  .rfoot #rDone{border-color:var(--accent);color:var(--accent)}
+  /* while customising: the menu steps aside so the rider shows (the camera comes in close) */
+  body.customizing #menu{opacity:0;pointer-events:none}
+  body.customizing #muteBtn, body.customizing #atmosBtn{display:none}
+  /* phones: compact tiles, swatch above the name */
+  @media (max-height:500px), (orientation:portrait) and (max-width:700px){
+    .rhead{padding:12px 16px 6px}
+    .rhead b{font-size:17px}
+    .rscroll{padding:0 16px 10px}
+    .rscroll .label{margin:8px 0 7px}
+    #rPresets{gap:6px}
+    .rpre{gap:6px;padding-right:4px;font-size:9.5px;letter-spacing:.05em}
+    .rpre i{width:24px;height:24px}
+    #rItems{grid-template-columns:repeat(5,minmax(0,1fr));gap:6px 4px}
+    .ritem{flex-direction:column;justify-content:flex-start;gap:5px;min-height:0;padding:4px 0 2px;border:0;background:none;
+      border-radius:10px;font-size:8.5px;letter-spacing:.08em;line-height:1.2;text-align:center}
+    .rfoot{padding:10px 16px 12px}
+  }
+  /* phone portrait: a bottom sheet over the lower half */
+  @media (orientation:portrait) and (max-width:700px){
+    #rider{top:auto;bottom:max(16px,env(safe-area-inset-bottom));left:max(16px,env(safe-area-inset-left));width:auto;
+      max-height:55vh;max-height:55dvh}
+    #rider.hide{transform:translateY(30px)}
+    .rhead .key{display:none}
   }
 </style>
 </head>
@@ -307,6 +395,7 @@
   <div id="debug" class="num"></div>
 </div>
 
+<div id="padToast"></div>
 <div class="screen" id="menu">
   <div class="eyebrow">WebGL2 · no engine · no assets</div>
   <h1>POWDER<br>LINE</h1>
@@ -328,6 +417,15 @@
     <div><i class="key">grab</i></div><div>Hold in the air for style points</div>
     <div><i class="key">drag</i></div><div>Swipe open screen to look around</div>
   </div>
+  <div class="keys pad-only" style="grid-template-columns:auto auto">
+    <div><i class="key">L stick</i></div><div>◀ ▶ carve (spin in air) · ▲ tuck / front flip · ▼ brake / back flip</div>
+    <div><i class="key">A</i></div><div>Hold to tuck &amp; load · release to ollie</div>
+    <div><i class="key">RT</i> <i class="key">LT</i></div><div>Tuck · brake (front / back flip in the air)</div>
+    <div><i class="key">X</i> <i class="key">B</i> <i class="key">Y</i> <i class="key">RB</i></div><div>Grabs (hold in air)</div>
+    <div><i class="key">R stick</i></div><div>Look around</div>
+    <div><i class="key">Menu</i> <i class="key">View</i></div><div>Pause · restart</div>
+    <div><i class="key">D-pad</i> <i class="key">A</i> <i class="key">Y</i></div><div>Menu: pick level · drop in · customize rider</div>
+  </div>
   <div id="levels">
     <button class="lvl" type="button" data-id="mountain"><i class="kb-only">1</i><b>Backcountry</b><span>Endless mountain · gates · kickers</span></button>
     <button class="lvl" type="button" data-id="pipe"><i class="kb-only">2</i><b>Half-pipe</b><span>Carve the walls · boost the lip</span></button>
@@ -335,7 +433,10 @@
     <button class="lvl" type="button" data-id="zen"><i class="kb-only">4</i><b>Zen</b><span>No gates, lives or score · day / night / neon</span></button>
   </div>
   <div class="go"><span class="kb-only">press 1–4 to pick a level · any other key to drop in</span><span class="touch-only">tap a level to drop in</span></div>
-  <button id="tiltBtn" class="touch-only" type="button">Tilt steering: OFF</button>
+  <div id="mbtns">
+    <button id="riderBtn" type="button"><span class="dots"><i></i><i></i></span>Rider<i class="key kb-only">C</i></button>
+    <button id="tiltBtn" class="touch-only" type="button">Tilt steering: OFF</button>
+  </div>
 </div>
 
 <div class="screen hide" id="over">
@@ -359,6 +460,17 @@
   <h1 style="font-size:clamp(34px,7vw,70px)">CATCHING<br>YOUR BREATH</h1>
   <div class="go"><span class="kb-only">press P to drop back in · R to restart · Esc for levels</span><span class="touch-only">tap to drop back in</span></div>
   <div class="pbtns"><button type="button" id="pResume">Resume</button><button type="button" id="pRestart">↺ Restart</button><button type="button" id="pMenu">☰ Levels</button></div>
+</div>
+
+<div id="rider" class="hide" role="dialog" aria-label="Customize rider" tabindex="-1">
+  <div class="rhead"><div><div class="eyebrow">customize</div><b>Your rider</b></div><i class="key kb-only">Esc</i></div>
+  <div class="rscroll">
+    <div class="label">Presets</div>
+    <div id="rPresets"></div>
+    <div class="label">Colours</div>
+    <div id="rItems"></div>
+  </div>
+  <div class="rfoot"><button type="button" id="rRandom">Randomize</button><button type="button" id="rReset">Reset</button><button type="button" id="rDone">Done</button></div>
 </div>
 
 <button id="atmosBtn" type="button" aria-label="Atmosphere" title="Atmosphere (N)">☀</button>
@@ -993,13 +1105,32 @@ const Gates = {
 
 const STRIDE = 9;
 
+/* ---------------- rider palette slots ----------------
+   Rider and board meshes carry a second vertex stream, aux = (slot, ao, v):
+     slot : which outfit item the vertex belongs to (RS.*). The rider shader
+            looks the colour up in Outfit.palette[slot] and the material
+            (cloth / gloss / lens) in its per-slot table, so recolouring the
+            outfit is just a uniform update, never a mesh rebuild.
+     ao   : baked ambient occlusion, 0..1 (1 = open)
+     v    : distance along the part's main axis in metres (seams, quilting)
+   The vertex colour is then a multiplier on the palette colour (white = as is,
+   darker = a fixed shade detail such as a seam or a sole).                  */
+const RS = {
+  JACKET: 0, ACCENT: 1, PANTS: 2, GLOVES: 3, HELMET: 4, LENS: 5,
+  BOOTS: 6, BOARD_TOP: 7, BOARD_BASE: 8, BINDING: 9, TRIM: 10, MASK: 11
+};
+const RS_COUNT = 12;
+
 /* ---------------- primitive builders ---------------- */
-function Geo() {
-  return { v: [], i: [] };
+/* Geo({ aux: true }) also records the aux stream: set g.slot / g.ao / g.vv
+   before emitting vertices (they apply to every vertex until changed). */
+function Geo(opts) {
+  return { v: [], i: [], aux: opts && opts.aux ? [] : null, slot: 0, ao: 1, vv: 0 };
 }
 function geoVert(g, x, y, z, nx, ny, nz, r, gg, b) {
   const o = g.v.length;
   g.v.push(x, y, z, nx, ny, nz, r, gg, b);
+  if (g.aux) g.aux.push(g.slot, g.ao, g.vv);
   return o / STRIDE;
 }
 function geoTri(g, a, b, c) { g.i.push(a, b, c); }
@@ -1083,17 +1214,172 @@ function geoCyl(g, cx, cy0, cz, r0, r1, y1, col, seg = 10, capTop = true, capBot
   }
 }
 
+/* ---------------- rider / board surface helpers ----------------
+   Rider and board parts are lofts, grids and thin shells with smooth numeric
+   normals. Triangles are wound to agree with their vertex normals, so a
+   builder never has to care which way a strip runs. Points are [x, y, z]. */
+const p3sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const p3cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const p3dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const p3norm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+
+// triangle wound so its face normal agrees with the summed vertex normals; slivers are dropped
+function geoTriN(g, a, b, c) {
+  const V = g.v, A = a * STRIDE, B = b * STRIDE, C = c * STRIDE;
+  const ux = V[B] - V[A], uy = V[B + 1] - V[A + 1], uz = V[B + 2] - V[A + 2];
+  const wx = V[C] - V[A], wy = V[C + 1] - V[A + 1], wz = V[C + 2] - V[A + 2];
+  const fx = uy * wz - uz * wy, fy = uz * wx - ux * wz, fz = ux * wy - uy * wx;
+  if (fx * fx + fy * fy + fz * fz < 1e-16) return;
+  const d = fx * (V[A + 3] + V[B + 3] + V[C + 3]) + fy * (V[A + 4] + V[B + 4] + V[C + 4]) + fz * (V[A + 5] + V[B + 5] + V[C + 5]);
+  if (d < 0) g.i.push(a, c, b); else g.i.push(a, b, c);
+}
+
+/* local frame {o, X, Y, Z}: Y along `y`, Z as close to `z` as possible */
+function geoFrame(o, y, z) {
+  const Y = p3norm(y), Z = p3norm(p3sub(z, Y.map(v => v * p3dot(z, Y))));
+  return { o, X: p3cross(Y, Z), Y, Z };
+}
+
+/* Grid surface. P[row][col] = point, A[row] = { s: slot, c: colour multiplier
+   (number or rgb), ao, v }. A row whose slot differs from the row below (or
+   flagged `hard`) is emitted twice so each band keeps its own attributes.
+   o.wrap closes the columns into a ring; o.hint(p, j, i) is a rough outward
+   direction that only picks the normal's sign; o.M = frame applied at the end. */
+function geoSurf(g, P, A, o) {
+  const R = P.length, C = P[0].length, wrap = !!o.wrap, M = o.M;
+  const cen = (j) => { const s = [0, 0, 0]; for (const p of P[j]) { s[0] += p[0]; s[1] += p[1]; s[2] += p[2]; } return s.map(v => v / C); };
+  const axis = p3norm(p3sub(cen(R - 1), cen(0)));
+  const N = [];
+  let sgn = 0;
+  for (let j = 0; j < R; j++) {
+    N.push([]);
+    for (let i = 0; i < C; i++) {
+      const il = wrap ? (i + C - 1) % C : Math.max(0, i - 1), ir = wrap ? (i + 1) % C : Math.min(C - 1, i + 1);
+      const du = p3sub(P[j][ir], P[j][il]);
+      const dv = p3sub(P[Math.min(R - 1, j + 1)][i], P[Math.max(0, j - 1)][i]);
+      const n = p3cross(dv, du);
+      if (Math.hypot(n[0], n[1], n[2]) < 1e-12) { N[j].push(null); continue; }   // pole
+      sgn += p3dot(p3norm(n), o.hint ? o.hint(P[j][i], j, i) : [0, 0, 0]);
+      N[j].push(p3norm(n));
+    }
+  }
+  for (let j = 0; j < R; j++) for (let i = 0; i < C; i++) {
+    if (!N[j][i]) N[j][i] = axis.map(v => v * (j === 0 ? -1 : 1));
+    else if (sgn < 0) N[j][i] = N[j][i].map(v => -v);
+  }
+  const emit = (j, at) => {
+    g.slot = at.s; g.ao = at.ao; g.vv = at.v;
+    const c = typeof at.c === 'number' ? [at.c, at.c, at.c] : at.c, ids = [];
+    for (let i = 0; i < C; i++) {
+      let p = P[j][i], n = N[j][i];
+      if (M) {
+        p = [M.o[0] + M.X[0] * p[0] + M.Y[0] * p[1] + M.Z[0] * p[2], M.o[1] + M.X[1] * p[0] + M.Y[1] * p[1] + M.Z[1] * p[2], M.o[2] + M.X[2] * p[0] + M.Y[2] * p[1] + M.Z[2] * p[2]];
+        n = p3norm([M.X[0] * n[0] + M.Y[0] * n[1] + M.Z[0] * n[2], M.X[1] * n[0] + M.Y[1] * n[1] + M.Z[1] * n[2], M.X[2] * n[0] + M.Y[2] * n[1] + M.Z[2] * n[2]]);
+      }
+      ids.push(geoVert(g, p[0], p[1], p[2], n[0], n[1], n[2], c[0], c[1], c[2]));
+    }
+    return ids;
+  };
+  const lo = [], hi = [];                          // row as the bottom / top edge of a band
+  for (let j = 0; j < R; j++) {
+    const a = A[j], b = A[j - 1];
+    if (j > 0 && (a.hard || a.s !== b.s)) { hi[j] = emit(j, Object.assign({}, b, { v: a.v })); lo[j] = emit(j, a); }
+    else hi[j] = lo[j] = emit(j, a);
+  }
+  for (let j = 0; j < R - 1; j++) for (let i = 0; i < (wrap ? C : C - 1); i++) {
+    const i1 = (i + 1) % C, a = lo[j][i], b = lo[j][i1], c = hi[j + 1][i], d = hi[j + 1][i1];
+    geoTriN(g, a, c, b); geoTriN(g, b, c, d);
+  }
+}
+
+/* Elliptic loft along +Y. rings = [{ y, a (half X), b (half Z, default a),
+   x, z (centre), s, c, ao, v, hard }]; s is inherited down the list. A ring
+   with a = 0 closes the end. o.warp(p, t, ring, j) may move points; o.M frame. */
+function rLoft(g, rings, seg, o = {}) {
+  const P = [], A = [];
+  let s = o.s !== undefined ? o.s : g.slot;
+  rings.forEach((r, j) => {
+    if (r.s !== undefined) s = r.s;
+    const row = [], b = r.b !== undefined ? r.b : r.a;
+    for (let i = 0; i < seg; i++) {
+      const t = i / seg * TAU;
+      let p = [(r.x || 0) + Math.cos(t) * r.a, r.y, (r.z || 0) + Math.sin(t) * b];
+      if (o.warp) p = o.warp(p, t, r, j);
+      row.push(p);
+    }
+    P.push(row);
+    A.push({ s, c: r.c !== undefined ? r.c : 1, ao: r.ao !== undefined ? r.ao : 1, v: r.v !== undefined ? r.v : r.y, hard: !!r.hard });
+  });
+  geoSurf(g, P, A, { wrap: true, M: o.M, hint: (p, j) => [p[0] - (rings[j].x || 0), 0, p[2] - (rings[j].z || 0)] });
+}
+
+/* round tube along +Y for the m4limb parts: prof = [[y, radius, extra], ...];
+   len = the part's length in metres, so vv comes out in metres */
+function rTube(g, prof, seg, len, v0 = 0) {
+  rLoft(g, prof.map(([y, r, e]) => Object.assign({ y, a: r, v: (y - v0) * len }, e)), seg);
+}
+
+/* Thin closed slab between an outer and an inner grid of the same shape:
+   both faces plus the four edge walls (attributes from A, one per row). */
+function geoShell(g, Po, Pi, A, M) {
+  const R = Po.length, C = Po[0].length;
+  geoSurf(g, Po, A, { M, hint: (p, j, i) => p3sub(Po[j][i], Pi[j][i]) });
+  geoSurf(g, Pi, A, { M, hint: (p, j, i) => p3sub(Pi[j][i], Po[j][i]) });
+  const wall = (pts, outs, at) => geoSurf(g, [pts.map(q => q[0]), pts.map(q => q[1])], [at, at],
+    { M, hint: (p, j, i) => outs[i] });
+  for (const j of [0, R - 1]) {
+    const jn = j ? j - 1 : 1;
+    wall(Po[j].map((p, i) => [Pi[j][i], p]), Po[j].map((p, i) => p3sub(p, Po[jn][i])), A[j]);
+  }
+  for (const i of [0, C - 1]) {
+    const inn = i ? i - 1 : 1;
+    const pts = [], outs = [];
+    for (let j = 0; j < R; j++) { pts.push([Pi[j][i], Po[j][i]]); outs.push(p3sub(Po[j][i], Po[j][inn])); }
+    // walls run along the rows here, so attributes are constant per wall
+    geoSurf(g, [pts.map(q => q[0]), pts.map(q => q[1])], [A[0], A[0]], { M, hint: (p, jj, ii) => outs[ii] });
+  }
+}
+
+/* multiply the baked AO of vertices [from, end) by fn(x, y, z) */
+function bakeAO(g, from, fn) {
+  for (let k = from, n = g.v.length / STRIDE; k < n; k++)
+    g.aux[k * 3 + 1] *= fn(g.v[k * STRIDE], g.v[k * STRIDE + 1], g.v[k * STRIDE + 2]);
+}
+
+/* ---------------- boot shape (shared by the boot mesh and the binding straps) ----------------
+   Boot frame: +X = board nose, +Y = up, +Z = toes, origin at the sole.
+   Rows: [y, half X, half Z, centre Z]. The toe box is a long low ellipse, the
+   shaft a short round one, so the lofted rings give a soft-boot instep. */
+const BOOT_SECT = [
+  [0.000, 0.050, 0.136, 0.026], [0.014, 0.058, 0.149, 0.026], [0.032, 0.061, 0.152, 0.025],
+  [0.062, 0.063, 0.143, 0.022], [0.092, 0.063, 0.118, 0.010], [0.122, 0.062, 0.092, -0.004],
+  [0.155, 0.062, 0.080, -0.012], [0.195, 0.064, 0.075, -0.015], [0.232, 0.067, 0.077, -0.015]
+];
+function bootSect(y) {
+  const S = BOOT_SECT;
+  let k = 0;
+  while (k < S.length - 2 && S[k + 1][0] < y) k++;
+  const u = clamp((y - S[k][0]) / (S[k + 1][0] - S[k][0]), 0, 1);
+  return [lerp(S[k][1], S[k + 1][1], u), lerp(S[k][2], S[k + 1][2], u), lerp(S[k][3], S[k + 1][3], u)];
+}
+// point on the boot surface at height y, angle t (0 = +X, π/2 = toes), pushed out by `off`
+function bootPt(y, t, off) {
+  const [a, b, z] = bootSect(y), c = Math.cos(t), s = Math.sin(t);
+  const n = p3norm([c / a, 0, s / b]);
+  return [c * a + n[0] * off, y, z + s * b + n[2] * off];
+}
+
 /* ---------------- the snowboard ---------------- */
-/* Local space: +X = nose, +Y = up from base, +Z = right edge. Length 3.05 */
+/* Local space: +X = nose, +Y = up from base, +Z = right edge. Length 1.60 */
 function buildBoard() {
-  const g = Geo();
+  const g = Geo({ aux: true });
   const L = 1.60, W = 0.15, T = 0.03;     // a real board: 160 cm, ~25 cm waist
   /* Outline: a sidecut body (widest at the contact points, narrower at the waist)
      closed by elliptical nose and tail caps, so the ends are round, not pointed.
      Samples are listed along x; caps get extra samples for a smooth curve. */
   const E = 0.17;                                  // cap length (nose/tail curve)
   const xs = [], ws = [];
-  const CAP = 10, BODY = 22, xT = -L / 2 + E, xN = L / 2 - E;
+  const CAP = 10, BODY = 28, xT = -L / 2 + E, xN = L / 2 - E;
   for (let k = CAP; k >= 1; k--) {                 // tail cap: tip → contact point
     const ph = k / CAP * Math.PI / 2;
     xs.push(xT - E * Math.sin(ph)); ws.push(W * Math.cos(ph));
@@ -1113,12 +1399,36 @@ function buildBoard() {
     const rock = 0.05 * Math.pow(sstep(0.82, 1, t), 2) + 0.045 * Math.pow(sstep(0.18, 0, t), 2);
     return c + rock;
   };
-  const TOPC = [0.06, 0.62, 0.74], BOTC = [0.96, 0.94, 0.90], EDGE = [0.10, 0.11, 0.15];
-  const top = [], bot = [];
+  /* top graphic as a shade multiplier on the BOARD_TOP colour: a light centre
+     stripe nose to tail, a chevron near each end pointing at the nose, and
+     darker tips. f = position across the board, -1..1 */
+  const graphic = (x, f) => {
+    const xn = x / (L / 2), af = Math.abs(f);
+    let k = 0.56;
+    k = lerp(k, 1.0, 1 - sstep(0.16, 0.30, af));
+    for (const c of [0.50, -0.62]) k = lerp(k, 1.0, 1 - sstep(0.05, 0.10, Math.abs(xn - c + 0.32 * af)));
+    k = lerp(k, 0.48, sstep(0.80, 0.92, Math.abs(xn)));
+    return k;
+  };
+  const COLS = 7;                                  // top-surface vertices across the width
+  const nearBinding = (x) => 1 - 0.18 * Math.max(sstep(0.16, 0.08, Math.abs(x - 0.27)), sstep(0.16, 0.08, Math.abs(x + 0.27)));
+  g.slot = RS.BOARD_TOP; g.ao = 1;
+  const top = [];
   for (let i = 0; i < n; i++) {
-    const x = xs[i], w = ws[i], y = baseY(x);
-    top.push([geoVert(g, x, y + T, -w, 0, 1, 0, ...TOPC), geoVert(g, x, y + T, w, 0, 1, 0, ...TOPC)]);
-    bot.push([geoVert(g, x, y, -w, 0, -1, 0, ...BOTC), geoVert(g, x, y, w, 0, -1, 0, ...BOTC)]);
+    const x = xs[i], w = ws[i], y = baseY(x), row = [];
+    g.vv = x;
+    for (let c = 0; c < COLS; c++) {
+      const f = c / (COLS - 1) * 2 - 1, k = graphic(x, f);
+      g.ao = nearBinding(x);
+      row.push(geoVert(g, x, y + T, f * w, 0, 1, 0, k, k, k));
+    }
+    top.push(row);
+  }
+  g.slot = RS.BOARD_BASE; g.ao = 1;
+  const bot = [];
+  for (let i = 0; i < n; i++) {
+    g.vv = xs[i];
+    bot.push([geoVert(g, xs[i], baseY(xs[i]), -ws[i], 0, -1, 0, 1, 1, 1), geoVert(g, xs[i], baseY(xs[i]), ws[i], 0, -1, 0, 1, 1, 1)]);
   }
   // rail normal at sample i: outward from the outline z = ±w(x), i.e. (-dw/dx, 0, ±1)
   const slope = (i) => {
@@ -1127,25 +1437,67 @@ function buildBoard() {
   };
   for (let i = 0; i < n - 1; i++) {
     // top surface / bottom surface (winding flipped)
-    geoQuad(g, top[i][0], top[i][1], top[i + 1][1], top[i + 1][0]);
+    for (let c = 0; c < COLS - 1; c++) geoQuad(g, top[i][c], top[i][c + 1], top[i + 1][c + 1], top[i + 1][c]);
     geoQuad(g, bot[i][0], bot[i + 1][0], bot[i + 1][1], bot[i][1]);
+  }
+  g.slot = RS.TRIM; g.ao = 1;
+  for (let i = 0; i < n - 1; i++) {
     // rails
     const xA = xs[i], xB = xs[i + 1], wA = ws[i], wB = ws[i + 1];
     const yA = baseY(xA), yB = baseY(xB), sA = slope(i), sB = slope(i + 1);
     for (const sgn of [-1, 1]) {
       const nA = V3.norm(V3(), V3(-sA, 0, sgn)), nB = V3.norm(V3(), V3(-sB, 0, sgn));
-      const a = geoVert(g, xA, yA + T, sgn * wA, nA.x, 0.3, nA.z, ...EDGE);
-      const b = geoVert(g, xA, yA, sgn * wA, nA.x, -0.3, nA.z, ...EDGE);
-      const c = geoVert(g, xB, yB, sgn * wB, nB.x, -0.3, nB.z, ...EDGE);
-      const d = geoVert(g, xB, yB + T, sgn * wB, nB.x, 0.3, nB.z, ...EDGE);
+      const a = geoVert(g, xA, yA + T, sgn * wA, nA.x, 0.3, nA.z, 1, 1, 1);
+      const b = geoVert(g, xA, yA, sgn * wA, nA.x, -0.3, nA.z, 0.8, 0.8, 0.8);
+      const c = geoVert(g, xB, yB, sgn * wB, nB.x, -0.3, nB.z, 0.8, 0.8, 0.8);
+      const d = geoVert(g, xB, yB + T, sgn * wB, nB.x, 0.3, nB.z, 1, 1, 1);
       if (sgn < 0) geoQuad(g, a, d, c, b); else geoQuad(g, a, b, c, d);
     }
   }
-  // bindings
+  // bindings: base plate + disc, curved highback, ankle and toe straps hugging the boot
   for (const bx of [-0.27, 0.27]) {
     const y0 = baseY(bx) + T;
-    geoBox(g, bx, y0 + 0.012, 0.01, 0.20, 0.024, W * 1.75, [0.10, 0.11, 0.14]);   // base plate
-    geoBox(g, bx, y0 + 0.10, -0.125, 0.17, 0.17, 0.03, [0.10, 0.11, 0.14]);       // highback (heel side)
+    const M = { o: [bx, 0.03, 0], X: [1, 0, 0], Y: [0, 1, 0], Z: [0, 0, 1] };   // the boot frame (player.js puts boots at y = 0.03)
+    g.slot = RS.TRIM; g.ao = 0.8; g.vv = 0;
+    geoCyl(g, bx, y0, 0.02, 0.085, 0.085, y0 + 0.008, [1, 1, 1], 14, true, false);    // mounting disc
+    g.slot = RS.BINDING; g.ao = 0.85;
+    geoBox(g, bx, y0 + 0.014, 0.015, 0.15, 0.016, 0.33, [1, 1, 1]);                  // base plate
+    const A = (c, ao) => ({ s: RS.BINDING, c, ao, v: 0 });
+    // highback: wraps the heel from side to side, tallest behind the calf
+    const HB = 7, HR = 4, Po = [], Pi = [], Ah = [];
+    for (let r = 0; r <= HR; r++) {
+      const ro = [], ri = [];
+      for (let k = 0; k <= HB; k++) {
+        const t = -Math.PI / 2 + (k / HB - 0.5) * 2.5;          // centred on -Z (the heel)
+        const h = 0.07 + 0.17 * Math.pow(Math.cos((k / HB - 0.5) * Math.PI), 1.4);
+        const y = 0.012 + h * r / HR;
+        const lean = y * 0.10;                                   // forward lean against the calf
+        const po = bootPt(y, t, 0.024), pi = bootPt(y, t, 0.008);
+        po[2] -= lean * 0.2; pi[2] -= lean * 0.2;
+        ro.push(po); ri.push(pi);
+      }
+      Po.push(ro); Pi.push(ri); Ah.push(A(r === HR ? 0.8 : 1, lerp(0.7, 1, r / HR)));
+    }
+    geoShell(g, Po, Pi, Ah, M);
+    // straps: bands around the front of the boot, low at the sides, high over the top
+    const strap = (yS, yT, wid, t0, t1) => {
+      const K = 7, So = [], Si = [];
+      for (const e of [-0.5, 0.5]) {
+        const ro = [], ri = [];
+        for (let k = 0; k <= K; k++) {
+          const t = lerp(t0, t1, k / K), y = lerp(yS, yT, Math.pow(Math.sin(t), 2)) + e * wid;
+          ro.push(bootPt(y, t, 0.014)); ri.push(bootPt(y, t, 0.002));
+        }
+        So.push(ro); Si.push(ri);
+      }
+      geoShell(g, So, Si, [A(1, 1), A(1, 1)], M);
+      g.slot = RS.TRIM;                                          // buckle on the toe-edge-facing side
+      const bp = bootPt(lerp(yS, yT, 0.5), (t0 + t1) / 2 - 0.55, 0.018);
+      geoBox(g, bx + bp[0], 0.03 + bp[1], bp[2], 0.012, 0.022, 0.03, [1, 1, 1]);
+      g.slot = RS.BINDING;
+    };
+    strap(0.10, 0.165, 0.045, 0.15, Math.PI - 0.15);           // ankle strap over the instep
+    strap(0.035, 0.075, 0.03, 0.35, Math.PI - 0.35);           // toe cap strap
   }
   return g;
 }
@@ -1155,100 +1507,242 @@ function buildBoard() {
      torso / pelvis / head : +Y up, +Z = the way the chest/face points,
                              +X = the lead shoulder side.  Origin at the base.
      limb meshes           : unit radius, unit length along +Y (m4limb scales them).
-     boot                  : +X = board nose, +Z = toes, origin at the sole.       */
+     mitten                : origin at the wrist, +Y up the forearm, +X = thumb side.
+     boot                  : +X = board nose, +Z = toes, origin at the sole.
+     scarf                 : unit strip along +Y, width on X, thickness on Z.
+   Colours come from the outfit palette per slot (RS.*); the vertex colour is
+   only a shade multiplier, using these greys for fixed details.             */
 const RiderGeo = {};
 const RIDER_COL = {
-  jacket: [0.96, 0.40, 0.10], accent: [1.00, 0.84, 0.22], pants: [0.11, 0.14, 0.24],
-  glove: [0.08, 0.08, 0.10], helmet: [0.17, 0.18, 0.22], lens: [1.00, 0.55, 0.12],
-  skin: [0.86, 0.64, 0.50], boot: [0.20, 0.20, 0.24]
+  base: 1.0, seam: 0.62, edge: 0.55, under: 0.42, inner: 0.30, sole: 0.34
 };
-
-/* ellipse loft along +Y: rings = [[y, halfX, halfZ, colour], ...], closed top/bottom */
-function geoLoft(g, rings, seg, cx = 0, cz = 0) {
-  const base = g.v.length / STRIDE;
-  for (let j = 0; j < rings.length; j++) {
-    const [y, a, b, col] = rings[j];
-    const jp = rings[Math.max(0, j - 1)], jn = rings[Math.min(rings.length - 1, j + 1)];
-    const dy = (jn[0] - jp[0]) || 1, da = (jn[1] - jp[1]) / dy, db = (jn[2] - jp[2]) / dy;
-    for (let i = 0; i <= seg; i++) {
-      const t = i / seg * TAU, c = Math.cos(t), sn = Math.sin(t);
-      // outward normal of an elliptic section, tilted by the taper
-      let nx = c / Math.max(a, 1e-3), nz = sn / Math.max(b, 1e-3);
-      const nl = Math.hypot(nx, nz); nx /= nl; nz /= nl;
-      const ny = -(da * Math.abs(c) + db * Math.abs(sn));
-      const l = Math.hypot(nx, ny, nz);
-      geoVert(g, cx + c * a, y, cz + sn * b, nx / l, ny / l, nz / l, col[0], col[1], col[2]);
-    }
-  }
-  const w = seg + 1;
-  for (let j = 0; j < rings.length - 1; j++) for (let i = 0; i < seg; i++) {
-    const a = base + j * w + i, b = a + 1, c = a + w, d = c + 1;
-    geoTri(g, a, c, b); geoTri(g, b, c, d);
-  }
-  // caps
-  const top = rings[rings.length - 1], bot = rings[0];
-  const ct = geoVert(g, cx, top[0], cz, 0, 1, 0, top[3][0], top[3][1], top[3][2]);
-  const tb = g.v.length / STRIDE;
-  for (let i = 0; i <= seg; i++) { const t = i / seg * TAU; geoVert(g, cx + Math.cos(t) * top[1], top[0], cz + Math.sin(t) * top[2], 0, 1, 0, top[3][0], top[3][1], top[3][2]); }
-  for (let i = 0; i < seg; i++) geoTri(g, ct, tb + i + 1, tb + i);
-  const cb = geoVert(g, cx, bot[0], cz, 0, -1, 0, bot[3][0], bot[3][1], bot[3][2]);
-  const bb = g.v.length / STRIDE;
-  for (let i = 0; i <= seg; i++) { const t = i / seg * TAU; geoVert(g, cx + Math.cos(t) * bot[1], bot[0], cz + Math.sin(t) * bot[2], 0, -1, 0, bot[3][0], bot[3][1], bot[3][2]); }
-  for (let i = 0; i < seg; i++) geoTri(g, cb, bb + i, bb + i + 1);
-}
 
 function buildRider() {
   const C = RIDER_COL;
-  // jacket: hem → waist → chest → broad shoulders → collar. Wide across X, shallow in Z.
-  const t = Geo();
-  geoLoft(t, [
-    [0.00, 0.165, 0.125, C.jacket], [0.08, 0.160, 0.120, C.jacket], [0.22, 0.175, 0.125, C.jacket],
-    [0.36, 0.205, 0.135, C.jacket], [0.44, 0.225, 0.135, C.accent], [0.47, 0.225, 0.130, C.accent],
-    [0.52, 0.215, 0.120, C.jacket], [0.57, 0.150, 0.095, C.jacket], [0.60, 0.075, 0.070, C.jacket]
-  ], 14);
-  geoSphere(t, 0.205, 0.50, 0, 0.085, C.jacket, 10, 6);                 // shoulder caps
-  geoSphere(t, -0.205, 0.50, 0, 0.085, C.jacket, 10, 6);
-  geoBox(t, 0, 0.30, 0.128, 0.025, 0.42, 0.012, C.glove);                // front zip
+  const SEG = 12;
+
+  /* jacket: puffy A-line torso, wider than deep. From the bottom: inside of the
+     hem (dark), the hem lip that hangs over the pants, an accent hem band, the
+     quilted body, an accent shoulder yoke, the collar. vv = height, for the
+     shader's quilting baffles. */
+  const t = Geo({ aux: true });
+  const J = RS.JACKET, AC = RS.ACCENT;
+  const TORSO = [
+    { y: 0.020, a: 0, s: J, c: C.inner, ao: 0.25 },
+    { y: -0.030, a: 0.150, b: 0.112, c: C.inner, ao: 0.3 },
+    { y: -0.068, a: 0.182, b: 0.140, c: C.under, ao: 0.42 },
+    { y: -0.078, a: 0.194, b: 0.151, c: C.edge, ao: 0.6 },
+    { y: -0.066, a: 0.199, b: 0.156, s: AC, ao: 0.85 },
+    { y: -0.026, a: 0.197, b: 0.154, ao: 0.9 },
+    { y: -0.014, a: 0.195, b: 0.152, s: J, ao: 0.9 },
+    { y: 0.060, a: 0.188, b: 0.146 },
+    { y: 0.150, a: 0.186, b: 0.144 },
+    { y: 0.250, a: 0.199, b: 0.153 },
+    { y: 0.340, a: 0.215, b: 0.163, z: 0.006 },
+    { y: 0.410, a: 0.226, b: 0.164, z: 0.006 },
+    { y: 0.462, a: 0.230, b: 0.157, z: 0.003, s: AC },
+    { y: 0.490, a: 0.230, b: 0.150 },
+    { y: 0.535, a: 0.210, b: 0.132 },
+    { y: 0.572, a: 0.162, b: 0.110 },
+    { y: 0.598, a: 0.112, b: 0.098 },
+    { y: 0.614, a: 0.094, b: 0.092, s: J },
+    { y: 0.668, a: 0.090, b: 0.090 },
+    { y: 0.692, a: 0.086, b: 0.086, c: C.edge },
+    { y: 0.684, a: 0.068, b: 0.068, c: C.inner, ao: 0.3 },
+    { y: 0.640, a: 0, c: C.inner, ao: 0.3 }
+  ];
+  rLoft(t, TORSO, 16);
+  // armpits and the small of the back sit in the shade of the arms / bend
+  bakeAO(t, 0, (x, y, z) => 1 - 0.35 * sstep(0.15, 0.21, Math.abs(x)) * sstep(0.18, 0.30, y) * (1 - sstep(0.40, 0.48, y)));
+  // padded shoulder caps (part of the yoke); their lower half hides inside the sleeve top
+  let v0 = t.v.length / STRIDE;
+  t.slot = AC; t.ao = 1; t.vv = 0.48;
+  geoSphere(t, 0.198, 0.492, 0.0, 0.080, [1, 1, 1], 10, 6, [1.0, 0.85, 0.95]);
+  geoSphere(t, -0.198, 0.492, 0.0, 0.080, [1, 1, 1], 10, 6, [1.0, 0.85, 0.95]);
+  bakeAO(t, v0, (x, y) => lerp(0.6, 1, sstep(0.44, 0.50, y)));
+  // hood rolled up behind the collar: two squashed lumps, shaded underneath
+  v0 = t.v.length / STRIDE;
+  t.slot = J; t.vv = 0.60;
+  geoSphere(t, 0, 0.630, -0.092, 0.125, [1, 1, 1], 10, 5, [1.0, 0.48, 0.55]);
+  geoSphere(t, 0, 0.600, -0.122, 0.095, [1, 1, 1], 8, 5, [1.0, 0.55, 0.50]);
+  bakeAO(t, v0, (x, y) => lerp(0.45, 1, sstep(0.56, 0.66, y)));
+  // front zip: a thin dark slab following the chest profile
+  {
+    const zr = TORSO.slice(4, 18).filter(r => r.a > 0), Zo = [], Zi = [], Az = [];
+    for (const r of zr) {
+      const zf = (r.z || 0) + r.b;
+      Zo.push([[-0.008, r.y, zf + 0.004], [0.008, r.y, zf + 0.004]]);
+      Zi.push([[-0.008, r.y, zf - 0.004], [0.008, r.y, zf - 0.004]]);
+      Az.push({ s: RS.TRIM, c: 1, ao: 1, v: r.y });
+    }
+    geoShell(t, Zo, Zi, Az);
+  }
   RiderGeo.torso = t;
 
-  // pelvis / seat of the pants, belt on top
-  const pv = Geo();
-  geoLoft(pv, [
-    [-0.17, 0.150, 0.115, C.pants], [-0.06, 0.165, 0.125, C.pants],
-    [0.00, 0.165, 0.125, C.glove], [0.03, 0.160, 0.122, C.glove]
+  // seat of the baggy pants (the jacket hem covers the top)
+  const pv = Geo({ aux: true });
+  rLoft(pv, [
+    { y: -0.215, a: 0, s: RS.PANTS, ao: 0.5 },
+    { y: -0.205, a: 0.085, b: 0.072, ao: 0.55 },
+    { y: -0.170, a: 0.140, b: 0.112, ao: 0.75 },
+    { y: -0.110, a: 0.172, b: 0.134 },
+    { y: -0.040, a: 0.175, b: 0.136, ao: 0.8 },
+    { y: 0.020, a: 0.167, b: 0.129, ao: 0.5 },
+    { y: 0.050, a: 0.130, b: 0.100, ao: 0.4 },
+    { y: 0.060, a: 0, ao: 0.4 }
   ], 14);
   RiderGeo.pelvis = pv;
 
-  // limbs: unit-radius tapered tubes, scaled per part
-  const limb = (col, r1) => { const g = Geo(); geoCyl(g, 0, 0, 0, 1, r1, 1, col, 10, true, true); return g; };
-  RiderGeo.thigh = limb(C.pants, 0.85);
-  RiderGeo.shin = limb(C.pants, 0.80);
-  RiderGeo.uparm = limb(C.jacket, 0.85);
-  RiderGeo.forearm = limb(C.jacket, 0.80);
-  // knee + elbow joints so bent limbs don't show gaps
-  RiderGeo.knee = Geo(); geoSphere(RiderGeo.knee, 0, 0, 0, 1, C.pants, 10, 6);
-  RiderGeo.elbow = Geo(); geoSphere(RiderGeo.elbow, 0, 0, 0, 1, C.jacket, 10, 6);
+  /* limbs: unit-radius tubes along +Y (y = 0 at the upper joint), scaled per
+     part by m4limb. Profiles bulge, bunch into soft fold ripples near the
+     joints (shaded troughs) and flare at the cuffs. */
+  const P_ = { s: RS.PANTS }, J_ = { s: RS.JACKET };
+  const fold = { ao: 0.74, c: 0.92 };
+  RiderGeo.thigh = Geo({ aux: true });
+  rTube(RiderGeo.thigh, [
+    [-0.03, 0, Object.assign({ ao: 0.6 }, P_)], [0.0, 1.06, { ao: 0.7 }], [0.12, 1.17], [0.45, 1.22],
+    [0.70, 1.27], [0.78, 1.17, fold], [0.84, 1.27], [0.905, 1.15, fold], [0.96, 1.21], [1.03, 1.10, { ao: 0.8 }], [1.07, 0, { ao: 0.8 }]
+  ], SEG, 0.45);
+  // shin: knee → ankle. Bunches where it stacks on the boot, then a wide cuff
+  // that hangs over the boot with a dark underside.
+  RiderGeo.shin = Geo({ aux: true });
+  rTube(RiderGeo.shin, [
+    [-0.06, 0, Object.assign({ ao: 0.8 }, P_)], [-0.03, 1.16], [0.03, 1.32], [0.09, 1.20, fold], [0.15, 1.33],
+    [0.22, 1.24, { ao: 0.82, c: 0.9 }], [0.42, 1.30], [0.63, 1.37], [0.71, 1.48], [0.765, 1.36, fold],
+    [0.82, 1.52], [0.87, 1.42, fold], [0.93, 1.57], [1.00, 1.61], [1.045, 1.60, { c: C.edge, ao: 0.6 }],
+    [1.035, 1.36, { c: C.inner, ao: 0.3 }], [0.95, 0, { c: C.inner, ao: 0.25 }]
+  ], SEG, 0.45);
+  RiderGeo.uparm = Geo({ aux: true });
+  rTube(RiderGeo.uparm, [
+    [-0.08, 0, { s: RS.ACCENT }], [-0.05, 1.16], [0.05, 1.38], [0.13, 1.36], [0.15, 1.35, J_], [0.25, 1.33], [0.55, 1.27],
+    [0.78, 1.24], [0.86, 1.10, fold], [0.93, 1.21], [1.03, 1.12, { ao: 0.85 }], [1.08, 0, { ao: 0.85 }]
+  ], SEG, 0.30, 1);   // v = 0 at the elbow, like the forearm, so the baffles line up
+  // forearm: elbow → wrist, accent cuff with a dark opening the mitten sits in
+  RiderGeo.forearm = Geo({ aux: true });
+  rTube(RiderGeo.forearm, [
+    [-0.06, 0, Object.assign({ ao: 0.85 }, J_)], [-0.03, 1.15], [0.05, 1.28], [0.12, 1.15, fold], [0.20, 1.32],
+    [0.55, 1.34], [0.76, 1.38], [0.82, 1.46, { s: RS.ACCENT }], [0.97, 1.50], [1.0, 1.43, { c: C.edge, ao: 0.6 }],
+    [0.99, 1.10, { c: C.inner, ao: 0.3 }], [0.90, 0, { c: C.inner, ao: 0.3 }]
+  ], SEG, 0.28);
+  // knee + elbow joints fill the gap on the outside of a bent limb
+  RiderGeo.knee = Geo({ aux: true });
+  RiderGeo.knee.slot = RS.PANTS;
+  geoSphere(RiderGeo.knee, 0, 0, 0, 1, [1, 1, 1], 10, 6);
+  RiderGeo.elbow = Geo({ aux: true });
+  RiderGeo.elbow.slot = RS.JACKET;
+  RiderGeo.elbow.vv = 0.05;                        // mid-baffle: no quilting seam across the joint
+  geoSphere(RiderGeo.elbow, 0, 0, 0, 1, [1, 1, 1], 8, 5);
 
-  // head: chin/face, full helmet, goggle strap + big lens facing +Z
-  const hd = Geo();
-  geoSphere(hd, 0, 0.05, 0.035, 0.105, C.skin, 12, 8, [0.95, 1.0, 0.9]);                 // face / chin
-  geoSphere(hd, 0, 0.115, 0, 0.150, C.helmet, 14, 9, [0.98, 0.90, 1.08]);                // helmet shell
-  geoCyl(hd, 0, 0.075, 0, 0.152, 0.150, 0.125, C.glove, 16, false, false);              // strap band
-  geoSphere(hd, 0, 0.10, 0.125, 0.085, C.lens, 12, 7, [1.25, 0.55, 0.45]);              // goggle lens
-  geoCyl(hd, 0, -0.08, -0.01, 0.055, 0.06, 0.02, C.skin, 8, false, false);              // neck
+  /* head: no face. Glossy helmet shell with a brim lip over the goggles and a
+     lower back, ear pads, big goggles (lens on a dark frame + strap), and a
+     neck gaiter covering the lower face and neck. */
+  const hd = Geo({ aux: true });
+  const HC = [0, 0.115, -0.006], HR = [0.150, 0.140, 0.166];
+  const helm = [];
+  const lat = (deg, e) => {
+    const f = deg * Math.PI / 180;
+    return Object.assign({ y: HC[1] + HR[1] * Math.sin(f), a: HR[0] * Math.cos(f), b: HR[2] * Math.cos(f), z: HC[2] }, e);
+  };
+  helm.push({ y: 0.095, a: 0, s: RS.HELMET, c: C.inner, ao: 0.3, z: HC[2] });
+  helm.push(lat(-24, { a: HR[0] * 0.86, b: HR[2] * 0.86, c: C.inner, ao: 0.35, drop: 1 }));
+  helm.push(lat(-24, { c: C.edge, ao: 0.75, drop: 1 }));
+  for (const [d, lip] of [[-12, 0], [2, 0], [12, 0], [17, 0.020], [22, 0.018], [27, 0], [40, 0], [55, 0], [70, 0], [82, 0]])
+    helm.push(lat(d, { lip, drop: d < 0 ? 0.5 : 0 }));
+  helm.push({ y: HC[1] + HR[1], a: 0, z: HC[2] });
+  rLoft(hd, helm, 14, {
+    warp(p, t, r) {
+      const s = Math.sin(t), c = Math.cos(t);
+      if (r.drop) p[1] -= r.drop * 0.045 * (Math.pow(Math.max(0, -s), 1.5) + 0.35 * c * c);   // lower at the back / over the ears
+      if (r.lip) { const k = r.lip * Math.pow(Math.max(0, s), 3); p[0] += c * k; p[2] += s * k; }
+      return p;
+    }
+  });
+  // ear pads
+  hd.slot = RS.TRIM; hd.ao = 0.85; hd.vv = 0;
+  geoSphere(hd, 0.143, 0.060, -0.010, 0.054, [1, 1, 1], 8, 5, [0.42, 1.0, 1.0]);
+  geoSphere(hd, -0.143, 0.060, -0.010, 0.054, [1, 1, 1], 8, 5, [0.42, 1.0, 1.0]);
+  // helmet surface point at height y, angle t, pushed out by `off` (for the goggles)
+  const helmPt = (y, t, off) => {
+    const k = Math.sqrt(Math.max(0.05, 1 - Math.pow((y - HC[1]) / HR[1], 2)));
+    const a = HR[0] * k, b = HR[2] * k, c = Math.cos(t), s = Math.sin(t);
+    const n = p3norm([c / a, 0, s / b]);
+    return [c * a + n[0] * off, y, HC[2] + s * b + n[2] * off];
+  };
+  const band = (y0, y1, t0, t1, oIn, oOut, slot, bulge, K = 12, Rw = 3) => {
+    const Po = [], Pi = [], A = [];
+    for (let r = 0; r <= Rw; r++) {
+      const y = lerp(y0, y1, r / Rw), ro = [], ri = [];
+      for (let k = 0; k <= K; k++) {
+        const t = lerp(t0, t1, k / K);
+        const b = bulge ? bulge * Math.sin((k / K) * Math.PI) * Math.sin((r / Rw) * Math.PI) : 0;
+        ro.push(helmPt(y, t, oOut + b)); ri.push(helmPt(y, t, oIn + b));
+      }
+      Po.push(ro); Pi.push(ri); A.push({ s: slot, c: 1, ao: 1, v: y });
+    }
+    geoShell(hd, Po, Pi, A);
+  };
+  band(0.060, 0.146, 0.33, Math.PI - 0.33, -0.006, 0.016, RS.TRIM, 0, 12, 2);       // goggle frame
+  band(0.070, 0.137, 0.42, Math.PI - 0.42, 0.012, 0.024, RS.LENS, 0.006, 12, 2);    // lens, slightly domed
+  band(0.084, 0.120, Math.PI - 0.36, TAU + 0.36, 0.0, 0.006, RS.TRIM, 0, 14, 1);   // strap round the back
+  // neck gaiter / face mask: neck → jaw → under the goggles, with a nose bump
+  rLoft(hd, [
+    { y: -0.140, a: 0, z: -0.010, s: RS.MASK, ao: 0.4 },
+    { y: -0.130, a: 0.062, z: -0.010, ao: 0.5 },
+    { y: -0.085, a: 0.068, b: 0.070, z: -0.004, ao: 0.7 },
+    { y: -0.055, a: 0.075, b: 0.080, ao: 0.8, c: 0.85 },
+    { y: -0.025, a: 0.090, b: 0.096, z: 0.012 },
+    { y: 0.012, a: 0.108, b: 0.113, z: 0.020 },
+    { y: 0.045, a: 0.121, b: 0.126, z: 0.022 },
+    { y: 0.072, a: 0.126, b: 0.131, z: 0.018, ao: 0.6 },
+    { y: 0.092, a: 0.110, b: 0.114, z: 0.014, ao: 0.4 },
+    { y: 0.100, a: 0, z: 0.014, ao: 0.4 }
+  ], 12, {
+    warp(p, t) {
+      const f = Math.pow(Math.max(0, Math.sin(t)), 6) * Math.exp(-Math.pow((p[1] - 0.045) / 0.03, 2));
+      p[2] += 0.016 * f;
+      return p;
+    }
+  });
   RiderGeo.head = hd;
 
-  const ha = Geo();
-  geoSphere(ha, 0, 0, 0, 0.065, C.glove, 10, 7, [1.0, 0.9, 1.25]);
-  geoCyl(ha, 0, 0.03, 0, 0.055, 0.06, 0.10, C.glove, 8, false, false);                  // cuff
-  RiderGeo.hand = ha;
+  /* mitten: gauntlet cuff tapering up into the sleeve, a flattened mitten body
+     (palm normal on Z) and a thumb on the +X side. */
+  const mt = Geo({ aux: true });
+  mt.slot = RS.GLOVES;
+  rLoft(mt, [
+    { y: 0.100, a: 0, ao: 0.4 }, { y: 0.095, a: 0.042, b: 0.040, ao: 0.5 }, { y: 0.040, a: 0.052, b: 0.048, ao: 0.8 },
+    { y: 0.006, a: 0.060, b: 0.055 }, { y: -0.002, a: 0.057, b: 0.051, c: C.edge, ao: 0.7 },
+    { y: -0.008, a: 0.047, b: 0.040, c: C.seam, ao: 0.6 }, { y: -0.035, a: 0.058, b: 0.044 },
+    { y: -0.070, a: 0.061, b: 0.045 }, { y: -0.100, a: 0.057, b: 0.042 }, { y: -0.122, a: 0.041, b: 0.033 },
+    { y: -0.136, a: 0.022, b: 0.019 }, { y: -0.141, a: 0 }
+  ], 10);
+  rLoft(mt, [
+    { y: -0.004, a: 0, ao: 0.7 }, { y: 0.0, a: 0.019, b: 0.017, ao: 0.75 }, { y: 0.030, a: 0.019, b: 0.017 },
+    { y: 0.050, a: 0.016, b: 0.014 }, { y: 0.060, a: 0.009, b: 0.008 }, { y: 0.064, a: 0 }
+  ], 8, { M: geoFrame([0.036, -0.030, 0.004], [0.62, -0.78, 0.12], [0, 0, 1]) });
+  RiderGeo.mitten = mt;
 
-  // boot: long axis across the board (+Z = toes)
-  const bt = Geo();
-  geoBox(bt, 0, 0.05, 0.025, 0.115, 0.10, 0.30, C.boot);
-  geoBox(bt, 0, 0.15, -0.015, 0.115, 0.12, 0.17, C.boot);
-  geoBox(bt, 0, 0.06, 0.10, 0.12, 0.035, 0.06, C.glove);                                // toe strap
+  /* boot: a soft lofted boot with a dark sole, a seam line at the welt and a
+     padded collar the pants cuff stacks on. */
+  const bt = Geo({ aux: true });
+  const S = BOOT_SECT, BR = [];
+  BR.push({ y: 0, a: 0, z: S[0][3], s: RS.BOOTS, c: C.sole, ao: 0.6 });
+  S.forEach(([y, a, b, z], k) => BR.push({ y, a, b, z, c: k < 2 ? C.sole : (k === 2 ? C.seam : 1), hard: k === 2, ao: k < 2 ? 0.7 : 1 }));
+  BR.push({ y: 0.240, a: 0.070, b: 0.080, z: -0.015, c: C.seam });
+  BR.push({ y: 0.236, a: 0.052, b: 0.060, z: -0.015, c: C.inner, ao: 0.3 });
+  BR.push({ y: 0.200, a: 0, z: -0.015, c: C.inner, ao: 0.3 });
+  rLoft(bt, BR, 12);
   RiderGeo.boot = bt;
+
+  /* scarf segment: a flattened tube, unit length along +Y. Full width reaches
+     back over the previous segment's end so the joints never pinch; the far
+     end tapers inside the next segment. v sits mid-baffle (no quilting seam). */
+  const sc = Geo({ aux: true });
+  rLoft(sc, [
+    { y: -0.16, a: 0, s: RS.ACCENT, v: 0.05 }, { y: -0.14, a: 0.5, b: 0.42, v: 0.05 },
+    { y: 1.0, a: 0.5, b: 0.42, v: 0.05 }, { y: 1.03, a: 0.3, b: 0.25, v: 0.05 }, { y: 1.04, a: 0, v: 0.05 }
+  ], 6);
+  RiderGeo.scarf = sc;
 }
 
 /* ---------------- vegetation + rocks (instanced) ---------------- */
@@ -1656,6 +2150,156 @@ function makeNeedleCanvas(W = 256, H = 128) {
 }
 
 </script>
+<script>/* js/outfit.js */
+/* =====================================================================
+   outfit.js — the rider's colours. One RGB per palette slot (RS.* in
+   meshes.js); the rider shader reads Outfit.palette as a uniform array, so
+   changing a colour is instant and never rebuilds a mesh.
+   The player's choice lives in localStorage ('powderline.outfit') and is
+   loaded at the bottom of this file, before game.js boots.
+   ===================================================================== */
+'use strict';
+
+const OUTFIT_DEFAULTS = {
+  [RS.JACKET]: '#f5661a', [RS.ACCENT]: '#ffd638', [RS.PANTS]: '#1c243d', [RS.GLOVES]: '#16161b',
+  [RS.HELMET]: '#2c2f38', [RS.LENS]: '#ff8a1f', [RS.BOOTS]: '#33343d', [RS.BOARD_TOP]: '#0f9ebd',
+  [RS.BOARD_BASE]: '#f4efe5', [RS.BINDING]: '#1a1c24', [RS.TRIM]: '#1a1c26', [RS.MASK]: '#2a2c33'
+};
+
+/* The user-facing items, in menu order. TRIM and MASK aren't listed: they
+   follow PANTS and HELMET (see derive()). */
+const OUTFIT_ITEMS = [
+  [RS.JACKET, 'Jacket'], [RS.ACCENT, 'Accent'], [RS.PANTS, 'Pants'], [RS.GLOVES, 'Gloves'],
+  [RS.HELMET, 'Helmet'], [RS.LENS, 'Goggles'], [RS.BOOTS, 'Boots'], [RS.BOARD_TOP, 'Board top'],
+  [RS.BOARD_BASE, 'Board base'], [RS.BINDING, 'Bindings']
+];
+
+/* Named looks. Order: jacket, accent, pants, gloves, helmet, lens, boots,
+   board top, board base, bindings (TRIM / MASK are derived). */
+const OUTFIT_PRESETS = {
+  Classic: null,   // = OUTFIT_DEFAULTS
+  Stealth: ['#18191d', '#2c2e35', '#111216', '#0c0c0f', '#1d1f24', '#33e4ff', '#17181c', '#1b1c21', '#33e4ff', '#0e0f12'],
+  Neon: ['#7b3fe4', '#19f0c8', '#ff2d95', '#19f0c8', '#fff04a', '#ff6a00', '#2b1b4d', '#ffe14a', '#19f0c8', '#ff2d95'],
+  Race: ['#f2f3f5', '#e0162b', '#c8102e', '#e0162b', '#f2f3f5', '#ffc21a', '#f2f3f5', '#e0162b', '#15171c', '#f2f3f5'],
+  Forest: ['#3f5a35', '#d9a441', '#b49a70', '#5a3d26', '#2f3a2a', '#e8b04a', '#4a3322', '#6e8b3d', '#ece3cf', '#2a2a24'],
+  Glacier: ['#a9d8f0', '#ffffff', '#eef3f8', '#2c4a63', '#f6f8fb', '#7a5cff', '#2c4a63', '#1c6fa8', '#a9d8f0', '#eef3f8']
+};
+
+const OUTFIT_KEY = 'powderline.outfit';
+const OUTFIT_HEX = /^#[0-9a-f]{6}$/i;
+
+const Outfit = {
+  palette: new Float32Array(RS_COUNT * 3),   // linear-ish 0..1 rgb per slot (as the old vertex colours were)
+  hex: {},
+
+  /* '#rrggbb' → palette entry */
+  set(slot, hex) {
+    this.hex[slot] = hex;
+    const n = parseInt(hex.slice(1), 16);
+    this.palette[slot * 3] = ((n >> 16) & 255) / 255;
+    this.palette[slot * 3 + 1] = ((n >> 8) & 255) / 255;
+    this.palette[slot * 3 + 2] = (n & 255) / 255;
+  },
+
+  reset() { for (const k in OUTFIT_DEFAULTS) this.set(+k, OUTFIT_DEFAULTS[k]); },
+
+  /* TRIM (cuffs, zips, collar) is a darker shade of the pants, MASK a shade of the helmet */
+  derive() {
+    this.set(RS.TRIM, hexShade(this.hex[RS.PANTS], 0.62));
+    this.set(RS.MASK, hexShade(this.hex[RS.HELMET], 0.9));
+  },
+
+  /* a user edit from the customise panel: set, keep the derived slots in step, persist */
+  pick(slot, hex) {
+    if (!OUTFIT_HEX.test(hex)) return;
+    this.set(slot, hex.toLowerCase());
+    if (slot === RS.PANTS || slot === RS.HELMET) this.derive();
+    this.save();
+  },
+
+  applyPreset(name) {
+    const p = OUTFIT_PRESETS[name];
+    if (p === undefined) return false;
+    if (!p) this.reset();
+    else { OUTFIT_ITEMS.forEach(([slot], i) => this.set(slot, p[i])); this.derive(); }
+    this.save();
+    return true;
+  },
+
+  /* the preset the current colours match exactly, or null */
+  presetName() {
+    for (const name in OUTFIT_PRESETS) {
+      const p = OUTFIT_PRESETS[name];
+      if (OUTFIT_ITEMS.every(([slot], i) => this.hex[slot] === (p ? p[i] : OUTFIT_DEFAULTS[slot]))) return name;
+    }
+    return null;
+  },
+
+  /* A harmonious random outfit: one base hue for the jacket, the accent near
+     its complement, pants either a dark neutral or a light contrast, and the
+     hardware (gloves, boots, bindings) mostly dark so the colours read. */
+  randomize() {
+    const r = Math.random, pickOf = (a) => a[Math.floor(r() * a.length)];
+    const h = r() * 360, comp = h + 180 + (r() - 0.5) * 50;
+    const darkN = () => hslHex(h + 180 + (r() - 0.5) * 60, 0.12 + r() * 0.2, 0.1 + r() * 0.09);
+    const jacket = hslHex(h, 0.55 + r() * 0.35, 0.42 + r() * 0.18);
+    const accent = hslHex(comp, 0.75 + r() * 0.25, 0.55 + r() * 0.12);
+    const pants = r() < 0.65 ? hslHex(h + 180 + (r() - 0.5) * 80, 0.2 + r() * 0.35, 0.13 + r() * 0.12)
+      : hslHex(h + (r() - 0.5) * 40, 0.1 + r() * 0.2, 0.82 + r() * 0.1);
+    const helmet = pickOf([darkN(), '#f2f3f5', jacket, hslHex(h, 0.15, 0.22)]);
+    const lens = hslHex(pickOf([comp, h + 120, h - 120, 30, 190]), 0.9, 0.55);
+    const vals = [
+      jacket, accent, pants,
+      r() < 0.7 ? darkN() : accent,                 // gloves
+      helmet, lens,
+      darkN(),                                      // boots
+      hslHex(h + pickOf([120, -120, 180, 0]), 0.6 + r() * 0.35, 0.4 + r() * 0.2),   // board top
+      r() < 0.5 ? hslHex(h, 0.15, 0.9) : accent,    // board base
+      r() < 0.75 ? darkN() : accent                 // bindings
+    ];
+    OUTFIT_ITEMS.forEach(([slot], i) => this.set(slot, vals[i]));
+    this.derive();
+    this.save();
+  },
+
+  /* ---------------- persistence (never let blocked storage break the game) ---------------- */
+  save() {
+    const o = {};
+    for (const name in RS) o[name] = this.hex[RS[name]];
+    try { localStorage.setItem(OUTFIT_KEY, JSON.stringify(o)); } catch (e) { }
+  },
+
+  /* defaults, then whatever valid colours were saved; true if a saved outfit was found */
+  load() {
+    this.reset();
+    let o = null;
+    try { o = JSON.parse(localStorage.getItem(OUTFIT_KEY) || 'null'); } catch (e) { o = null; }
+    if (!o || typeof o !== 'object') return false;
+    for (const name in RS) if (typeof o[name] === 'string' && OUTFIT_HEX.test(o[name])) this.set(RS[name], o[name].toLowerCase());
+    return true;
+  }
+};
+
+/* '#rrggbb' scaled towards black by f (0..1) */
+function hexShade(hex, f) {
+  const n = parseInt(hex.slice(1), 16);
+  const c = (v) => Math.round(v * f).toString(16).padStart(2, '0');
+  return '#' + c((n >> 16) & 255) + c((n >> 8) & 255) + c(n & 255);
+}
+/* hue in degrees (any range), s / l 0..1 → '#rrggbb' */
+function hslHex(h, s, l) {
+  h = ((h % 360) + 360) % 360; s = Math.min(1, Math.max(0, s)); l = Math.min(1, Math.max(0, l));
+  const a = s * Math.min(l, 1 - l);
+  const f = (n) => {
+    const k = (n + h / 30) % 12;
+    return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)))).toString(16).padStart(2, '0');
+  };
+  return '#' + f(0) + f(8) + f(4);
+}
+
+Outfit.load();
+
+</script>
 <script>/* js/levels.js */
 /* =====================================================================
    levels.js — the two built courses (the endless mountain lives in world.js).
@@ -1966,7 +2610,7 @@ const GL = {
     // uses 3..7, bindParticles uses 3/4. Binding an undeclared name is a no-op.
     const SLOTS = [['aPos', 0], ['aNormal', 1], ['aColor', 2],
                    ['aIM0', 3], ['aIM1', 4], ['aIM2', 5], ['aIM3', 6], ['aTint', 7],
-                   ['aP0', 3], ['aP1', 4], ['aAlpha', 1]];
+                   ['aP0', 3], ['aP1', 4], ['aAlpha', 1], ['aAux', 8]];
     for (const [nm, loc] of SLOTS) gl.bindAttribLocation(p, loc, nm);
     gl.linkProgram(p);
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('Link "' + name + '": ' + gl.getProgramInfoLog(p));
@@ -1999,8 +2643,16 @@ const GL = {
     const ib = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(geo.i), gl.STATIC_DRAW);
+    // optional second stream (rider/board): aux = (palette slot, baked ao, v) at location 8
+    let ab = null;
+    if (geo.aux && geo.aux.length) {
+      ab = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, ab);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(geo.aux), gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(8); gl.vertexAttribPointer(8, 3, gl.FLOAT, false, 12, 0);
+    }
     gl.bindVertexArray(null);
-    const m = { vao, count: geo.i.length, vb, ib, stride: STRIDE };
+    const m = { vao, count: geo.i.length, vb, ib, ab, stride: STRIDE };
     this.mesh[name] = m;
     return m;
   },
@@ -2533,6 +3185,104 @@ GL.buildShaders = function () {
       fragColor = vec4(col, 1.0);
     }`;
 
+  /* ---------- rider + board ----------
+     Colour comes from the outfit palette (uPal[slot]) × the vertex colour
+     (a shade multiplier); material is chosen per slot:
+       cloth  (jacket, accent, pants, gloves, boots, mask): wrapped diffuse +
+              soft rim, NO specular highlight — matte fabric
+       gloss  (helmet, board top/base): clear-coat Blinn highlight + fresnel sky
+       lens   (goggles): shiny tinted colour with a hot highlight
+       satin  (bindings, trim): a faint broad highlight
+     aux = (slot, baked ao, v along the part) — see meshes.js. */
+  const RIDER_VS = V_HEAD + `
+    in vec3 aAux;
+    out vec3 vNormal; out vec3 vColor; out vec3 vWorld; out vec3 vAux;
+    void main(){
+      vec4 wp = uModel * vec4(aPos, 1.0);
+      vWorld = wp.xyz;
+      vNormal = normalize(mat3(uModel) * aNormal);
+      vColor = aColor;
+      vAux = aAux;
+      gl_Position = uProj * uView * wp;
+    }`;
+  const RIDER_FS = LIGHTING_GLSL + `
+    in vec3 vNormal; in vec3 vColor; in vec3 vWorld; in vec3 vAux;
+    out vec4 fragColor;
+    uniform vec3 uPal[12];
+    // material per slot: 0 cloth, 1 gloss, 2 lens, 3 satin
+    const int MAT[12] = int[12](0, 0, 0, 0, 1, 2, 0, 1, 1, 3, 3, 0);
+    float wrapD(float NoL, float w){ return max((NoL + w) / ((1.0 + w) * (1.0 + w)), 0.0); }
+    // bump without tangents (Mikkelsen, "bump mapping unparametrized surfaces")
+    vec3 bumpN(vec3 N, vec3 P, float h, float k){
+      vec3 dpx = dFdx(P), dpy = dFdy(P);
+      float dhx = dFdx(h), dhy = dFdy(h);
+      vec3 r1 = cross(dpy, N), r2 = cross(N, dpx);
+      float det = dot(dpx, r1);
+      return normalize(abs(det) * N - k * sign(det) * (dhx * r1 + dhy * r2));
+    }
+    void main(){
+      int slot = int(vAux.x + 0.5);
+      int mat = MAT[slot];
+      vec3 base = uPal[slot] * vColor;
+      float ao = clamp(vAux.y, 0.0, 1.0);
+      vec3 n = normalize(vNormal);
+      vec3 V = normalize(uCamPos - vWorld);
+      if(dot(n, V) < -0.2) n = -n;                       // thin/open shells seen from inside
+      float dist = length(uCamPos - vWorld);
+
+      // puffy jacket: horizontal quilting baffles along the torso (v = metres up the part)
+      if(slot == 0 || slot == 1){
+        float per = 0.105;
+        float f = fract(vAux.z / per);
+        float seam = 1.0 - smoothstep(0.0, 0.10 + fwidth(vAux.z / per) * 1.5, min(f, 1.0 - f));
+        float near = 1.0 - smoothstep(6.0, 16.0, dist);
+        base *= mix(1.0, 0.80, seam * near);
+        ao *= mix(1.0, 0.86, seam * near);
+        n = bumpN(n, vWorld, sin(3.14159 * f) * 0.010 * near, 1.0);
+      }
+
+      float NoL = dot(n, uSunDir), NoV = max(dot(n, V), 1e-3);
+      float sh = shadowFactor(vWorld, max(NoL, 0.0));
+      vec3 H = normalize(uSunDir + V);
+      float NoH = max(dot(n, H), 0.0);
+      vec3 amb = hemi(n) * (0.50 + 0.25 * n.y) * ao;
+      vec3 col;
+      if(mat == 0){
+        // matte fabric: soft wrapped terminator, grazing-angle sheen, no highlight
+        float diff = wrapD(NoL, 0.45) * sh * mix(1.0, ao, 0.35);
+        col = base * (uSunColor * diff + amb);
+        float rim = pow(1.0 - NoV, 3.0);
+        col += mix(base, uSkyTint, 0.55) * rim * 0.32 * (0.35 + 0.65 * sh) * ao;
+      } else {
+        float diff = max(NoL, 0.0) * sh;
+        col = base * (uSunColor * diff + amb);
+        vec3 R = reflect(-V, n);
+        float F = 0.04 + 0.96 * pow(1.0 - NoV, 5.0);
+        vec3 env = mix(uGroundTint, uSkyTint * 1.6, clamp(R.y * 0.5 + 0.5, 0.0, 1.0));
+        if(mat == 1){                                      // clear-coat: helmet shell, board
+          col += uSunColor * pow(NoH, 110.0) * 0.9 * sh;
+          col += env * F * 0.55 * ao;
+        } else if(mat == 2){                               // goggle lens: shiny tinted colour
+          col = base * (uSunColor * diff * 0.6 + amb * 0.8) + base * 0.18;
+          col += uSunColor * pow(NoH, 160.0) * 2.2 * sh;
+          col += env * mix(0.15, 0.6, F) * base;
+        } else {                                           // satin: bindings, trim
+          col += uSunColor * pow(NoH, 28.0) * 0.12 * sh;
+          col += env * F * 0.2 * ao;
+        }
+      }
+      // night lamps / rider glow (diffuse only)
+      for(int i = 0; i < 8; i++){
+        if(i >= uPLn) break;
+        vec3 Lv = uPL[i].xyz - vWorld;
+        float d = length(Lv);
+        float a = clamp(1.0 - d / uPL[i].w, 0.0, 1.0); a *= a;
+        col += base * uPLc[i].rgb * a * (0.3 + 0.7 * max(dot(n, Lv / max(d, 1e-3)), 0.0));
+      }
+      col = applyFog(col, vWorld, V, dist);
+      fragColor = vec4(col, 1.0);
+    }`;
+
   /* ---------- instanced props ---------- */
   const INST_VS = V_HEAD + V_OUT + `
     out float vEmis;
@@ -2787,6 +3537,7 @@ GL.buildShaders = function () {
 
   this.prog.world = this.link(TERRAIN_VS, TERRAIN_FS, 'world');
   this.prog.lit = this.link(LIT_VS, LIT_FS, 'lit');
+  this.prog.rider = this.link(RIDER_VS, RIDER_FS, 'rider');
   this.prog.inst = this.link(INST_VS, INST_FS, 'inst');
   this.prog.shadow = this.link(SHADOW_VS, SHADOW_FS, 'shadow');
   this.prog.shadowInst = this.link(SHADOW_INST_VS, SHADOW_FS, 'shadowInst');
@@ -2821,6 +3572,7 @@ const Cam = {
   heading: 0, snapNext: true,
   // mouse orbit (right/middle drag) + wheel zoom; springs back after release
   orbitYaw: 0, orbitPitch: 0, zoom: 1, portraitZoom: 1, dragging: false, releaseT: 0,
+  cust: 0,             // 0..1 blend into the close "customize rider" framing
 
   snap(P) { this.heading = P.yaw; this.orbitYaw = this.orbitPitch = 0; this.shake = 0; this.snapNext = true; },
   drag(dx, dy) {
@@ -2831,7 +3583,10 @@ const Cam = {
   update(dt, P, state) {
     const speedN = clamp(P.speed / 26, 0, 1);
     // FOV opens up with speed — the classic sense-of-velocity trick
-    this.fov = damp(this.fov, 1.02 + speedN * 0.26 + (P.airborne ? 0.04 : 0), 3.2, dt);
+    // customize screen: swing in close and slowly circle the rider
+    this.cust = damp(this.cust, Game.customizing ? 1 : 0, 3.5, dt);
+    if (this.cust > 0.01 && !this.dragging) this.orbitYaw += dt * 0.35 * this.cust;
+    this.fov = damp(this.fov, lerp(1.02 + speedN * 0.26 + (P.airborne ? 0.04 : 0), 0.62, this.cust), 3.2, dt);
     this.aspect = GL.w / Math.max(1, GL.h);
     // portrait screens: widen the vertical FOV so the horizontal view isn't a
     // slit, but only so far — the camera moves in instead (see portraitZoom)
@@ -2864,8 +3619,8 @@ const Cam = {
     const yaw = this.heading + this.orbitYaw;
     const fx = Math.sin(yaw), fz = Math.cos(yaw);
     const lc = Level.cur.cam || {};
-    const dist = (9.0 + speedN * 3.5 + (P.airborne ? 1.5 : 0)) * this.zoom * (lc.dist || 1) * this.portraitZoom;
-    const elev = clamp((lc.elev || 0.40) + this.orbitPitch, -0.12, 1.35);
+    const dist = lerp((9.0 + speedN * 3.5 + (P.airborne ? 1.5 : 0)) * this.zoom * (lc.dist || 1) * this.portraitZoom, 4.2, this.cust);
+    const elev = clamp(lerp(lc.elev || 0.40, 0.16, this.cust) + this.orbitPitch, -0.12, 1.35);
     const ce = Math.cos(elev), se = Math.sin(elev);
     const fy = P.pos.y + 1.1;                               // focus: rider's chest
     const tx = P.pos.x - fx * dist * ce, tz = P.pos.z - fz * dist * ce;
@@ -2873,21 +3628,29 @@ const Cam = {
 
     // ---- aim: rider, plus a lead down the hill when the view is at rest ----
     const userOff = Math.min(1, Math.abs(this.orbitYaw) * 1.5 + Math.abs(this.orbitPitch) * 1.5);
-    const lead = (3 + speedN * 7) * (1 - userOff);
+    const lead = (3 + speedN * 7) * (1 - userOff) * (1 - this.cust);
     const hx = Math.sin(this.heading), hz = Math.cos(this.heading);
     const lx = P.pos.x + hx * lead, lz = P.pos.z + hz * lead;
-    const ly = lerp(fy, heightAt(lx, lz) + 1.1, 0.5);
+    let ly = lerp(fy, heightAt(lx, lz) + 1.1, 0.5);
+    // customize framing: the panel covers the right side (desktop) or the bottom
+    // (portrait phone) — aim past the rider so they sit in the open part of the screen
+    let ax = lx, az = lz;
+    if (this.cust > 0.01) {
+      const rx = -Math.cos(yaw), rz = Math.sin(yaw);       // toward screen-right on the ground plane
+      const side = this.aspect > 1 ? 0.95 : 0, down = this.aspect > 1 ? 0.15 : 0.75;
+      ax += rx * side * this.cust; az += rz * side * this.cust; ly -= down * this.cust;
+    }
 
     if (this.snapNext) {
-      V3.set(this.pos, tx, ty, tz); V3.set(this.look, lx, ly, lz); this.snapNext = false;
+      V3.set(this.pos, tx, ty, tz); V3.set(this.look, ax, ly, az); this.snapNext = false;
     } else {
       const lag = this.dragging ? 16 : (P.airborne ? 4.5 : 7);
       this.pos.x = damp(this.pos.x, tx, lag, dt);
       this.pos.y = damp(this.pos.y, ty, lag * 0.8, dt);
       this.pos.z = damp(this.pos.z, tz, lag, dt);
-      this.look.x = damp(this.look.x, lx, 9, dt);
+      this.look.x = damp(this.look.x, ax, 9, dt);
       this.look.y = damp(this.look.y, ly, 6, dt);           // terrain noise ahead → smooth it
-      this.look.z = damp(this.look.z, lz, 9, dt);
+      this.look.z = damp(this.look.z, az, 9, dt);
     }
 
     // camera shake
@@ -3277,15 +4040,20 @@ const Render = {
     // ---- night: lamp posts along the run ----
     Atmos.drawLamps(ip, P);
 
-    // ---- rider + board ----
+    // ---- level structures ----
     const lp = GL.prog.lit.use();
     Sun.setUniforms(lp);
     gl.uniform1f(lp.uSparkle, 0.0);
     if (GL.mesh._levelDecor) drawMesh(lp, '_levelDecor', IDENT);
-    drawMesh(lp, 'board', P.boardMat);
+
+    // ---- rider + board: outfit palette + per-slot materials ----
+    const rp = GL.prog.rider.use();
+    Sun.setUniforms(rp);
+    gl.uniform3fv(rp.uPal, Outfit.palette);
+    drawMesh(rp, 'board', P.boardMat);
     for (let i = 0; i < P.partCount; i++) {
       const q = P.parts[i];
-      drawMesh(lp, q.mesh, q.mat);
+      drawMesh(rp, q.mesh, q.mat);
     }
 
     // ---- particles ----
@@ -4362,10 +5130,10 @@ class Player {
     this.boardMat = M4();
     this.parts = [];
     this.partCount = 0;
-    // buildPose() emits 14 parts (torso, head, 8 limbs, 2 boots, 2 hands) plus
-    // temporaries. The pool must never wrap mid-pose, or a later part shares —
-    // and overwrites — an earlier part's matrix.
-    this._tmpM = new Array(32);
+    // buildPose() emits ~27 parts (pelvis, torso, head, 12 limb/joint parts,
+    // 2 mittens, 2 boots, scarf segments) plus temporaries. The pool must never
+    // wrap mid-pose, or a later part shares — and overwrites — an earlier part's matrix.
+    this._tmpM = new Array(48);
     for (let i = 0; i < this._tmpM.length; i++) this._tmpM[i] = M4();
     this._mi = 0;
   }
@@ -4379,6 +5147,7 @@ class Player {
     this.yaw = 0; this.lean = 0; this.speed = v0;
     this.airborne = false; this.airTime = 0; this.crashTimer = 0;
     this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipVis = 0; this.grab = null; this.tuck = 0; this.invuln = 1.2;
+    this._scarf = null;       // re-seed the scarf chain at the new spot
     this.grind = null;
     this.updateBasis();
   }
@@ -4970,25 +5739,31 @@ class Player {
     const frameM = (X, Y, Z, p) => m4axes(this._m(), X, Y, Z, p.x, p.y, p.z, 1);
     const limbM = (a, b, r) => m4limb(this._m(), a.x, a.y, a.z, b.x, b.y, b.z, r);
     const ballM = (p, r) => { const m = this._m(); m4ident(m); m[0] = m[5] = m[10] = r; m[12] = p.x; m[13] = p.y; m[14] = p.z; return m; };
-    const handM = (p, toward) => {
-      const d = nrm(toward.x - p.x, toward.y - p.y, toward.z - p.z);
-      return m4limb(this._m(), p.x, p.y, p.z, p.x + d.x, p.y + d.y, p.z + d.z, 1);
+    // mitten frame: +Y up the forearm, thumb (+X) toward the chest's forward/up side
+    const mittenM = (p, toward) => {
+      const Y = nrm(toward.x - p.x, toward.y - p.y, toward.z - p.z);
+      let c = V3(TZ.x + TY.x * 0.5, TZ.y + TY.y * 0.5, TZ.z + TY.z * 0.5);
+      let k = V3.dot(c, Y);
+      if (Math.hypot(c.x - Y.x * k, c.y - Y.y * k, c.z - Y.z * k) < 0.25) { c = TX; k = V3.dot(c, Y); }
+      const X = nrm(c.x - Y.x * k, c.y - Y.y * k, c.z - Y.z * k);
+      return m4axes(this._m(), X, Y, V3.cross(V3(), X, Y), p.x, p.y, p.z, 1);
     };
 
     push('pelvis', frameM(PX, PY, PZ, pelvisP));
-    push('torso', frameM(TX, TY, TZ, torsoP));
+    const torsoM = frameM(TX, TY, TZ, torsoP);
+    push('torso', torsoM);
     push('head', frameM(HX, TY, HZ, headP));
     for (const leg of [legF, legB]) {
-      push('thigh', limbM(leg === legF ? hipF : hipB, leg.joint, 0.088));
+      push('thigh', limbM(leg === legF ? hipF : hipB, leg.joint, 0.086));
       push('shin', limbM(leg.joint, leg.end, 0.072));
-      push('knee', ballM(leg.joint, 0.08));
+      push('knee', ballM(leg.joint, 0.098));
     }
     for (const arm of [armF, armB]) {
       const sh = arm === armF ? shF : shB;
-      push('uparm', limbM(sh, arm.joint, 0.064));
-      push('forearm', limbM(arm.joint, arm.end, 0.054));
-      push('elbow', ballM(arm.joint, 0.058));
-      push('hand', handM(arm.end, arm.joint));
+      push('uparm', limbM(sh, arm.joint, 0.060));
+      push('forearm', limbM(arm.joint, arm.end, 0.052));
+      push('elbow', ballM(arm.joint, 0.068));
+      push('mitten', mittenM(arm.end, arm.joint));
     }
     push('boot', frameM(dir, up, right, local(STANCE, 0.03, 0)));
     push('boot', frameM(dir, up, right, local(-STANCE, 0.03, 0)));
@@ -5011,10 +5786,255 @@ class Player {
       for (const q of out) m4mul(q.mat, R, q.mat);
     }
 
+    // scarf: simulated in world space after the flip, so it trails the real motion
+    this.stepScarf(torsoM);
+    const S = this._scarf, SF = V3(torsoM[8] + torsoM[4] * 0.35, torsoM[9] + torsoM[5] * 0.35, torsoM[10] + torsoM[6] * 0.35);
+    for (let i = 0; i < S.length - 1; i++) {
+      const a = S[i], b = S[i + 1];
+      const Y = V3(b.x - a.x, b.y - a.y, b.z - a.z);
+      const len = Math.hypot(Y.x, Y.y, Y.z) || 1e-4;
+      V3.scale(Y, Y, 1 / len);
+      // flat side toward the chest/up direction: lies flat on the back when it hangs,
+      // turns on edge when it streams out sideways (never parallel: the scarf trails behind)
+      const X = V3.norm(V3(), V3.cross(V3(), Y, SF));
+      const Z = V3.cross(V3(), X, Y);
+      push('scarf', m4axesS(this._m(), X, Y, Z, a.x, a.y, a.z, 0.085 - i * 0.005, len, 0.040));
+    }
+
     this.parts = out;
     this.partCount = out.length;
   }
+
+  /* Scarf: a short verlet chain pinned at the back of the collar (TM = the
+     torso matrix). Drag against still air makes it stream behind the rider and
+     a speed-scaled flutter keeps it alive. dt is clamped and split into fixed
+     substeps, each link is held at its rest length by moving only the child
+     node (no stretch, no stiffness to blow up), nodes are pushed out of the
+     torso and helmet, and the chain re-seeds after reset() or whenever it ends
+     up far from its anchor (teleports, NaNs). */
+  stepScarf(TM) {
+    const N = 6, SL = 0.095;
+    const anc = m4point(V3(), TM, 0, 0.63, -0.115);
+    const now = GL.time || 0;
+    const dt = clamp(now - (this._scarfT === undefined ? now : this._scarfT), 0, 1 / 20);
+    this._scarfT = now;
+    const X = V3(TM[0], TM[1], TM[2]), Y = V3(TM[4], TM[5], TM[6]), Z = V3(TM[8], TM[9], TM[10]);
+    let S = this._scarf;
+    if (S) {
+      const e = S[N - 1];
+      if (!isFinite(e.x + e.y + e.z) || Math.hypot(S[0].x - anc.x, S[0].y - anc.y, S[0].z - anc.z) > 1.5) S = null;
+    }
+    if (!S) {                                         // hang it down the back
+      S = [];
+      for (let i = 0; i < N; i++) {
+        const x = anc.x - Z.x * 0.03 * i, y = anc.y - SL * i * 0.97, z = anc.z - Z.z * 0.03 * i;
+        S.push({ x, y, z, px: x, py: y, pz: z });
+      }
+      this._scarf = S;
+    }
+    const a0 = V3(S[0].x, S[0].y, S[0].z);
+    const n = Math.max(1, Math.ceil(dt / (1 / 90))), h = dt / n;
+    const kd = Math.exp(-3.5 * h), sp = Math.min(this.speed, 25);
+    const O = V3(TM[12], TM[13], TM[14]);
+    for (let s = 0; s < n && dt > 0; s++) {
+      const u = (s + 1) / n, ts = now - dt + u * dt, r0 = S[0];
+      r0.x = r0.px = lerp(a0.x, anc.x, u); r0.y = r0.py = lerp(a0.y, anc.y, u); r0.z = r0.pz = lerp(a0.z, anc.z, u);
+      for (let i = 1; i < N; i++) {
+        const q = S[i];
+        const f = Math.sin(ts * (15 + i * 3.1) + i * 1.3) * sp * 0.30 * (i / N);
+        const vx = (q.x - q.px) * kd, vy = (q.y - q.py) * kd, vz = (q.z - q.pz) * kd;
+        q.px = q.x; q.py = q.y; q.pz = q.z;
+        q.x += vx + (X.x * f + Y.x * f * 0.4) * h * h;
+        q.y += vy + (X.y * f + Y.y * f * 0.4 - G * 0.7) * h * h;
+        q.z += vz + (X.z * f + Y.z * f * 0.4) * h * h;
+        // keep out of the jacket (elliptic column) and the helmet (sphere), in torso space
+        let lx = (q.x - O.x) * X.x + (q.y - O.y) * X.y + (q.z - O.z) * X.z;
+        let ly = (q.x - O.x) * Y.x + (q.y - O.y) * Y.y + (q.z - O.z) * Y.z;
+        let lz = (q.x - O.x) * Z.x + (q.y - O.y) * Z.y + (q.z - O.z) * Z.z;
+        const e = (lx / 0.25) ** 2 + (lz / 0.19) ** 2;
+        if (ly > -0.12 && ly < 0.62 && e < 1) { const k = 1 / Math.sqrt(Math.max(e, 1e-4)); lx *= k; lz *= k; }
+        const hy = ly - 0.81, hr = Math.hypot(lx, hy, lz);
+        if (hr < 0.17) { const k = 0.17 / Math.max(hr, 1e-4); lx *= k; ly = 0.81 + hy * k; lz *= k; }
+        q.x = O.x + X.x * lx + Y.x * ly + Z.x * lz;
+        q.y = O.y + X.y * lx + Y.y * ly + Z.y * lz;
+        q.z = O.z + X.z * lx + Y.z * ly + Z.z * lz;
+        // a little bending stiffness: keep the grandparent at least 1.7 links away
+        if (i > 1) {
+          const g = S[i - 2], bx = q.x - g.x, by = q.y - g.y, bz = q.z - g.z, bl = Math.hypot(bx, by, bz);
+          if (bl < SL * 1.7 && bl > 1e-5) { const k = SL * 1.7 / bl; q.x = g.x + bx * k; q.y = g.y + by * k; q.z = g.z + bz * k; }
+        }
+        // inextensible link: move only the child back to the rest length
+        const p = S[i - 1], dx = q.x - p.x, dy = q.y - p.y, dz = q.z - p.z;
+        const l = Math.hypot(dx, dy, dz) || 1e-6;
+        q.x = p.x + dx * SL / l; q.y = p.y + dy * SL / l; q.z = p.z + dz * SL / l;
+      }
+    }
+  }
 }
+
+</script>
+<script>/* js/pad.js */
+/* =====================================================================
+   pad.js — game controllers via the browser Gamepad API (Xbox / PlayStation
+   on desktop, MFi controllers such as the GameSir G8 on iPhone/iPad).
+   Polled once per frame; uses the W3C "standard" layout:
+     buttons 0 A  1 B  2 X  3 Y  4 LB  5 RB  6 LT  7 RT  8 View/Back  9 Menu/Start
+             12 up  13 down  14 left  15 right       axes 0,1 left stick  2,3 right
+   A controller only appears after its first button press on the page.
+   Gameplay input flows into the same analog path as the touch joystick
+   (Input.sample reads Pad.steer / Pad.stickY / Pad.lt / Pad.rt / Pad.grab).
+   ===================================================================== */
+'use strict';
+
+const PAD_DZ = 0.16;                       // radial stick dead zone
+const PAD_LEVELS = ['mountain', 'pipe', 'park', 'zen'];
+
+const Pad = {
+  index: -1, prev: [], active: false,
+  steer: null, stickY: 0, lt: 0, rt: 0, grab: null,
+  _jump: false, _cam: false, _navT: 0, _toastT: 0,
+
+  init() {
+    window.addEventListener('gamepadconnected', (e) => {
+      this.toast('🎮 ' + this.shortName(e.gamepad.id) + ' connected');
+    });
+    window.addEventListener('gamepaddisconnected', (e) => {
+      if (e.gamepad.index === this.index) { this.index = -1; this.release(); }
+      this.toast('🎮 Controller disconnected');
+      document.body.classList.remove('pad');
+    });
+    // a finger on the screen hands control back to the touch UI
+    window.addEventListener('touchstart', () => document.body.classList.remove('pad'), { passive: true, capture: true });
+  },
+
+  shortName(id) {
+    const s = (id || 'Controller').replace(/\(.*?\)/g, '').replace(/\s+/g, ' ').trim();
+    return s.length > 32 ? s.slice(0, 32) + '…' : (s || 'Controller');
+  },
+
+  toast(text) {
+    const t = document.getElementById('padToast'); if (!t) return;
+    t.textContent = text; t.classList.add('on');
+    clearTimeout(this._toastT);
+    this._toastT = setTimeout(() => t.classList.remove('on'), 2600);
+  },
+
+  /* the pad to read: the last one used, else the first with the standard layout */
+  get() {
+    const list = navigator.getGamepads ? navigator.getGamepads() : null;
+    if (!list) return null;
+    if (this.index >= 0 && list[this.index] && list[this.index].connected) return list[this.index];
+    for (const gp of list) if (gp && gp.connected && gp.mapping === 'standard') { this.index = gp.index; return gp; }
+    for (const gp of list) if (gp && gp.connected) { this.index = gp.index; return gp; }
+    return null;
+  },
+
+  /* drop anything held (pad unplugged, window blurred) */
+  release() {
+    if (this._jump) { Input.releaseJump(); Input.down.jump = false; this._jump = false; }
+    if (this._cam) { Cam.dragging = false; Cam.releaseT = 1.0; this._cam = false; }
+    this.steer = null; this.stickY = 0; this.lt = this.rt = 0; this.grab = null;
+  },
+
+  rumble(strong, weak, ms) {
+    const gp = this.get();
+    const a = gp && gp.vibrationActuator;
+    if (!a || !a.playEffect) return;
+    try { a.playEffect('dual-rumble', { startDelay: 0, duration: ms, strongMagnitude: strong, weakMagnitude: weak }); } catch (e) { }
+  },
+
+  poll(dt) {
+    const gp = this.get();
+    if (!gp) { if (this.active) { this.release(); this.active = false; } return; }
+    const B = (i) => !!(gp.buttons[i] && (gp.buttons[i].pressed || gp.buttons[i].value > 0.5));
+    const V = (i) => (gp.buttons[i] ? gp.buttons[i].value || (gp.buttons[i].pressed ? 1 : 0) : 0);
+    const now = [];
+    for (let i = 0; i < 17; i++) now[i] = B(i);
+    const edge = (i) => now[i] && !this.prev[i];
+    const stick = (x, y) => {                                 // radial dead zone, rescaled to 0..1
+      x = x || 0; y = y || 0;
+      const m = Math.hypot(x, y);
+      if (m < PAD_DZ) return [0, 0];
+      const k = Math.min(1, (m - PAD_DZ) / (1 - PAD_DZ)) / m;
+      return [x * k, y * k];
+    };
+    const [lx, ly] = stick(gp.axes[0], gp.axes[1]);
+    const [rx, ry] = stick(gp.axes[2], gp.axes[3]);
+    const lt = V(6), rt = V(7);
+    if (now.some(Boolean) || lx || ly || rx || ry || lt > 0.1 || rt > 0.1) {
+      if (!this.active) { this.active = true; }
+      if (Game.state === 'play' || Game.state === 'menu') document.body.classList.add('pad');
+      Audio.init(); Audio.resume();
+    }
+    const st = Game.state;
+    // a button still held from the menu (A that dropped us in) must not act in the run
+    if (st !== this._lastState) {
+      if (st === 'play') { this._jump = now[0]; this.prev = now.slice(); }
+      this._lastState = st;
+    }
+
+    if (st === 'play') {
+      this.steer = lx ? lx : (now[14] ? -1 : now[15] ? 1 : null);
+      this.stickY = ly || (now[12] ? -1 : now[13] ? 1 : 0);
+      this.lt = lt; this.rt = rt;                               // triggers: brake / tuck (and flips in the air)
+      this.grab = now[2] ? 'Indy' : now[1] ? 'method' : now[3] ? 'stale' : (now[4] || now[5]) ? 'mute' : null;
+      // A = Space: hold to load, release to ollie
+      if (now[0] && !this._jump && !this.prev[0]) {
+        this._jump = true;
+        if (!Input.down.jump) { Input.jumpHeld = true; Input.chargeT = 0; }
+        Input.down.jump = true;
+      } else if (!now[0] && this._jump) {
+        this._jump = false; Input.releaseJump(); Input.down.jump = false;
+      }
+      if (edge(9)) Game.togglePause();
+      if (edge(8)) Game.restart(true);
+      // right stick orbits the camera (springs back like the mouse orbit)
+      if (rx || ry) { Cam.dragging = true; this._cam = true; Cam.drag(rx * dt * 700, ry * dt * 520); }
+      else if (this._cam) { Cam.dragging = false; Cam.releaseT = 1.0; this._cam = false; }
+    } else {
+      if (this._jump || this._cam || this.steer !== null) this.release();
+      // menus: D-pad / left stick to choose, A to confirm, B to back out
+      this._navT -= dt;
+      const left = now[14] || lx < -0.6, right = now[15] || lx > 0.6;
+      const nav = (left || right) && this._navT <= 0 ? (left ? -1 : 1) : 0;
+      if (!left && !right) this._navT = 0;
+      if (nav) this._navT = 0.28;
+      if (st === 'menu' && Game.customizing) {
+        if (edge(1) || edge(9)) Customize.close();
+        else if (edge(2)) { Outfit.randomize(); Outfit.save(); Customize.sync(); }
+        else if (edge(4) || edge(5)) this.cyclePreset(edge(5) ? 1 : -1);
+      } else if (st === 'menu') {
+        if (nav) this.cycleLevel(nav);
+        if (edge(0) || edge(9)) { Game.menuAt = -1e9; Input.anyKey = true; }
+        else if (edge(3)) Customize.open();
+      } else if (st === 'pause') {
+        if (edge(0) || edge(9)) Game.togglePause();
+        else if (edge(8)) Game.restart(true);
+        else if (edge(1)) Game.toMenu();
+      } else if (st === 'over') {
+        if (nav) this.cycleLevel(nav);
+        if (edge(0) || edge(9) || edge(8)) Game.restart(true);
+        else if (edge(1)) Game.toMenu();
+      }
+    }
+    this.prev = now;
+  },
+
+  cycleLevel(d) {
+    const i = PAD_LEVELS.indexOf(Level.cur.id);
+    Game.selectLevel(PAD_LEVELS[(i + d + PAD_LEVELS.length) % PAD_LEVELS.length]);
+    Audio.ui && Audio.ui(500);
+  },
+
+  cyclePreset(d) {
+    const names = Object.keys(OUTFIT_PRESETS);
+    const cur = Outfit.presetName ? Outfit.presetName() : null;
+    const i = Math.max(0, names.indexOf(cur));
+    Outfit.applyPreset(names[(i + d + names.length) % names.length]);
+    Outfit.save && Outfit.save();
+    Customize.sync && Customize.sync();
+  }
+};
 
 </script>
 <script>/* js/game.js */
@@ -5054,6 +6074,9 @@ const Input = {
       // Safari requires an AudioContext to be created/resumed inside the
       // user-gesture call stack — doing it from the rAF loop is blocked.
       Audio.init(); Audio.resume();
+      // customise panel: its own keys only (Esc closes); nothing reaches the game
+      if (Game.customizing) { if (e.code === 'Escape') Customize.close(); return; }
+      if (e.code === 'KeyC' && Game.state === 'menu') { Customize.open(); return; }
       const LV = { Digit1: 'mountain', Digit2: 'pipe', Digit3: 'park', Digit4: 'zen',
                    Numpad1: 'mountain', Numpad2: 'pipe', Numpad3: 'park', Numpad4: 'zen' };
       if (LV[e.code] && (Game.state === 'menu' || Game.state === 'over')) {
@@ -5096,6 +6119,7 @@ const Input = {
     });
     window.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('wheel', (e) => {
+      if (e.target.closest && e.target.closest('#rider')) return;   // let the panel scroll
       e.preventDefault();
       Cam.zoom = clamp(Cam.zoom * Math.exp(e.deltaY * 0.0012), 0.55, 2.2);
     }, { passive: false });
@@ -5138,6 +6162,7 @@ const Input = {
     const mb = $('muteBtn');
     mb.addEventListener('pointerdown', (e) => e.stopPropagation());   // don't start a run from the menu
     mb.addEventListener('click', (e) => { e.stopPropagation(); Audio.init(); Audio.resume(); Game.toggleMute(); mb.blur(); });
+    Customize.init();
   },
 
   /* ---------------- touch: steering pad, buttons, swipe camera, tilt ---------------- */
@@ -5278,21 +6303,92 @@ const Input = {
   sample(dt) {
     let target = (this.down.right ? 1 : 0) - (this.down.left ? 1 : 0);
     if (this.touchSteer !== null) target = this.touchSteer;          // thumb on the pad wins
+    else if (Pad.steer !== null) target = Pad.steer;                 // game controller stick
     else if (target === 0 && this.tiltOn && this.tiltSteer !== null) target = this.tiltSteer;
     this.steer = damp(this.steer, target, 11, dt);
     // joystick: push forward = tuck (front flip in the air), pull back = brake
     // (back flip), both analog. Past the dead zone they ramp to full by ~3/4 throw.
-    const sy = this.touchStickY || 0;
-    const fwd = clamp((-sy - 0.28) / 0.47, 0, 1), back = clamp((sy - 0.28) / 0.47, 0, 1);
+    const sy = this.touchStickY || Pad.stickY || 0;
+    // controller triggers: right = tuck / front flip, left = brake / back flip
+    const fwd = Math.max(clamp((-sy - 0.28) / 0.47, 0, 1), clamp((Pad.rt - 0.1) / 0.7, 0, 1)),
+          back = Math.max(clamp((sy - 0.28) / 0.47, 0, 1), clamp((Pad.lt - 0.1) / 0.7, 0, 1));
     const loading = !!this.down.jump && this.jumpHeld;
     if (loading) this.chargeT += dt;
     this.brake = Math.max(this.down.brake ? 1 : 0, back);
     this.tuck = Math.max(this.down.tuck || loading ? 1 : 0, fwd);   // holding Space = tuck
     this.grab = this.down.method ? 'method' : this.down.Indy ? 'Indy'
-      : this.down.stale ? 'stale' : this.down.mutegrab ? 'mute' : null;
+      : this.down.stale ? 'stale' : this.down.mutegrab ? 'mute' : Pad.grab;
     const j = this.jumpRelease; this.jumpRelease = false;
     return { steer: this.steer, brake: this.brake, tuck: this.tuck, jump: j, charge: this.releaseCharge,
              flipFwd: Math.max(this.down.tuck ? 1 : 0, fwd), flipBack: Math.max(this.down.brake ? 1 : 0, back), grab: this.grab };
+  }
+};
+
+/* ---------------- rider customisation panel (menu only) ---------------- */
+const Customize = {
+  init() {
+    const pre = $('rPresets'), items = $('rItems');
+    for (const name in OUTFIT_PRESETS) {
+      const p = OUTFIT_PRESETS[name], c = (i) => p ? p[i] : OUTFIT_DEFAULTS[OUTFIT_ITEMS[i][0]];
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'rpre'; b.dataset.name = name;
+      b.innerHTML = '<i></i>' + name;
+      // jacket / pants / accent / board top
+      b.firstChild.style.background = `conic-gradient(${c(0)} 0 50%, ${c(1)} 0 62.5%, ${c(7)} 0 75%, ${c(2)} 0)`;
+      b.addEventListener('click', () => { Outfit.applyPreset(name); this.sync(); });
+      pre.appendChild(b);
+    }
+    for (const [slot, label] of OUTFIT_ITEMS) {
+      const l = document.createElement('label');
+      l.className = 'ritem';
+      l.innerHTML = '<input type="color"><span></span>';
+      l.lastChild.textContent = label;
+      const inp = l.firstChild;
+      inp.dataset.slot = slot;
+      inp.setAttribute('aria-label', label + ' colour');
+      inp.addEventListener('input', () => { Outfit.pick(slot, inp.value); this.sync(); });
+      inp.addEventListener('change', () => { Outfit.pick(slot, inp.value); this.sync(); });
+      items.appendChild(l);
+    }
+    $('rRandom').addEventListener('click', () => { Outfit.randomize(); this.sync(); });
+    $('rReset').addEventListener('click', () => { Outfit.applyPreset('Classic'); this.sync(); });
+    $('rDone').addEventListener('click', () => this.close());
+    // nothing in the panel may reach the menu's "tap anywhere to drop in"
+    const panel = $('rider');
+    for (const t of ['pointerdown', 'click', 'touchstart', 'mousedown']) panel.addEventListener(t, (e) => e.stopPropagation());
+    const rb = $('riderBtn');
+    rb.addEventListener('pointerdown', (e) => e.stopPropagation());
+    rb.addEventListener('click', (e) => { e.stopPropagation(); this.open(); rb.blur(); });
+    this.sync();
+  },
+
+  /* inputs, preset highlight and the menu button's swatch follow Outfit */
+  sync() {
+    for (const inp of document.querySelectorAll('#rItems input')) inp.value = Outfit.hex[+inp.dataset.slot];
+    const cur = Outfit.presetName();
+    for (const b of document.querySelectorAll('.rpre')) b.classList.toggle('sel', b.dataset.name === cur);
+    const d = document.querySelectorAll('#riderBtn .dots i');
+    d[0].style.background = Outfit.hex[RS.JACKET]; d[1].style.background = Outfit.hex[RS.PANTS];
+  },
+
+  open() {
+    if (Game.state !== 'menu' || Game.customizing) return;
+    Game.customizing = true; Input.anyKey = false;
+    document.body.classList.add('customizing');
+    this.sync();
+    const panel = $('rider');
+    panel.classList.remove('hide');
+    panel.querySelector('.rscroll').scrollTop = 0;
+    panel.focus({ preventScroll: true });
+  },
+
+  close() {
+    if (!Game.customizing) return;
+    Game.customizing = false; Input.anyKey = false;
+    Game.menuAt = performance.now();          // swallow any trailing tap on the menu
+    document.body.classList.remove('customizing');
+    $('rider').classList.add('hide');
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
   }
 };
 
@@ -5307,6 +6403,7 @@ const Game = {
   air: { t: 0, spin: 0, flip: 0, grab: null, grabT: 0 },
   lastZ: 0, startY: 0, t: 0, frames: 0, fps: 60, _fpsT: 0, _mt: 0,
   menuAt: -1e9,                  // when the menu last opened (swallows that tap's trailing click)
+  customizing: false,            // rider colour panel open (menu only; render.js frames the rider)
   perf: { t: 0, n: 0, warm: 0, low: 0 },     // dynamic-resolution frame-rate monitor
   frameNo: 0,                    // monotonic; never reset (chunk cache ages on it)
 
@@ -5438,6 +6535,7 @@ const Game = {
     this.combo = 1; this.comboTimer = 0;
     this.flash = 0.45; this.desat = 1;
     this.msg('WIPEOUT', 1200);
+    Pad.rumble(1.0, 0.8, 380);
     if (Level.cur.zen) return;                 // zen: brush it off and keep riding
     this.setLives(Math.max(0, this.lives - 1));
     if (this.lives <= 0) this._deadTimer = 1.1;
@@ -5579,6 +6677,7 @@ const Game = {
     if (wasAir && !P.airborne) {
       this.totalAir += this.air.t;
       if (P.landedClean) { this.lands++; this.evalTrick(); }
+      if (P.landedClean && this.air.t > 0.35) Pad.rumble(clamp(this.air.t * 0.25, 0.15, 0.6), 0.35, 110);
       this.air.grabT = 0;
     }
 
@@ -5680,6 +6779,7 @@ const Game = {
     GL.makeShadowMap(GL.shadowSize, GL.shadowSize);
     Game.boot();
     Input.init();
+    Pad.init();
   } catch (e) { die(e); return; }
 
   /* Surface driver errors while they are still attributable: a GL error on the
@@ -5732,8 +6832,9 @@ const Game = {
     if (Game._fpsT > 0.5) { Game.fps = Game.frames / Game._fpsT; Game.frames = 0; Game._fpsT = 0; }
 
     try {
+      Pad.poll(dt);
       if (Game.state === 'menu') {
-        if (Input.anyKey) { Input.anyKey = false; Game.start(); }
+        if (Input.anyKey) { Input.anyKey = false; if (!Game.customizing) Game.start(); }
         // idle: drift down the mountain so the menu has a live backdrop
         Game.P.pos.z += dt * 7;
         if (Level.cur.finishZ && Game.P.pos.z > Level.cur.finishZ) Game.P.pos.z = Game.spawnZ();

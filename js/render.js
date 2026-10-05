@@ -18,6 +18,7 @@ const Cam = {
   heading: 0, snapNext: true,
   // mouse orbit (right/middle drag) + wheel zoom; springs back after release
   orbitYaw: 0, orbitPitch: 0, zoom: 1, portraitZoom: 1, dragging: false, releaseT: 0,
+  cust: 0,             // 0..1 blend into the close "customize rider" framing
 
   snap(P) { this.heading = P.yaw; this.orbitYaw = this.orbitPitch = 0; this.shake = 0; this.snapNext = true; },
   drag(dx, dy) {
@@ -28,7 +29,10 @@ const Cam = {
   update(dt, P, state) {
     const speedN = clamp(P.speed / 26, 0, 1);
     // FOV opens up with speed — the classic sense-of-velocity trick
-    this.fov = damp(this.fov, 1.02 + speedN * 0.26 + (P.airborne ? 0.04 : 0), 3.2, dt);
+    // customize screen: swing in close and slowly circle the rider
+    this.cust = damp(this.cust, Game.customizing ? 1 : 0, 3.5, dt);
+    if (this.cust > 0.01 && !this.dragging) this.orbitYaw += dt * 0.35 * this.cust;
+    this.fov = damp(this.fov, lerp(1.02 + speedN * 0.26 + (P.airborne ? 0.04 : 0), 0.62, this.cust), 3.2, dt);
     this.aspect = GL.w / Math.max(1, GL.h);
     // portrait screens: widen the vertical FOV so the horizontal view isn't a
     // slit, but only so far — the camera moves in instead (see portraitZoom)
@@ -61,8 +65,8 @@ const Cam = {
     const yaw = this.heading + this.orbitYaw;
     const fx = Math.sin(yaw), fz = Math.cos(yaw);
     const lc = Level.cur.cam || {};
-    const dist = (9.0 + speedN * 3.5 + (P.airborne ? 1.5 : 0)) * this.zoom * (lc.dist || 1) * this.portraitZoom;
-    const elev = clamp((lc.elev || 0.40) + this.orbitPitch, -0.12, 1.35);
+    const dist = lerp((9.0 + speedN * 3.5 + (P.airborne ? 1.5 : 0)) * this.zoom * (lc.dist || 1) * this.portraitZoom, 4.2, this.cust);
+    const elev = clamp(lerp(lc.elev || 0.40, 0.16, this.cust) + this.orbitPitch, -0.12, 1.35);
     const ce = Math.cos(elev), se = Math.sin(elev);
     const fy = P.pos.y + 1.1;                               // focus: rider's chest
     const tx = P.pos.x - fx * dist * ce, tz = P.pos.z - fz * dist * ce;
@@ -70,21 +74,29 @@ const Cam = {
 
     // ---- aim: rider, plus a lead down the hill when the view is at rest ----
     const userOff = Math.min(1, Math.abs(this.orbitYaw) * 1.5 + Math.abs(this.orbitPitch) * 1.5);
-    const lead = (3 + speedN * 7) * (1 - userOff);
+    const lead = (3 + speedN * 7) * (1 - userOff) * (1 - this.cust);
     const hx = Math.sin(this.heading), hz = Math.cos(this.heading);
     const lx = P.pos.x + hx * lead, lz = P.pos.z + hz * lead;
-    const ly = lerp(fy, heightAt(lx, lz) + 1.1, 0.5);
+    let ly = lerp(fy, heightAt(lx, lz) + 1.1, 0.5);
+    // customize framing: the panel covers the right side (desktop) or the bottom
+    // (portrait phone) — aim past the rider so they sit in the open part of the screen
+    let ax = lx, az = lz;
+    if (this.cust > 0.01) {
+      const rx = -Math.cos(yaw), rz = Math.sin(yaw);       // toward screen-right on the ground plane
+      const side = this.aspect > 1 ? 0.95 : 0, down = this.aspect > 1 ? 0.15 : 0.75;
+      ax += rx * side * this.cust; az += rz * side * this.cust; ly -= down * this.cust;
+    }
 
     if (this.snapNext) {
-      V3.set(this.pos, tx, ty, tz); V3.set(this.look, lx, ly, lz); this.snapNext = false;
+      V3.set(this.pos, tx, ty, tz); V3.set(this.look, ax, ly, az); this.snapNext = false;
     } else {
       const lag = this.dragging ? 16 : (P.airborne ? 4.5 : 7);
       this.pos.x = damp(this.pos.x, tx, lag, dt);
       this.pos.y = damp(this.pos.y, ty, lag * 0.8, dt);
       this.pos.z = damp(this.pos.z, tz, lag, dt);
-      this.look.x = damp(this.look.x, lx, 9, dt);
+      this.look.x = damp(this.look.x, ax, 9, dt);
       this.look.y = damp(this.look.y, ly, 6, dt);           // terrain noise ahead → smooth it
-      this.look.z = damp(this.look.z, lz, 9, dt);
+      this.look.z = damp(this.look.z, az, 9, dt);
     }
 
     // camera shake
@@ -474,15 +486,20 @@ const Render = {
     // ---- night: lamp posts along the run ----
     Atmos.drawLamps(ip, P);
 
-    // ---- rider + board ----
+    // ---- level structures ----
     const lp = GL.prog.lit.use();
     Sun.setUniforms(lp);
     gl.uniform1f(lp.uSparkle, 0.0);
     if (GL.mesh._levelDecor) drawMesh(lp, '_levelDecor', IDENT);
-    drawMesh(lp, 'board', P.boardMat);
+
+    // ---- rider + board: outfit palette + per-slot materials ----
+    const rp = GL.prog.rider.use();
+    Sun.setUniforms(rp);
+    gl.uniform3fv(rp.uPal, Outfit.palette);
+    drawMesh(rp, 'board', P.boardMat);
     for (let i = 0; i < P.partCount; i++) {
       const q = P.parts[i];
-      drawMesh(lp, q.mesh, q.mat);
+      drawMesh(rp, q.mesh, q.mat);
     }
 
     // ---- particles ----

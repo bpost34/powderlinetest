@@ -55,10 +55,10 @@ class Player {
     this.boardMat = M4();
     this.parts = [];
     this.partCount = 0;
-    // buildPose() emits 14 parts (torso, head, 8 limbs, 2 boots, 2 hands) plus
-    // temporaries. The pool must never wrap mid-pose, or a later part shares —
-    // and overwrites — an earlier part's matrix.
-    this._tmpM = new Array(32);
+    // buildPose() emits ~27 parts (pelvis, torso, head, 12 limb/joint parts,
+    // 2 mittens, 2 boots, scarf segments) plus temporaries. The pool must never
+    // wrap mid-pose, or a later part shares — and overwrites — an earlier part's matrix.
+    this._tmpM = new Array(48);
     for (let i = 0; i < this._tmpM.length; i++) this._tmpM[i] = M4();
     this._mi = 0;
   }
@@ -72,6 +72,7 @@ class Player {
     this.yaw = 0; this.lean = 0; this.speed = v0;
     this.airborne = false; this.airTime = 0; this.crashTimer = 0;
     this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipVis = 0; this.grab = null; this.tuck = 0; this.invuln = 1.2;
+    this._scarf = null;       // re-seed the scarf chain at the new spot
     this.grind = null;
     this.updateBasis();
   }
@@ -663,25 +664,31 @@ class Player {
     const frameM = (X, Y, Z, p) => m4axes(this._m(), X, Y, Z, p.x, p.y, p.z, 1);
     const limbM = (a, b, r) => m4limb(this._m(), a.x, a.y, a.z, b.x, b.y, b.z, r);
     const ballM = (p, r) => { const m = this._m(); m4ident(m); m[0] = m[5] = m[10] = r; m[12] = p.x; m[13] = p.y; m[14] = p.z; return m; };
-    const handM = (p, toward) => {
-      const d = nrm(toward.x - p.x, toward.y - p.y, toward.z - p.z);
-      return m4limb(this._m(), p.x, p.y, p.z, p.x + d.x, p.y + d.y, p.z + d.z, 1);
+    // mitten frame: +Y up the forearm, thumb (+X) toward the chest's forward/up side
+    const mittenM = (p, toward) => {
+      const Y = nrm(toward.x - p.x, toward.y - p.y, toward.z - p.z);
+      let c = V3(TZ.x + TY.x * 0.5, TZ.y + TY.y * 0.5, TZ.z + TY.z * 0.5);
+      let k = V3.dot(c, Y);
+      if (Math.hypot(c.x - Y.x * k, c.y - Y.y * k, c.z - Y.z * k) < 0.25) { c = TX; k = V3.dot(c, Y); }
+      const X = nrm(c.x - Y.x * k, c.y - Y.y * k, c.z - Y.z * k);
+      return m4axes(this._m(), X, Y, V3.cross(V3(), X, Y), p.x, p.y, p.z, 1);
     };
 
     push('pelvis', frameM(PX, PY, PZ, pelvisP));
-    push('torso', frameM(TX, TY, TZ, torsoP));
+    const torsoM = frameM(TX, TY, TZ, torsoP);
+    push('torso', torsoM);
     push('head', frameM(HX, TY, HZ, headP));
     for (const leg of [legF, legB]) {
-      push('thigh', limbM(leg === legF ? hipF : hipB, leg.joint, 0.088));
+      push('thigh', limbM(leg === legF ? hipF : hipB, leg.joint, 0.086));
       push('shin', limbM(leg.joint, leg.end, 0.072));
-      push('knee', ballM(leg.joint, 0.08));
+      push('knee', ballM(leg.joint, 0.098));
     }
     for (const arm of [armF, armB]) {
       const sh = arm === armF ? shF : shB;
-      push('uparm', limbM(sh, arm.joint, 0.064));
-      push('forearm', limbM(arm.joint, arm.end, 0.054));
-      push('elbow', ballM(arm.joint, 0.058));
-      push('hand', handM(arm.end, arm.joint));
+      push('uparm', limbM(sh, arm.joint, 0.060));
+      push('forearm', limbM(arm.joint, arm.end, 0.052));
+      push('elbow', ballM(arm.joint, 0.068));
+      push('mitten', mittenM(arm.end, arm.joint));
     }
     push('boot', frameM(dir, up, right, local(STANCE, 0.03, 0)));
     push('boot', frameM(dir, up, right, local(-STANCE, 0.03, 0)));
@@ -704,7 +711,88 @@ class Player {
       for (const q of out) m4mul(q.mat, R, q.mat);
     }
 
+    // scarf: simulated in world space after the flip, so it trails the real motion
+    this.stepScarf(torsoM);
+    const S = this._scarf, SF = V3(torsoM[8] + torsoM[4] * 0.35, torsoM[9] + torsoM[5] * 0.35, torsoM[10] + torsoM[6] * 0.35);
+    for (let i = 0; i < S.length - 1; i++) {
+      const a = S[i], b = S[i + 1];
+      const Y = V3(b.x - a.x, b.y - a.y, b.z - a.z);
+      const len = Math.hypot(Y.x, Y.y, Y.z) || 1e-4;
+      V3.scale(Y, Y, 1 / len);
+      // flat side toward the chest/up direction: lies flat on the back when it hangs,
+      // turns on edge when it streams out sideways (never parallel: the scarf trails behind)
+      const X = V3.norm(V3(), V3.cross(V3(), Y, SF));
+      const Z = V3.cross(V3(), X, Y);
+      push('scarf', m4axesS(this._m(), X, Y, Z, a.x, a.y, a.z, 0.085 - i * 0.005, len, 0.040));
+    }
+
     this.parts = out;
     this.partCount = out.length;
+  }
+
+  /* Scarf: a short verlet chain pinned at the back of the collar (TM = the
+     torso matrix). Drag against still air makes it stream behind the rider and
+     a speed-scaled flutter keeps it alive. dt is clamped and split into fixed
+     substeps, each link is held at its rest length by moving only the child
+     node (no stretch, no stiffness to blow up), nodes are pushed out of the
+     torso and helmet, and the chain re-seeds after reset() or whenever it ends
+     up far from its anchor (teleports, NaNs). */
+  stepScarf(TM) {
+    const N = 6, SL = 0.095;
+    const anc = m4point(V3(), TM, 0, 0.63, -0.115);
+    const now = GL.time || 0;
+    const dt = clamp(now - (this._scarfT === undefined ? now : this._scarfT), 0, 1 / 20);
+    this._scarfT = now;
+    const X = V3(TM[0], TM[1], TM[2]), Y = V3(TM[4], TM[5], TM[6]), Z = V3(TM[8], TM[9], TM[10]);
+    let S = this._scarf;
+    if (S) {
+      const e = S[N - 1];
+      if (!isFinite(e.x + e.y + e.z) || Math.hypot(S[0].x - anc.x, S[0].y - anc.y, S[0].z - anc.z) > 1.5) S = null;
+    }
+    if (!S) {                                         // hang it down the back
+      S = [];
+      for (let i = 0; i < N; i++) {
+        const x = anc.x - Z.x * 0.03 * i, y = anc.y - SL * i * 0.97, z = anc.z - Z.z * 0.03 * i;
+        S.push({ x, y, z, px: x, py: y, pz: z });
+      }
+      this._scarf = S;
+    }
+    const a0 = V3(S[0].x, S[0].y, S[0].z);
+    const n = Math.max(1, Math.ceil(dt / (1 / 90))), h = dt / n;
+    const kd = Math.exp(-3.5 * h), sp = Math.min(this.speed, 25);
+    const O = V3(TM[12], TM[13], TM[14]);
+    for (let s = 0; s < n && dt > 0; s++) {
+      const u = (s + 1) / n, ts = now - dt + u * dt, r0 = S[0];
+      r0.x = r0.px = lerp(a0.x, anc.x, u); r0.y = r0.py = lerp(a0.y, anc.y, u); r0.z = r0.pz = lerp(a0.z, anc.z, u);
+      for (let i = 1; i < N; i++) {
+        const q = S[i];
+        const f = Math.sin(ts * (15 + i * 3.1) + i * 1.3) * sp * 0.30 * (i / N);
+        const vx = (q.x - q.px) * kd, vy = (q.y - q.py) * kd, vz = (q.z - q.pz) * kd;
+        q.px = q.x; q.py = q.y; q.pz = q.z;
+        q.x += vx + (X.x * f + Y.x * f * 0.4) * h * h;
+        q.y += vy + (X.y * f + Y.y * f * 0.4 - G * 0.7) * h * h;
+        q.z += vz + (X.z * f + Y.z * f * 0.4) * h * h;
+        // keep out of the jacket (elliptic column) and the helmet (sphere), in torso space
+        let lx = (q.x - O.x) * X.x + (q.y - O.y) * X.y + (q.z - O.z) * X.z;
+        let ly = (q.x - O.x) * Y.x + (q.y - O.y) * Y.y + (q.z - O.z) * Y.z;
+        let lz = (q.x - O.x) * Z.x + (q.y - O.y) * Z.y + (q.z - O.z) * Z.z;
+        const e = (lx / 0.25) ** 2 + (lz / 0.19) ** 2;
+        if (ly > -0.12 && ly < 0.62 && e < 1) { const k = 1 / Math.sqrt(Math.max(e, 1e-4)); lx *= k; lz *= k; }
+        const hy = ly - 0.81, hr = Math.hypot(lx, hy, lz);
+        if (hr < 0.17) { const k = 0.17 / Math.max(hr, 1e-4); lx *= k; ly = 0.81 + hy * k; lz *= k; }
+        q.x = O.x + X.x * lx + Y.x * ly + Z.x * lz;
+        q.y = O.y + X.y * lx + Y.y * ly + Z.y * lz;
+        q.z = O.z + X.z * lx + Y.z * ly + Z.z * lz;
+        // a little bending stiffness: keep the grandparent at least 1.7 links away
+        if (i > 1) {
+          const g = S[i - 2], bx = q.x - g.x, by = q.y - g.y, bz = q.z - g.z, bl = Math.hypot(bx, by, bz);
+          if (bl < SL * 1.7 && bl > 1e-5) { const k = SL * 1.7 / bl; q.x = g.x + bx * k; q.y = g.y + by * k; q.z = g.z + bz * k; }
+        }
+        // inextensible link: move only the child back to the rest length
+        const p = S[i - 1], dx = q.x - p.x, dy = q.y - p.y, dz = q.z - p.z;
+        const l = Math.hypot(dx, dy, dz) || 1e-6;
+        q.x = p.x + dx * SL / l; q.y = p.y + dy * SL / l; q.z = p.z + dz * SL / l;
+      }
+    }
   }
 }

@@ -34,6 +34,9 @@ const Input = {
       // Safari requires an AudioContext to be created/resumed inside the
       // user-gesture call stack — doing it from the rAF loop is blocked.
       Audio.init(); Audio.resume();
+      // customise panel: its own keys only (Esc closes); nothing reaches the game
+      if (Game.customizing) { if (e.code === 'Escape') Customize.close(); return; }
+      if (e.code === 'KeyC' && Game.state === 'menu') { Customize.open(); return; }
       const LV = { Digit1: 'mountain', Digit2: 'pipe', Digit3: 'park', Digit4: 'zen',
                    Numpad1: 'mountain', Numpad2: 'pipe', Numpad3: 'park', Numpad4: 'zen' };
       if (LV[e.code] && (Game.state === 'menu' || Game.state === 'over')) {
@@ -76,6 +79,7 @@ const Input = {
     });
     window.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('wheel', (e) => {
+      if (e.target.closest && e.target.closest('#rider')) return;   // let the panel scroll
       e.preventDefault();
       Cam.zoom = clamp(Cam.zoom * Math.exp(e.deltaY * 0.0012), 0.55, 2.2);
     }, { passive: false });
@@ -118,6 +122,7 @@ const Input = {
     const mb = $('muteBtn');
     mb.addEventListener('pointerdown', (e) => e.stopPropagation());   // don't start a run from the menu
     mb.addEventListener('click', (e) => { e.stopPropagation(); Audio.init(); Audio.resume(); Game.toggleMute(); mb.blur(); });
+    Customize.init();
   },
 
   /* ---------------- touch: steering pad, buttons, swipe camera, tilt ---------------- */
@@ -258,21 +263,92 @@ const Input = {
   sample(dt) {
     let target = (this.down.right ? 1 : 0) - (this.down.left ? 1 : 0);
     if (this.touchSteer !== null) target = this.touchSteer;          // thumb on the pad wins
+    else if (Pad.steer !== null) target = Pad.steer;                 // game controller stick
     else if (target === 0 && this.tiltOn && this.tiltSteer !== null) target = this.tiltSteer;
     this.steer = damp(this.steer, target, 11, dt);
     // joystick: push forward = tuck (front flip in the air), pull back = brake
     // (back flip), both analog. Past the dead zone they ramp to full by ~3/4 throw.
-    const sy = this.touchStickY || 0;
-    const fwd = clamp((-sy - 0.28) / 0.47, 0, 1), back = clamp((sy - 0.28) / 0.47, 0, 1);
+    const sy = this.touchStickY || Pad.stickY || 0;
+    // controller triggers: right = tuck / front flip, left = brake / back flip
+    const fwd = Math.max(clamp((-sy - 0.28) / 0.47, 0, 1), clamp((Pad.rt - 0.1) / 0.7, 0, 1)),
+          back = Math.max(clamp((sy - 0.28) / 0.47, 0, 1), clamp((Pad.lt - 0.1) / 0.7, 0, 1));
     const loading = !!this.down.jump && this.jumpHeld;
     if (loading) this.chargeT += dt;
     this.brake = Math.max(this.down.brake ? 1 : 0, back);
     this.tuck = Math.max(this.down.tuck || loading ? 1 : 0, fwd);   // holding Space = tuck
     this.grab = this.down.method ? 'method' : this.down.Indy ? 'Indy'
-      : this.down.stale ? 'stale' : this.down.mutegrab ? 'mute' : null;
+      : this.down.stale ? 'stale' : this.down.mutegrab ? 'mute' : Pad.grab;
     const j = this.jumpRelease; this.jumpRelease = false;
     return { steer: this.steer, brake: this.brake, tuck: this.tuck, jump: j, charge: this.releaseCharge,
              flipFwd: Math.max(this.down.tuck ? 1 : 0, fwd), flipBack: Math.max(this.down.brake ? 1 : 0, back), grab: this.grab };
+  }
+};
+
+/* ---------------- rider customisation panel (menu only) ---------------- */
+const Customize = {
+  init() {
+    const pre = $('rPresets'), items = $('rItems');
+    for (const name in OUTFIT_PRESETS) {
+      const p = OUTFIT_PRESETS[name], c = (i) => p ? p[i] : OUTFIT_DEFAULTS[OUTFIT_ITEMS[i][0]];
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'rpre'; b.dataset.name = name;
+      b.innerHTML = '<i></i>' + name;
+      // jacket / pants / accent / board top
+      b.firstChild.style.background = `conic-gradient(${c(0)} 0 50%, ${c(1)} 0 62.5%, ${c(7)} 0 75%, ${c(2)} 0)`;
+      b.addEventListener('click', () => { Outfit.applyPreset(name); this.sync(); });
+      pre.appendChild(b);
+    }
+    for (const [slot, label] of OUTFIT_ITEMS) {
+      const l = document.createElement('label');
+      l.className = 'ritem';
+      l.innerHTML = '<input type="color"><span></span>';
+      l.lastChild.textContent = label;
+      const inp = l.firstChild;
+      inp.dataset.slot = slot;
+      inp.setAttribute('aria-label', label + ' colour');
+      inp.addEventListener('input', () => { Outfit.pick(slot, inp.value); this.sync(); });
+      inp.addEventListener('change', () => { Outfit.pick(slot, inp.value); this.sync(); });
+      items.appendChild(l);
+    }
+    $('rRandom').addEventListener('click', () => { Outfit.randomize(); this.sync(); });
+    $('rReset').addEventListener('click', () => { Outfit.applyPreset('Classic'); this.sync(); });
+    $('rDone').addEventListener('click', () => this.close());
+    // nothing in the panel may reach the menu's "tap anywhere to drop in"
+    const panel = $('rider');
+    for (const t of ['pointerdown', 'click', 'touchstart', 'mousedown']) panel.addEventListener(t, (e) => e.stopPropagation());
+    const rb = $('riderBtn');
+    rb.addEventListener('pointerdown', (e) => e.stopPropagation());
+    rb.addEventListener('click', (e) => { e.stopPropagation(); this.open(); rb.blur(); });
+    this.sync();
+  },
+
+  /* inputs, preset highlight and the menu button's swatch follow Outfit */
+  sync() {
+    for (const inp of document.querySelectorAll('#rItems input')) inp.value = Outfit.hex[+inp.dataset.slot];
+    const cur = Outfit.presetName();
+    for (const b of document.querySelectorAll('.rpre')) b.classList.toggle('sel', b.dataset.name === cur);
+    const d = document.querySelectorAll('#riderBtn .dots i');
+    d[0].style.background = Outfit.hex[RS.JACKET]; d[1].style.background = Outfit.hex[RS.PANTS];
+  },
+
+  open() {
+    if (Game.state !== 'menu' || Game.customizing) return;
+    Game.customizing = true; Input.anyKey = false;
+    document.body.classList.add('customizing');
+    this.sync();
+    const panel = $('rider');
+    panel.classList.remove('hide');
+    panel.querySelector('.rscroll').scrollTop = 0;
+    panel.focus({ preventScroll: true });
+  },
+
+  close() {
+    if (!Game.customizing) return;
+    Game.customizing = false; Input.anyKey = false;
+    Game.menuAt = performance.now();          // swallow any trailing tap on the menu
+    document.body.classList.remove('customizing');
+    $('rider').classList.add('hide');
+    if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
   }
 };
 
@@ -287,6 +363,7 @@ const Game = {
   air: { t: 0, spin: 0, flip: 0, grab: null, grabT: 0 },
   lastZ: 0, startY: 0, t: 0, frames: 0, fps: 60, _fpsT: 0, _mt: 0,
   menuAt: -1e9,                  // when the menu last opened (swallows that tap's trailing click)
+  customizing: false,            // rider colour panel open (menu only; render.js frames the rider)
   perf: { t: 0, n: 0, warm: 0, low: 0 },     // dynamic-resolution frame-rate monitor
   frameNo: 0,                    // monotonic; never reset (chunk cache ages on it)
 
@@ -418,6 +495,7 @@ const Game = {
     this.combo = 1; this.comboTimer = 0;
     this.flash = 0.45; this.desat = 1;
     this.msg('WIPEOUT', 1200);
+    Pad.rumble(1.0, 0.8, 380);
     if (Level.cur.zen) return;                 // zen: brush it off and keep riding
     this.setLives(Math.max(0, this.lives - 1));
     if (this.lives <= 0) this._deadTimer = 1.1;
@@ -559,6 +637,7 @@ const Game = {
     if (wasAir && !P.airborne) {
       this.totalAir += this.air.t;
       if (P.landedClean) { this.lands++; this.evalTrick(); }
+      if (P.landedClean && this.air.t > 0.35) Pad.rumble(clamp(this.air.t * 0.25, 0.15, 0.6), 0.35, 110);
       this.air.grabT = 0;
     }
 
@@ -660,6 +739,7 @@ const Game = {
     GL.makeShadowMap(GL.shadowSize, GL.shadowSize);
     Game.boot();
     Input.init();
+    Pad.init();
   } catch (e) { die(e); return; }
 
   /* Surface driver errors while they are still attributable: a GL error on the
@@ -712,8 +792,9 @@ const Game = {
     if (Game._fpsT > 0.5) { Game.fps = Game.frames / Game._fpsT; Game.frames = 0; Game._fpsT = 0; }
 
     try {
+      Pad.poll(dt);
       if (Game.state === 'menu') {
-        if (Input.anyKey) { Input.anyKey = false; Game.start(); }
+        if (Input.anyKey) { Input.anyKey = false; if (!Game.customizing) Game.start(); }
         // idle: drift down the mountain so the menu has a live backdrop
         Game.P.pos.z += dt * 7;
         if (Level.cur.finishZ && Game.P.pos.z > Level.cur.finishZ) Game.P.pos.z = Game.spawnZ();

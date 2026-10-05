@@ -123,6 +123,16 @@
     background:#04060b;font-size:14px;line-height:1.7;color:#cfe6ff;text-align:center}
 
   /* mute toggle: top centre, right of the lives (and of the pause button on touch) */
+  /* game controller: its own help, no touch overlay while it's in use */
+  .pad-only{display:none}
+  body.pad .keys.pad-only{display:grid}
+  body.pad .keys.kb-only, body.pad .keys.touch-only, body.pad #hint{display:none!important}
+  body.pad #touch{display:none!important}
+  #padToast{position:fixed;left:50%;bottom:max(24px,env(safe-area-inset-bottom));transform:translate(-50%,20px);z-index:20;
+    padding:10px 18px;border-radius:22px;background:rgba(10,22,38,.78);border:1.5px solid rgba(95,226,255,.55);
+    color:#eaf6ff;font-size:13px;font-weight:700;letter-spacing:.06em;opacity:0;pointer-events:none;
+    transition:opacity .25s,transform .25s;white-space:nowrap;max-width:calc(100vw - 32px);overflow:hidden;text-overflow:ellipsis}
+  #padToast.on{opacity:1;transform:translate(-50%,0)}
   #muteBtn{position:fixed;top:max(12px,env(safe-area-inset-top));left:50%;margin-left:46px;width:38px;height:38px;
     border-radius:50%;border:1.5px solid rgba(190,225,255,.35);background:rgba(10,22,38,.38);color:#eaf6ff;
     display:flex;align-items:center;justify-content:center;padding:0;z-index:6;cursor:pointer;
@@ -264,6 +274,84 @@
     body.touch .keys.touch-only{grid-template-columns:auto auto auto auto!important;gap:6px 14px}
     .eyebrow{margin-bottom:8px}
     #tiltBtn{margin-top:10px}
+    #mbtns{margin-top:10px}
+  }
+
+  /* ---------- rider customisation ---------- */
+  #mbtns{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-items:center;margin-top:16px}
+  #mbtns #tiltBtn{margin:0;min-height:42px}
+  #riderBtn{display:inline-flex;align-items:center;gap:10px;padding:7px 18px 7px 7px;min-height:42px;
+    border-radius:24px;border:1.5px solid rgba(190,225,255,.4);background:rgba(10,22,38,.45);color:#eaf6ff;
+    font:800 12px/1 inherit;font-family:inherit;letter-spacing:.16em;text-transform:uppercase;cursor:pointer;
+    touch-action:manipulation;transition:border-color .15s,background .15s}
+  #riderBtn:hover{border-color:var(--accent)}
+  #riderBtn .dots{display:flex}
+  #riderBtn .dots i{width:16px;height:26px;border:1.5px solid rgba(255,255,255,.55)}
+  #riderBtn .dots i:first-child{border-radius:13px 0 0 13px;border-right:0}
+  #riderBtn .dots i:last-child{border-radius:0 13px 13px 0;border-left:0}
+  #riderBtn .key{margin-left:2px;padding:2px 6px;letter-spacing:0}
+  #rider{position:fixed;z-index:7;top:max(16px,env(safe-area-inset-top));right:max(16px,env(safe-area-inset-right));
+    max-height:calc(100% - max(16px,env(safe-area-inset-top)) - max(16px,env(safe-area-inset-bottom)));
+    width:min(372px,calc(100vw - 32px));display:flex;flex-direction:column;
+    border-radius:18px;border:1.5px solid rgba(190,225,255,.24);background:rgba(7,15,27,.74);color:#eaf6ff;
+    box-shadow:0 20px 60px rgba(0,4,12,.5);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    transition:opacity .28s ease,transform .28s ease,visibility 0s;outline:none;overflow:hidden}
+  #rider.hide{opacity:0;transform:translateX(26px);pointer-events:none;visibility:hidden;
+    transition:opacity .28s ease,transform .28s ease,visibility 0s linear .28s}
+  .rhead{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;padding:16px 18px 10px}
+  .rhead .eyebrow{margin-bottom:5px;font-size:9.5px}
+  .rhead b{display:block;font-size:20px;font-weight:850;letter-spacing:.01em}
+  .rhead .key{font-style:normal;color:var(--dim)}
+  .rscroll{flex:1;min-height:0;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;touch-action:pan-y;padding:2px 18px 12px;
+    -webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:rgba(190,225,255,.25) transparent}
+  .rscroll .label{margin:10px 0 8px;text-shadow:none}
+  #rPresets{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+  .rpre{display:flex;align-items:center;gap:7px;min-height:40px;padding:5px 8px 5px 5px;border-radius:21px;
+    border:1.5px solid rgba(190,225,255,.22);background:rgba(10,22,38,.5);color:#eaf6ff;font:800 10px/1.1 inherit;
+    font-family:inherit;letter-spacing:.08em;text-transform:uppercase;text-align:left;cursor:pointer;touch-action:manipulation}
+  .rpre i{flex:none;width:26px;height:26px;border-radius:50%;border:1.5px solid rgba(255,255,255,.4)}
+  .rpre:hover{border-color:rgba(190,225,255,.55)}
+  .rpre.sel{border-color:var(--accent);color:var(--accent);background:rgba(20,60,90,.55)}
+  #rItems{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+  .ritem{display:flex;align-items:center;gap:10px;min-height:48px;padding:4px 10px 4px 4px;border-radius:25px;
+    border:1px solid var(--line);background:rgba(10,22,38,.45);cursor:pointer;font-size:10.5px;font-weight:800;
+    letter-spacing:.12em;text-transform:uppercase;color:rgba(234,246,255,.9);transition:border-color .15s}
+  .ritem:hover,.ritem:focus-within{border-color:rgba(190,225,255,.55)}
+  .ritem input{flex:none;-webkit-appearance:none;appearance:none;width:40px;height:40px;padding:0;border:0;border-radius:50%;
+    background:none;cursor:pointer;box-shadow:0 0 0 1.5px rgba(255,255,255,.45),0 2px 8px rgba(0,0,0,.35)}
+  .ritem input::-webkit-color-swatch-wrapper{padding:0}
+  .ritem input::-webkit-color-swatch{border:0;border-radius:50%}
+  .ritem input::-moz-color-swatch{border:0;border-radius:50%}
+  .ritem input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .rfoot{display:flex;gap:8px;padding:12px 18px 16px;border-top:1px solid var(--line)}
+  .rfoot button{flex:1;min-height:42px;padding:0 10px;border-radius:22px;border:1.5px solid rgba(190,225,255,.4);
+    background:rgba(10,22,38,.45);color:#eaf6ff;font:800 11px/1 inherit;font-family:inherit;letter-spacing:.14em;
+    text-transform:uppercase;cursor:pointer;touch-action:manipulation;white-space:nowrap}
+  .rfoot button:hover{border-color:rgba(190,225,255,.7)}
+  .rfoot #rDone{border-color:var(--accent);color:var(--accent)}
+  /* while customising: the menu steps aside so the rider shows (the camera comes in close) */
+  body.customizing #menu{opacity:0;pointer-events:none}
+  body.customizing #muteBtn, body.customizing #atmosBtn{display:none}
+  /* phones: compact tiles, swatch above the name */
+  @media (max-height:500px), (orientation:portrait) and (max-width:700px){
+    .rhead{padding:12px 16px 6px}
+    .rhead b{font-size:17px}
+    .rscroll{padding:0 16px 10px}
+    .rscroll .label{margin:8px 0 7px}
+    #rPresets{gap:6px}
+    .rpre{gap:6px;padding-right:4px;font-size:9.5px;letter-spacing:.05em}
+    .rpre i{width:24px;height:24px}
+    #rItems{grid-template-columns:repeat(5,minmax(0,1fr));gap:6px 4px}
+    .ritem{flex-direction:column;justify-content:flex-start;gap:5px;min-height:0;padding:4px 0 2px;border:0;background:none;
+      border-radius:10px;font-size:8.5px;letter-spacing:.08em;line-height:1.2;text-align:center}
+    .rfoot{padding:10px 16px 12px}
+  }
+  /* phone portrait: a bottom sheet over the lower half */
+  @media (orientation:portrait) and (max-width:700px){
+    #rider{top:auto;bottom:max(16px,env(safe-area-inset-bottom));left:max(16px,env(safe-area-inset-left));width:auto;
+      max-height:55vh;max-height:55dvh}
+    #rider.hide{transform:translateY(30px)}
+    .rhead .key{display:none}
   }
 </style>
 </head>
@@ -307,6 +395,7 @@
   <div id="debug" class="num"></div>
 </div>
 
+<div id="padToast"></div>
 <div class="screen" id="menu">
   <div class="eyebrow">WebGL2 · no engine · no assets</div>
   <h1>POWDER<br>LINE</h1>
@@ -328,6 +417,15 @@
     <div><i class="key">grab</i></div><div>Hold in the air for style points</div>
     <div><i class="key">drag</i></div><div>Swipe open screen to look around</div>
   </div>
+  <div class="keys pad-only" style="grid-template-columns:auto auto">
+    <div><i class="key">L stick</i></div><div>◀ ▶ carve (spin in air) · ▲ tuck / front flip · ▼ brake / back flip</div>
+    <div><i class="key">A</i></div><div>Hold to tuck &amp; load · release to ollie</div>
+    <div><i class="key">RT</i> <i class="key">LT</i></div><div>Tuck · brake (front / back flip in the air)</div>
+    <div><i class="key">X</i> <i class="key">B</i> <i class="key">Y</i> <i class="key">RB</i></div><div>Grabs (hold in air)</div>
+    <div><i class="key">R stick</i></div><div>Look around</div>
+    <div><i class="key">Menu</i> <i class="key">View</i></div><div>Pause · restart</div>
+    <div><i class="key">D-pad</i> <i class="key">A</i> <i class="key">Y</i></div><div>Menu: pick level · drop in · customize rider</div>
+  </div>
   <div id="levels">
     <button class="lvl" type="button" data-id="mountain"><i class="kb-only">1</i><b>Backcountry</b><span>Endless mountain · gates · kickers</span></button>
     <button class="lvl" type="button" data-id="pipe"><i class="kb-only">2</i><b>Half-pipe</b><span>Carve the walls · boost the lip</span></button>
@@ -335,7 +433,10 @@
     <button class="lvl" type="button" data-id="zen"><i class="kb-only">4</i><b>Zen</b><span>No gates, lives or score · day / night / neon</span></button>
   </div>
   <div class="go"><span class="kb-only">press 1–4 to pick a level · any other key to drop in</span><span class="touch-only">tap a level to drop in</span></div>
-  <button id="tiltBtn" class="touch-only" type="button">Tilt steering: OFF</button>
+  <div id="mbtns">
+    <button id="riderBtn" type="button"><span class="dots"><i></i><i></i></span>Rider<i class="key kb-only">C</i></button>
+    <button id="tiltBtn" class="touch-only" type="button">Tilt steering: OFF</button>
+  </div>
 </div>
 
 <div class="screen hide" id="over">
@@ -361,6 +462,17 @@
   <div class="pbtns"><button type="button" id="pResume">Resume</button><button type="button" id="pRestart">↺ Restart</button><button type="button" id="pMenu">☰ Levels</button></div>
 </div>
 
+<div id="rider" class="hide" role="dialog" aria-label="Customize rider" tabindex="-1">
+  <div class="rhead"><div><div class="eyebrow">customize</div><b>Your rider</b></div><i class="key kb-only">Esc</i></div>
+  <div class="rscroll">
+    <div class="label">Presets</div>
+    <div id="rPresets"></div>
+    <div class="label">Colours</div>
+    <div id="rItems"></div>
+  </div>
+  <div class="rfoot"><button type="button" id="rRandom">Randomize</button><button type="button" id="rReset">Reset</button><button type="button" id="rDone">Done</button></div>
+</div>
+
 <button id="atmosBtn" type="button" aria-label="Atmosphere" title="Atmosphere (N)">☀</button>
 <button id="muteBtn" type="button" aria-label="Mute" title="Mute (M)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z" fill="currentColor" stroke="none"/><g class="waves"><path d="M16 9.5a3.5 3.5 0 0 1 0 5"/><path d="M18.5 7a7 7 0 0 1 0 10"/></g><g class="x"><path d="M16.5 9.5l5 5M21.5 9.5l-5 5"/></g></svg></button>
 
@@ -378,17 +490,19 @@
 <div id="fatal"></div>
 <div id="foot">built from scratch — webgl2 · procedural terrain · edge-based carve physics</div>
 
-<script src="js/math.js?v=20261008a"></script>
-<script src="js/world.js?v=20261008a"></script>
-<script src="js/meshes.js?v=20261008a"></script>
-<script src="js/levels.js?v=20261008a"></script>
-<script src="js/gl.js?v=20261008a"></script>
-<script src="js/render.js?v=20261008a"></script>
-<script src="js/scenery.js?v=20261008a"></script>
-<script src="js/atmos.js?v=20261008a"></script>
-<script src="js/fx.js?v=20261008a"></script>
-<script src="js/audio.js?v=20261008a"></script>
-<script src="js/player.js?v=20261008a"></script>
-<script src="js/game.js?v=20261008a"></script>
+<script src="js/math.js?v=20261008c"></script>
+<script src="js/world.js?v=20261008c"></script>
+<script src="js/meshes.js?v=20261008c"></script>
+<script src="js/outfit.js?v=20261008c"></script>
+<script src="js/levels.js?v=20261008c"></script>
+<script src="js/gl.js?v=20261008c"></script>
+<script src="js/render.js?v=20261008c"></script>
+<script src="js/scenery.js?v=20261008c"></script>
+<script src="js/atmos.js?v=20261008c"></script>
+<script src="js/fx.js?v=20261008c"></script>
+<script src="js/audio.js?v=20261008c"></script>
+<script src="js/player.js?v=20261008c"></script>
+<script src="js/pad.js?v=20261008c"></script>
+<script src="js/game.js?v=20261008c"></script>
 </body>
 </html>

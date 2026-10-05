@@ -37,7 +37,7 @@ const GL = {
     // uses 3..7, bindParticles uses 3/4. Binding an undeclared name is a no-op.
     const SLOTS = [['aPos', 0], ['aNormal', 1], ['aColor', 2],
                    ['aIM0', 3], ['aIM1', 4], ['aIM2', 5], ['aIM3', 6], ['aTint', 7],
-                   ['aP0', 3], ['aP1', 4], ['aAlpha', 1]];
+                   ['aP0', 3], ['aP1', 4], ['aAlpha', 1], ['aAux', 8]];
     for (const [nm, loc] of SLOTS) gl.bindAttribLocation(p, loc, nm);
     gl.linkProgram(p);
     if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('Link "' + name + '": ' + gl.getProgramInfoLog(p));
@@ -70,8 +70,16 @@ const GL = {
     const ib = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(geo.i), gl.STATIC_DRAW);
+    // optional second stream (rider/board): aux = (palette slot, baked ao, v) at location 8
+    let ab = null;
+    if (geo.aux && geo.aux.length) {
+      ab = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, ab);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(geo.aux), gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(8); gl.vertexAttribPointer(8, 3, gl.FLOAT, false, 12, 0);
+    }
     gl.bindVertexArray(null);
-    const m = { vao, count: geo.i.length, vb, ib, stride: STRIDE };
+    const m = { vao, count: geo.i.length, vb, ib, ab, stride: STRIDE };
     this.mesh[name] = m;
     return m;
   },
@@ -604,6 +612,104 @@ GL.buildShaders = function () {
       fragColor = vec4(col, 1.0);
     }`;
 
+  /* ---------- rider + board ----------
+     Colour comes from the outfit palette (uPal[slot]) × the vertex colour
+     (a shade multiplier); material is chosen per slot:
+       cloth  (jacket, accent, pants, gloves, boots, mask): wrapped diffuse +
+              soft rim, NO specular highlight — matte fabric
+       gloss  (helmet, board top/base): clear-coat Blinn highlight + fresnel sky
+       lens   (goggles): shiny tinted colour with a hot highlight
+       satin  (bindings, trim): a faint broad highlight
+     aux = (slot, baked ao, v along the part) — see meshes.js. */
+  const RIDER_VS = V_HEAD + `
+    in vec3 aAux;
+    out vec3 vNormal; out vec3 vColor; out vec3 vWorld; out vec3 vAux;
+    void main(){
+      vec4 wp = uModel * vec4(aPos, 1.0);
+      vWorld = wp.xyz;
+      vNormal = normalize(mat3(uModel) * aNormal);
+      vColor = aColor;
+      vAux = aAux;
+      gl_Position = uProj * uView * wp;
+    }`;
+  const RIDER_FS = LIGHTING_GLSL + `
+    in vec3 vNormal; in vec3 vColor; in vec3 vWorld; in vec3 vAux;
+    out vec4 fragColor;
+    uniform vec3 uPal[12];
+    // material per slot: 0 cloth, 1 gloss, 2 lens, 3 satin
+    const int MAT[12] = int[12](0, 0, 0, 0, 1, 2, 0, 1, 1, 3, 3, 0);
+    float wrapD(float NoL, float w){ return max((NoL + w) / ((1.0 + w) * (1.0 + w)), 0.0); }
+    // bump without tangents (Mikkelsen, "bump mapping unparametrized surfaces")
+    vec3 bumpN(vec3 N, vec3 P, float h, float k){
+      vec3 dpx = dFdx(P), dpy = dFdy(P);
+      float dhx = dFdx(h), dhy = dFdy(h);
+      vec3 r1 = cross(dpy, N), r2 = cross(N, dpx);
+      float det = dot(dpx, r1);
+      return normalize(abs(det) * N - k * sign(det) * (dhx * r1 + dhy * r2));
+    }
+    void main(){
+      int slot = int(vAux.x + 0.5);
+      int mat = MAT[slot];
+      vec3 base = uPal[slot] * vColor;
+      float ao = clamp(vAux.y, 0.0, 1.0);
+      vec3 n = normalize(vNormal);
+      vec3 V = normalize(uCamPos - vWorld);
+      if(dot(n, V) < -0.2) n = -n;                       // thin/open shells seen from inside
+      float dist = length(uCamPos - vWorld);
+
+      // puffy jacket: horizontal quilting baffles along the torso (v = metres up the part)
+      if(slot == 0 || slot == 1){
+        float per = 0.105;
+        float f = fract(vAux.z / per);
+        float seam = 1.0 - smoothstep(0.0, 0.10 + fwidth(vAux.z / per) * 1.5, min(f, 1.0 - f));
+        float near = 1.0 - smoothstep(6.0, 16.0, dist);
+        base *= mix(1.0, 0.80, seam * near);
+        ao *= mix(1.0, 0.86, seam * near);
+        n = bumpN(n, vWorld, sin(3.14159 * f) * 0.010 * near, 1.0);
+      }
+
+      float NoL = dot(n, uSunDir), NoV = max(dot(n, V), 1e-3);
+      float sh = shadowFactor(vWorld, max(NoL, 0.0));
+      vec3 H = normalize(uSunDir + V);
+      float NoH = max(dot(n, H), 0.0);
+      vec3 amb = hemi(n) * (0.50 + 0.25 * n.y) * ao;
+      vec3 col;
+      if(mat == 0){
+        // matte fabric: soft wrapped terminator, grazing-angle sheen, no highlight
+        float diff = wrapD(NoL, 0.45) * sh * mix(1.0, ao, 0.35);
+        col = base * (uSunColor * diff + amb);
+        float rim = pow(1.0 - NoV, 3.0);
+        col += mix(base, uSkyTint, 0.55) * rim * 0.32 * (0.35 + 0.65 * sh) * ao;
+      } else {
+        float diff = max(NoL, 0.0) * sh;
+        col = base * (uSunColor * diff + amb);
+        vec3 R = reflect(-V, n);
+        float F = 0.04 + 0.96 * pow(1.0 - NoV, 5.0);
+        vec3 env = mix(uGroundTint, uSkyTint * 1.6, clamp(R.y * 0.5 + 0.5, 0.0, 1.0));
+        if(mat == 1){                                      // clear-coat: helmet shell, board
+          col += uSunColor * pow(NoH, 110.0) * 0.9 * sh;
+          col += env * F * 0.55 * ao;
+        } else if(mat == 2){                               // goggle lens: shiny tinted colour
+          col = base * (uSunColor * diff * 0.6 + amb * 0.8) + base * 0.18;
+          col += uSunColor * pow(NoH, 160.0) * 2.2 * sh;
+          col += env * mix(0.15, 0.6, F) * base;
+        } else {                                           // satin: bindings, trim
+          col += uSunColor * pow(NoH, 28.0) * 0.12 * sh;
+          col += env * F * 0.2 * ao;
+        }
+      }
+      // night lamps / rider glow (diffuse only)
+      for(int i = 0; i < 8; i++){
+        if(i >= uPLn) break;
+        vec3 Lv = uPL[i].xyz - vWorld;
+        float d = length(Lv);
+        float a = clamp(1.0 - d / uPL[i].w, 0.0, 1.0); a *= a;
+        col += base * uPLc[i].rgb * a * (0.3 + 0.7 * max(dot(n, Lv / max(d, 1e-3)), 0.0));
+      }
+      col = applyFog(col, vWorld, V, dist);
+      fragColor = vec4(col, 1.0);
+    }`;
+
   /* ---------- instanced props ---------- */
   const INST_VS = V_HEAD + V_OUT + `
     out float vEmis;
@@ -858,6 +964,7 @@ GL.buildShaders = function () {
 
   this.prog.world = this.link(TERRAIN_VS, TERRAIN_FS, 'world');
   this.prog.lit = this.link(LIT_VS, LIT_FS, 'lit');
+  this.prog.rider = this.link(RIDER_VS, RIDER_FS, 'rider');
   this.prog.inst = this.link(INST_VS, INST_FS, 'inst');
   this.prog.shadow = this.link(SHADOW_VS, SHADOW_FS, 'shadow');
   this.prog.shadowInst = this.link(SHADOW_INST_VS, SHADOW_FS, 'shadowInst');

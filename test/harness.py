@@ -1,7 +1,7 @@
 """Headless harness: run the game's non-GL code in a JS engine and assert it behaves."""
 import quickjs, json, sys, os, re
 
-FILES = ['math.js', 'world.js', 'meshes.js', 'player.js', 'fx.js']
+FILES = ['math.js', 'world.js', 'meshes.js', 'outfit.js', 'player.js', 'fx.js']
 
 PRELUDE = r"""
 // ---- minimal environment stubs ----
