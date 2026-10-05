@@ -180,26 +180,26 @@ class Particles {
   }
 
   /* ---------- upload + draw ---------- */
-  draw(camRight, camUp) {
-    const gl = GL.gl;
+  draw() {
+    const gl = GL.gl, v = Cam.view;               // camera right / up = rows of the view matrix
     const ib = GL.buf.particles;
     const d = ib.data;
     const n = Math.min(this.n, ib.max);
     if (n === 0) return;
+    const pt = Atmos.p.spray || ONE3;              // snow spray is unlit: dim it at night
     for (let i = 0; i < n; i++) {
       const t = this.life[i] / this.maxLife[i];
       // fade in fast, out slow
       const fade = Math.min(1, t * 2.6) * Math.min(1, (1 - t) * 8 + 0.25);
       const o = i * 8;
       d[o] = this.px[i]; d[o + 1] = this.py[i]; d[o + 2] = this.pz[i]; d[o + 3] = Math.max(0.02, this.size[i]);
-      const pt = Atmos.p.spray || ONE3;          // snow spray is unlit: dim it at night
       d[o + 4] = this.r[i] * pt[0]; d[o + 5] = this.g[i] * pt[1]; d[o + 6] = this.b[i] * pt[2]; d[o + 7] = this.a[i] * fade;
     }
     const p = GL.prog.particle.use();
     gl.uniformMatrix4fv(p.uProj, false, Cam.proj);
     gl.uniformMatrix4fv(p.uView, false, Cam.view);
-    gl.uniform3f(p.uRight, camRight.x, camRight.y, camRight.z);
-    gl.uniform3f(p.uUp, camUp.x, camUp.y, camUp.z);
+    gl.uniform3f(p.uRight, v[0], v[4], v[8]);
+    gl.uniform3f(p.uUp, v[1], v[5], v[9]);
     const m = GL.mesh.particle;
     // VAO first: attribute pointers and divisors are per-VAO state, so they
     // must be written into the particle VAO, not whatever was bound last.

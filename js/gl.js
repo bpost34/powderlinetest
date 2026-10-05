@@ -54,8 +54,9 @@ const GL = {
   /* ---------------- buffers ---------------- */
   /* geo = {v:[], i:[]} → VAO with pos(0) normal(1) color(2), stride STRIDE.
      Every mesh in the game uses this one layout — including streamed terrain,
-     which writes white into the colour slots — so no per-mesh stride is needed
-     and no attribute slot can ever read past the end of a buffer. */
+     whose colour slots carry shader hints (forest, cavity, wall) — so no
+     per-mesh stride is needed and no attribute slot can read past a buffer.
+     Rider/board meshes add an optional aux stream at location 8. */
   upload(name, geo) {
     const gl = this.gl;
     const vao = gl.createVertexArray();
@@ -254,7 +255,6 @@ const GL = {
     if (!gl) throw new Error('WebGL2 is not available in this browser.');
     this.gl = gl;
     const floatExt = gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float');
-    gl.getExtension('OES_texture_float_linear');
     this.hdr = !!floatExt;
 
     gl.enable(gl.DEPTH_TEST);
@@ -264,22 +264,12 @@ const GL = {
     gl.clearColor(0.05, 0.08, 0.13, 1);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
 
-    // attribute bindings are identical for every standard mesh
-    this.PROG_VS_COMMON = `
-      precision highp float;
-      in vec3 aPos; in vec3 aNormal; in vec3 aColor;
-      out vec3 vNormal; out vec3 vColor; out vec3 vWorld;
-      uniform mat4 uProj, uView, uModel;
-      mat4 model(){ return uModel; }
-    `;
-
     this.buildShaders();
 
     // geometry
     buildRider();
     this.upload('board', buildBoard());
     for (const k in RiderGeo) this.upload(k, RiderGeo[k]);
-    this.upload('tree', buildTree());
     for (let sh = 0; sh < FIR_SHAPES.length; sh++) {
       this.upload('firFol' + sh, buildFirFoliage(sh, 0));
       this.upload('firFolLo' + sh, buildFirFoliage(sh, 1));
@@ -379,7 +369,6 @@ const GL = {
     const gl = this.gl;
     if (m) { gl.deleteVertexArray(m.vao); gl.deleteBuffer(m.vb); gl.deleteBuffer(m.ib); }
     m = this.upload('_chunk' + key, data);
-    m.key = key;
     this.chunkVAO.set(key, m);
     return m;
   },
@@ -459,10 +448,12 @@ const LIGHTING_GLSL = `
   // snow albedo: drifts, exposed rock, blue shadows in hollows
   vec3 snowAlbedo(vec3 wp, vec3 n, float ao){
     float steep = 1.0 - clamp(n.y, 0.0, 1.0);
-    float rockMask = smoothstep(0.42, 0.72, steep) * (0.55 + 0.45 * fbm(wp.xz * 0.09));
-    vec3 drift = mix(vec3(0.90,0.94,1.00), vec3(0.78,0.87,0.99), fbm(wp.xz * 0.035));
-    vec3 rock = mix(vec3(0.26,0.28,0.33), vec3(0.42,0.43,0.47), fbm(wp.xz * 0.6));
-    vec3 col = mix(drift, rock, rockMask);
+    vec3 col = mix(vec3(0.90,0.94,1.00), vec3(0.78,0.87,0.99), fbm(wp.xz * 0.035));   // drifts
+    if(steep > 0.42){                       // exposed rock only on steep ground (skip the noise elsewhere)
+      float rockMask = smoothstep(0.42, 0.72, steep) * (0.55 + 0.45 * fbm(wp.xz * 0.09));
+      vec3 rock = mix(vec3(0.26,0.28,0.33), vec3(0.42,0.43,0.47), fbm(wp.xz * 0.6));
+      col = mix(col, rock, rockMask);
+    }
     col *= 0.86 + 0.14 * ao;
     return col;
   }
@@ -523,7 +514,7 @@ GL.buildShaders = function () {
       vec4 wp = uModel * vec4(aPos, 1.0);
       vWorld = wp.xyz;
       vNormal = normalize(mat3(uModel) * aNormal);
-      vColor = vec3(1.0);
+      vColor = aColor;               // terrain hints: forest cover, cavity, valley wall (world.js)
       gl_Position = uProj * uView * wp;
     }`;
 
@@ -627,7 +618,11 @@ GL.buildShaders = function () {
     void main(){
       vec4 wp = uModel * vec4(aPos, 1.0);
       vWorld = wp.xyz;
-      vNormal = normalize(mat3(uModel) * aNormal);
+      // limbs/scarf are non-uniformly scaled (m4limb, m4axesS): normals need the
+      // inverse-transpose. The axes are orthogonal, so that is just dividing each
+      // component by its axis' squared length before transforming.
+      mat3 m = mat3(uModel);
+      vNormal = normalize(m * (aNormal / vec3(dot(m[0], m[0]), dot(m[1], m[1]), dot(m[2], m[2]))));
       vColor = aColor;
       vAux = aAux;
       gl_Position = uProj * uView * wp;
@@ -657,15 +652,19 @@ GL.buildShaders = function () {
       if(dot(n, V) < -0.2) n = -n;                       // thin/open shells seen from inside
       float dist = length(uCamPos - vWorld);
 
-      // puffy jacket: horizontal quilting baffles along the torso (v = metres up the part)
+      // puffy jacket: horizontal quilting baffles along the torso (v = metres up the part).
+      // Derivatives are taken BEFORE the per-slot branch: a 2x2 pixel quad can straddle
+      // a slot edge, and derivatives inside divergent control flow are undefined.
+      float per = 0.105;
+      float f = fract(vAux.z / per);
+      float fw = fwidth(vAux.z / per);
+      float near = 1.0 - smoothstep(6.0, 16.0, dist);
+      vec3 bumped = bumpN(n, vWorld, sin(3.14159 * f) * 0.010 * near, 1.0);
       if(slot == 0 || slot == 1){
-        float per = 0.105;
-        float f = fract(vAux.z / per);
-        float seam = 1.0 - smoothstep(0.0, 0.10 + fwidth(vAux.z / per) * 1.5, min(f, 1.0 - f));
-        float near = 1.0 - smoothstep(6.0, 16.0, dist);
+        float seam = 1.0 - smoothstep(0.0, 0.10 + fw * 1.5, min(f, 1.0 - f));
         base *= mix(1.0, 0.80, seam * near);
         ao *= mix(1.0, 0.86, seam * near);
-        n = bumpN(n, vWorld, sin(3.14159 * f) * 0.010 * near, 1.0);
+        n = bumped;
       }
 
       float NoL = dot(n, uSunDir), NoV = max(dot(n, V), 1e-3);
@@ -957,7 +956,10 @@ GL.buildShaders = function () {
       col *= mix(1.0, vig, uVignette);
       col += uFlash * vec3(1.0, 0.96, 0.9) * 0.55;
       // dither to kill banding on the snow
-      float dth = fract(sin(dot(uv * uRes, vec2(12.9898,78.233)) + uTime) * 43758.5453);
+      // sin-free hash (low-precision mobile sin() of large arguments makes visible patterns)
+      vec3 dp = fract(vec3(uv * uRes, fract(uTime * 0.37) * 97.0) * 0.1031);
+      dp += dot(dp, dp.yzx + 33.33);
+      float dth = fract((dp.x + dp.y) * dp.z);
       col += (dth - 0.5) / 255.0;
       fragColor = vec4(col, 1.0);
     }`;

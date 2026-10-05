@@ -37,9 +37,14 @@ function fbm(x, y, oct, s) {
   return sum / norm;            // 0..1
 }
 
-/* The fall line: the mountain meanders, so you can never just hold straight. */
+/* The fall line: the mountain meanders, so you can never just hold straight.
+   Memoised on the last z: terrain rows and normalAt() sample many x at one z,
+   and every height sample needs the centre line (~20% of chunk build time). */
+let _cxZ = NaN, _cxV = 0;
 function mtnCenterX(z) {
-  return (z * 0.11) * Math.sin(z * 0.0032) +
+  if (z === _cxZ) return _cxV;
+  _cxZ = z;
+  return _cxV = (z * 0.11) * Math.sin(z * 0.0032) +
          Math.sin(z * 0.0071) * 34 +
          Math.sin(z * 0.0019 + 1.7) * 58 +
          (fbm(0.5, z * 0.0022, 3, 31) - 0.5) * 40;
@@ -79,10 +84,10 @@ function kickerBump(x, z, k) {
   const v = dx * c - dz * s;      // across it
   if (Math.abs(v) > k.rad * 2.2) return 0;
   let h = 0;
+  const lat = Math.exp(-(v * v) / (2 * k.rad * k.rad * 0.42));      // same for every roller
   for (let i = 0; i < k.n; i++) {
     const uu = u - i * k.gap;
     if (uu < -k.L || uu > k.rad) continue;
-    const lat = Math.exp(-(v * v) / (2 * k.rad * k.rad * 0.42));
     if (uu < 0) h += k.h * sstep(-k.L, 0, uu) * lat;
     else h += k.h * Math.exp(-(uu * uu) / (2 * 4.6 * 4.6)) * lat;
   }
@@ -185,6 +190,9 @@ class Chunk {
       const sc = 0.75 + hash2(i, 9, 404) * 0.85;
       t.push({ x, y, z, sc, rot: hash2(i, 5, 505) * TAU, sway: hash2(i, 7, 606) * TAU,
                shape: hash2(i, this.ix * 3 + this.iz, 707) < 0.55 ? 0 : 1, tall: 0.9 + hash2(i, 11, 808) * 0.25 });
+      const tr = t[t.length - 1];
+      tr.c = Math.cos(tr.rot); tr.s = Math.sin(tr.rot);                     // instance matrix, cached
+      tr.shade = 0.78 + hash2(Math.floor(x), Math.floor(z), 77) * 0.42;
     }
     // occasional boulders on the rideable slope beside the run — never up on the
     // valley walls (where they read as floating snowballs) or on steep ground.
@@ -216,10 +224,17 @@ class Chunk {
 
     // Pass 1: sample the raw heights once per grid vertex.
     const h = new Float32Array(n * n);
+    let yMin = Infinity, yMax = -Infinity;
     for (let j = 0; j < n; j++) {
       const z = this.z0 + (j - 1) * cell;
-      for (let i = 0; i < n; i++) h[j * n + i] = heightAt(this.x0 + (i - 1) * cell, z);
+      for (let i = 0; i < n; i++) {
+        const y = h[j * n + i] = heightAt(this.x0 + (i - 1) * cell, z);
+        if (y < yMin) yMin = y; if (y > yMax) yMax = y;
+      }
     }
+    // bounding sphere for frustum culling (skirt drops a little below yMin)
+    this.yMid = (yMin + yMax) * 0.5;
+    this.rad = Math.hypot(CHUNK * 0.75, (yMax - yMin) * 0.5 + 2);
 
     // Pass 2: emit vertices. Normals come from central differences of the
     // heights we already sampled, which removes the 4 extra heightAt() calls
@@ -253,8 +268,8 @@ class Chunk {
         let forest = 0, wall = 0;
         if (mtn) {
           wall = sstep(WALL_START, WALL_START + 70, d);
-          forest = sstep(clear + 4, clear + 20, d) * (1 - sstep(WALL_START + 70, WALL_START + 150, d))
-            * sstep(0.48, 0.62, ny / l) * clamp(0.35 + fbm(xv * 0.012, zRow * 0.012, 2, 31) * 1.1, 0, 1);
+          forest = sstep(clear + 4, clear + 20, d) * (1 - sstep(WALL_START + 130, WALL_START + 260, d))
+            * sstep(0.30, 0.50, ny / l) * clamp(0.45 + fbm(xv * 0.012, zRow * 0.012, 2, 31) * 1.1, 0, 1);
         }
         const lap = (h[iL] + h[iR] + h[jD] + h[jU] - 4 * h[idx]) / (cell * cell);
         v[p++] = forest; v[p++] = clamp(0.5 - lap * 1.6, 0, 1); v[p++] = wall;
@@ -277,14 +292,12 @@ class Chunk {
 const World = {
   chunks: new Map(),
   visible: [],
-  dirty: true,
-  builtThisFrame: 0,
 
   key(ix, iz) { return ix * 100000 + iz; },
 
   /* drop every chunk (CPU + GPU) — used when the level changes */
   reset() {
-    this.chunks.clear(); this.visible.length = 0; this.dirty = true;
+    this.chunks.clear(); this.visible.length = 0;
     _featCache.clear();
     if (typeof GL !== 'undefined' && GL.purgeChunks) GL.purgeChunks();
   },
@@ -321,7 +334,6 @@ const World = {
     for (let i = 0; i < pending.length && i < budget; i++) {
       const [c, lod] = pending[i];
       c.lods[lod] = c.build(LODS[lod].res);
-      this.dirty = true;
     }
     // garbage collect far chunks
     if (this.chunks.size > 340) {
@@ -349,7 +361,6 @@ const World = {
       c.wantLod = lod;
       if (!c.lods[lod]) c.lods[lod] = c.build(LODS[lod].res);
     }
-    this.dirty = true;
   },
 
   /* gather props of visible chunks (trees/rocks) — used by renderer + physics */

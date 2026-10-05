@@ -29,6 +29,11 @@ def inline(m):
 bundled, n = tag.subn(inline, html)
 if n == 0:
     sys.exit('no <script src="js/..."> tags found in index.html')
+# every script must be inlined: a tag written differently (defer, type=…) would
+# silently stay an external reference and break the single-file build
+left = bundled.count('<script src=')
+if left:
+    sys.exit('%d <script src=...> tag(s) were not inlined (unexpected attributes?)' % left)
 os.makedirs(OUT_DIR, exist_ok=True)
 with open(OUT, 'w', encoding='utf-8') as f:
     f.write(bundled)

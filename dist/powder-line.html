@@ -117,8 +117,6 @@
   .stats .label{margin-bottom:7px}
   .stats b{font-size:27px;font-weight:800}
   .newbest{color:var(--gold);font-size:12px;letter-spacing:.24em;text-transform:uppercase;margin-top:16px}
-  #foot{position:fixed;bottom:16px;left:0;right:0;text-align:center;font-size:10px;letter-spacing:.2em;
-    text-transform:uppercase;color:rgba(180,215,245,.34)}
   #fatal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:30px;
     background:#04060b;font-size:14px;line-height:1.7;color:#cfe6ff;text-align:center}
 
@@ -156,7 +154,6 @@
   .touch-only{display:none}
   body.touch .touch-only{display:block}
   body.touch .keys.touch-only{display:grid}
-  body.touch #foot{display:none}
   body.touch .kb-only{display:none!important}
   body{-webkit-touch-callout:none}
   #touch{position:fixed;inset:0;pointer-events:none;display:none;z-index:5}
@@ -174,7 +171,6 @@
   #tB{right:calc(max(18px,env(safe-area-inset-right)) + 14px);bottom:calc(max(20px,env(safe-area-inset-bottom)) + 118px)}
   #tG{right:calc(max(18px,env(safe-area-inset-right)) + 106px);bottom:calc(max(20px,env(safe-area-inset-bottom)) + 98px);
     width:62px;height:62px}
-  #tP{left:50%;top:max(12px,env(safe-area-inset-top));margin-left:46px;width:38px;height:38px;font-size:10px;letter-spacing:0}
   #steerPad{position:absolute;left:max(18px,env(safe-area-inset-left));bottom:max(20px,env(safe-area-inset-bottom));
     width:min(156px,38vw);height:min(156px,38vw);border-radius:50%;border:1.5px solid rgba(190,225,255,.35);
     background:rgba(10,22,38,.30);pointer-events:auto;touch-action:none;backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
@@ -195,7 +191,7 @@
   body.touch #speed{font-size:36px}
   body.touch #speedbar{width:120px}
   body.touch #center{bottom:140px}
-  #tiltBtn{margin:18px auto 0;padding:10px 18px;border-radius:22px;border:1.5px solid rgba(190,225,255,.4);
+  #tiltBtn{padding:10px 18px;border-radius:22px;border:1.5px solid rgba(190,225,255,.4);
     background:rgba(10,22,38,.45);color:#eaf6ff;font:800 11px/1 inherit;font-family:inherit;letter-spacing:.16em;
     text-transform:uppercase;touch-action:manipulation}
   #tiltBtn.on{border-color:var(--accent);color:var(--accent)}
@@ -208,7 +204,6 @@
     #menu .go{margin-top:16px}
     #menu h1{font-size:clamp(44px,10vh,104px)}
   }
-  #foot{display:none!important}
   /* on menus the top-centre is the title — park the mute button in the corner */
   body:not(.playing) #muteBtn{left:auto;right:max(14px,env(safe-area-inset-right));margin-left:0}
   .zen-only{display:none}
@@ -271,9 +266,8 @@
     #dist{font-size:32px}#score{font-size:26px}
     body.touch .corner.bl{top:86px}
     #drop{font-size:12px;margin-top:3px}
-    body.touch .keys.touch-only{grid-template-columns:auto auto auto auto!important;gap:6px 14px}
+    body.touch .keys.touch-only{grid-template-columns:auto auto auto auto;gap:6px 14px}
     .eyebrow{margin-bottom:8px}
-    #tiltBtn{margin-top:10px}
     #mbtns{margin-top:10px}
   }
 
@@ -410,14 +404,14 @@
     <div><i class="key">Right</i> / <i class="key">Middle</i> drag</div><div>Orbit camera · wheel to zoom</div>
     <div><i class="key">R</i> <i class="key">P</i> <i class="key">M</i> <i class="key">`</i></div><div>Restart · pause · mute · debug</div>
   </div>
-  <div class="keys touch-only" style="grid-template-columns:auto auto">
+  <div class="keys touch-only">
     <div><i class="key">stick</i></div><div>◀ ▶ carve (spin in air) · ▲ tuck / front flip · ▼ brake / back flip</div>
     <div><i class="key">ollie</i></div><div>Hold to tuck &amp; load · release to jump</div>
     <div><i class="key">tuck</i> <i class="key">brake</i></div><div>Speed / slow · front &amp; back flips in the air</div>
     <div><i class="key">grab</i></div><div>Hold in the air for style points</div>
     <div><i class="key">drag</i></div><div>Swipe open screen to look around</div>
   </div>
-  <div class="keys pad-only" style="grid-template-columns:auto auto">
+  <div class="keys pad-only">
     <div><i class="key">L stick</i></div><div>◀ ▶ carve (spin in air) · ▲ tuck / front flip · ▼ brake / back flip</div>
     <div><i class="key">A</i></div><div>Hold to tuck &amp; load · release to ollie</div>
     <div><i class="key">RT</i> <i class="key">LT</i></div><div>Tuck · brake (front / back flip in the air)</div>
@@ -488,7 +482,6 @@
 </div>
 
 <div id="fatal"></div>
-<div id="foot">built from scratch — webgl2 · procedural terrain · edge-based carve physics</div>
 
 <script>/* js/math.js */
 /* =====================================================================
@@ -511,17 +504,12 @@ const sign = (v) => v < 0 ? -1 : 1;
 /* ---------------- vec3 (plain objects: {x,y,z}) ---------------- */
 function V3(x = 0, y = 0, z = 0) { return { x, y, z }; }
 V3.set = function (o, x, y, z) { o.x = x; o.y = y; o.z = z; return o; };
-V3.copy = function (o, a) { o.x = a.x; o.y = a.y; o.z = a.z; return o; };
-V3.add = function (o, a, b) { o.x = a.x + b.x; o.y = a.y + b.y; o.z = a.z + b.z; return o; };
-V3.sub = function (o, a, b) { o.x = a.x - b.x; o.y = a.y - b.y; o.z = a.z - b.z; return o; };
 V3.scale = function (o, a, s) { o.x = a.x * s; o.y = a.y * s; o.z = a.z * s; return o; };
 V3.dot = function (a, b) { return a.x * b.x + a.y * b.y + a.z * b.z; };
 V3.cross = function (o, a, b) {
   const ax = a.x, ay = a.y, az = a.z, bx = b.x, by = b.y, bz = b.z;
   o.x = ay * bz - az * by; o.y = az * bx - ax * bz; o.z = ax * by - ay * bx; return o;
 };
-V3.len = function (a) { return Math.hypot(a.x, a.y, a.z); };
-V3.dist = function (a, b) { return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z); };
 V3.norm = function (o, a) {
   const l = Math.hypot(a.x, a.y, a.z);
   if (l > 1e-8) { o.x = a.x / l; o.y = a.y / l; o.z = a.z / l; }
@@ -623,15 +611,6 @@ function m4invert(o, a) {
   return o;
 }
 
-/* Build a rigid matrix from an orthonormal basis (columns = images of X,Y,Z). */
-function m4basis(o, r, u, f, px, py, pz) {
-  o[0] = r.x; o[1] = r.y; o[2] = r.z; o[3] = 0;
-  o[4] = u.x; o[5] = u.y; o[6] = u.z; o[7] = 0;
-  o[8] = -f.x; o[9] = -f.y; o[10] = -f.z; o[11] = 0; // local forward is -Z (GL convention)
-  o[12] = px; o[13] = py; o[14] = pz; o[15] = 1;
-  return o;
-}
-
 /* Set a matrix directly from three basis vectors (columns = images of X,Y,Z).
    NOTE: X,Y,Z must form a RIGHT-HANDED frame (Z = X × Y) or winding flips. */
 function m4axes(o, X, Y, Z, px, py, pz, scale) {
@@ -677,12 +656,6 @@ function m4point(out, m, x, y, z) {
   out.x = (m[0] * x + m[4] * y + m[8] * z + m[12]) / w;
   out.y = (m[1] * x + m[5] * y + m[9] * z + m[13]) / w;
   out.z = (m[2] * x + m[6] * y + m[10] * z + m[14]) / w;
-  return out;
-}
-function m4dir(out, m, x, y, z) {
-  out.x = m[0] * x + m[4] * y + m[8] * z;
-  out.y = m[1] * x + m[5] * y + m[9] * z;
-  out.z = m[2] * x + m[6] * y + m[10] * z;
   return out;
 }
 
@@ -735,9 +708,14 @@ function fbm(x, y, oct, s) {
   return sum / norm;            // 0..1
 }
 
-/* The fall line: the mountain meanders, so you can never just hold straight. */
+/* The fall line: the mountain meanders, so you can never just hold straight.
+   Memoised on the last z: terrain rows and normalAt() sample many x at one z,
+   and every height sample needs the centre line (~20% of chunk build time). */
+let _cxZ = NaN, _cxV = 0;
 function mtnCenterX(z) {
-  return (z * 0.11) * Math.sin(z * 0.0032) +
+  if (z === _cxZ) return _cxV;
+  _cxZ = z;
+  return _cxV = (z * 0.11) * Math.sin(z * 0.0032) +
          Math.sin(z * 0.0071) * 34 +
          Math.sin(z * 0.0019 + 1.7) * 58 +
          (fbm(0.5, z * 0.0022, 3, 31) - 0.5) * 40;
@@ -777,10 +755,10 @@ function kickerBump(x, z, k) {
   const v = dx * c - dz * s;      // across it
   if (Math.abs(v) > k.rad * 2.2) return 0;
   let h = 0;
+  const lat = Math.exp(-(v * v) / (2 * k.rad * k.rad * 0.42));      // same for every roller
   for (let i = 0; i < k.n; i++) {
     const uu = u - i * k.gap;
     if (uu < -k.L || uu > k.rad) continue;
-    const lat = Math.exp(-(v * v) / (2 * k.rad * k.rad * 0.42));
     if (uu < 0) h += k.h * sstep(-k.L, 0, uu) * lat;
     else h += k.h * Math.exp(-(uu * uu) / (2 * 4.6 * 4.6)) * lat;
   }
@@ -883,6 +861,9 @@ class Chunk {
       const sc = 0.75 + hash2(i, 9, 404) * 0.85;
       t.push({ x, y, z, sc, rot: hash2(i, 5, 505) * TAU, sway: hash2(i, 7, 606) * TAU,
                shape: hash2(i, this.ix * 3 + this.iz, 707) < 0.55 ? 0 : 1, tall: 0.9 + hash2(i, 11, 808) * 0.25 });
+      const tr = t[t.length - 1];
+      tr.c = Math.cos(tr.rot); tr.s = Math.sin(tr.rot);                     // instance matrix, cached
+      tr.shade = 0.78 + hash2(Math.floor(x), Math.floor(z), 77) * 0.42;
     }
     // occasional boulders on the rideable slope beside the run — never up on the
     // valley walls (where they read as floating snowballs) or on steep ground.
@@ -914,10 +895,17 @@ class Chunk {
 
     // Pass 1: sample the raw heights once per grid vertex.
     const h = new Float32Array(n * n);
+    let yMin = Infinity, yMax = -Infinity;
     for (let j = 0; j < n; j++) {
       const z = this.z0 + (j - 1) * cell;
-      for (let i = 0; i < n; i++) h[j * n + i] = heightAt(this.x0 + (i - 1) * cell, z);
+      for (let i = 0; i < n; i++) {
+        const y = h[j * n + i] = heightAt(this.x0 + (i - 1) * cell, z);
+        if (y < yMin) yMin = y; if (y > yMax) yMax = y;
+      }
     }
+    // bounding sphere for frustum culling (skirt drops a little below yMin)
+    this.yMid = (yMin + yMax) * 0.5;
+    this.rad = Math.hypot(CHUNK * 0.75, (yMax - yMin) * 0.5 + 2);
 
     // Pass 2: emit vertices. Normals come from central differences of the
     // heights we already sampled, which removes the 4 extra heightAt() calls
@@ -951,8 +939,8 @@ class Chunk {
         let forest = 0, wall = 0;
         if (mtn) {
           wall = sstep(WALL_START, WALL_START + 70, d);
-          forest = sstep(clear + 4, clear + 20, d) * (1 - sstep(WALL_START + 70, WALL_START + 150, d))
-            * sstep(0.48, 0.62, ny / l) * clamp(0.35 + fbm(xv * 0.012, zRow * 0.012, 2, 31) * 1.1, 0, 1);
+          forest = sstep(clear + 4, clear + 20, d) * (1 - sstep(WALL_START + 130, WALL_START + 260, d))
+            * sstep(0.30, 0.50, ny / l) * clamp(0.45 + fbm(xv * 0.012, zRow * 0.012, 2, 31) * 1.1, 0, 1);
         }
         const lap = (h[iL] + h[iR] + h[jD] + h[jU] - 4 * h[idx]) / (cell * cell);
         v[p++] = forest; v[p++] = clamp(0.5 - lap * 1.6, 0, 1); v[p++] = wall;
@@ -975,14 +963,12 @@ class Chunk {
 const World = {
   chunks: new Map(),
   visible: [],
-  dirty: true,
-  builtThisFrame: 0,
 
   key(ix, iz) { return ix * 100000 + iz; },
 
   /* drop every chunk (CPU + GPU) — used when the level changes */
   reset() {
-    this.chunks.clear(); this.visible.length = 0; this.dirty = true;
+    this.chunks.clear(); this.visible.length = 0;
     _featCache.clear();
     if (typeof GL !== 'undefined' && GL.purgeChunks) GL.purgeChunks();
   },
@@ -1019,7 +1005,6 @@ const World = {
     for (let i = 0; i < pending.length && i < budget; i++) {
       const [c, lod] = pending[i];
       c.lods[lod] = c.build(LODS[lod].res);
-      this.dirty = true;
     }
     // garbage collect far chunks
     if (this.chunks.size > 340) {
@@ -1047,7 +1032,6 @@ const World = {
       c.wantLod = lod;
       if (!c.lods[lod]) c.lods[lod] = c.build(LODS[lod].res);
     }
-    this.dirty = true;
   },
 
   /* gather props of visible chunks (trees/rocks) — used by renderer + physics */
@@ -1506,7 +1490,8 @@ function buildBoard() {
    Every part is built in its own local frame:
      torso / pelvis / head : +Y up, +Z = the way the chest/face points,
                              +X = the lead shoulder side.  Origin at the base.
-     limb meshes           : unit radius, unit length along +Y (m4limb scales them).
+     limb meshes           : ≈unit radius, ≈unit length along +Y (m4limb scales them;
+                             cuffs/folds bulge a little past 1).
      mitten                : origin at the wrist, +Y up the forearm, +X = thumb side.
      boot                  : +X = board nose, +Z = toes, origin at the sole.
      scarf                 : unit strip along +Y, width on X, thickness on Z.
@@ -1514,7 +1499,7 @@ function buildBoard() {
    only a shade multiplier, using these greys for fixed details.             */
 const RiderGeo = {};
 const RIDER_COL = {
-  base: 1.0, seam: 0.62, edge: 0.55, under: 0.42, inner: 0.30, sole: 0.34
+  seam: 0.62, edge: 0.55, under: 0.42, inner: 0.30, sole: 0.34
 };
 
 function buildRider() {
@@ -1746,62 +1731,10 @@ function buildRider() {
 }
 
 /* ---------------- vegetation + rocks (instanced) ---------------- */
-function buildTree() {
-  /* Snowy fir: a trunk plus five drooping, star-shaped branch tiers. Flat-shaded
-     facets; each tier's upper surface fades from snow at the top to needles at
-     the tips, the underside is dark. Unit scale: ~4.6 m tall. */
-  const g = Geo();
-  geoCyl(g, 0, 0, 0, 0.15, 0.08, 1.3, [0.30, 0.21, 0.15], 7, false, false);
-  const SNOW = [0.93, 0.96, 1.0], UNDER = [0.08, 0.20, 0.14];
-  const face = (A, B, C, ca, cb, cc, hint) => {
-    let ux = B[0] - A[0], uy = B[1] - A[1], uz = B[2] - A[2], wx = C[0] - A[0], wy = C[1] - A[1], wz = C[2] - A[2];
-    let nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
-    if (nx * hint[0] + ny * hint[1] + nz * hint[2] < 0) { [B, C] = [C, B]; [cb, cc] = [cc, cb]; nx = -nx; ny = -ny; nz = -nz; }
-    const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
-    geoTri(g, geoVert(g, A[0], A[1], A[2], nx, ny, nz, ...ca),
-              geoVert(g, B[0], B[1], B[2], nx, ny, nz, ...cb),
-              geoVert(g, C[0], C[1], C[2], nx, ny, nz, ...cc));
-  };
-  const K = 10, TIERS = 5;
-  for (let t = 0; t < TIERS; t++) {
-    const k = t / (TIERS - 1);
-    const y0 = 0.95 + t * 0.74;                     // tier skirt height
-    const R = 1.5 * (1 - k * 0.72);                 // radius shrinks up the tree
-    const yTop = y0 + 1.15 - k * 0.15;
-    const rTop = t === TIERS - 1 ? 0.0 : R * 0.16;
-    const green = [0.10 + k * 0.03, 0.30 + k * 0.06, 0.19 + k * 0.03];
-    const tip = [], top = [];
-    for (let i = 0; i < K; i++) {
-      const a = (i + t * 0.5) / K * TAU;            // twist each tier a little
-      const out = i % 2 === 0;
-      const r = out ? R : R * 0.62;
-      const droop = out ? 0.22 : 0.0;
-      tip.push([Math.cos(a) * r, y0 - droop, Math.sin(a) * r]);
-      top.push([Math.cos(a) * rTop, yTop, Math.sin(a) * rTop]);
-    }
-    const snowMix = (c, m) => [lerp(c[0], SNOW[0], m), lerp(c[1], SNOW[1], m), lerp(c[2], SNOW[2], m)];
-    const tipCol = snowMix(green, 0.12), midCol = snowMix(green, 0.55);
-    for (let i = 0; i < K; i++) {
-      const j = (i + 1) % K;
-      const A = top[i], B = top[j], C = tip[i], D = tip[j];
-      const hint = [(C[0] + D[0]) * 0.5, 0.8, (C[2] + D[2]) * 0.5];   // outward + up
-      if (rTop > 0) face(A, D, C, SNOW, i % 2 ? tipCol : midCol, i % 2 ? midCol : tipCol, hint);
-      face(A, B, D, SNOW, SNOW, j % 2 ? midCol : tipCol, hint);
-      if (rTop === 0) face(A, D, C, SNOW, tipCol, tipCol, hint);
-      // underside back to the trunk
-      face(C, D, [0, y0 + 0.28, 0], UNDER, UNDER, UNDER, [(C[0] + D[0]) * 0.5, -1.2, (C[2] + D[2]) * 0.5]);
-    }
-  }
-  return g;
-}
-/* A displaced sphere shell with CORRECT normals.
-   The previous version faked them with Math.abs(ny), which flipped the entire
-   lower hemisphere to point upward — under backface culling that both lit the
-   underside wrongly and failed the winding agreement test (127/162 = 78%).
-   Normals are now central differences of the displaced grid itself:
-   n = cross(dP/du, dP/dv), which is exactly the direction the a,b,c / b,d,c
-   face winding produces. Verified analytically at the equator: a vertex at
-   (1,0,0) gets n = (+,0,0). */
+/* A noise-displaced sphere shell (tMax < 1 covers only the top of the pole).
+   The noise wraps around the seam and each pole collapses to one point, so the
+   shell is closed; normals are central differences of the displaced grid,
+   wrapping across the seam. */
 function geoBoulder(g, ring, ampLo, ampHi, seed, col, scale, tMax) {
   const seg = 9, w = seg + 1;
   const base = g.v.length / STRIDE;
@@ -1810,8 +1743,10 @@ function geoBoulder(g, ring, ampLo, ampHi, seed, col, scale, tMax) {
   for (let j = 0; j <= ring; j++) {
     const v = (j / ring) * tM, th = v * Math.PI;
     for (let i = 0; i <= seg; i++) {
-      const ph = i / seg * TAU;
-      const n = ampLo + ampHi * fbm(Math.cos(ph) * 3 + i, Math.sin(ph) * 3 + j * 2, 2, seed);
+      const pole = j === 0 || (j === ring && tM >= 1);
+      const ii = pole ? 0 : i % seg;                 // seam column = first column; poles = one point
+      const ph = ii / seg * TAU;
+      const n = ampLo + ampHi * fbm(Math.cos(ph) * 3 + ii, Math.sin(ph) * 3 + j * 2, 2, seed);
       pos.push(Math.sin(th) * Math.cos(ph) * n * scale,
                Math.cos(th) * n * 0.72 * scale,
                Math.sin(th) * Math.sin(ph) * n * scale);
@@ -1820,14 +1755,16 @@ function geoBoulder(g, ring, ampLo, ampHi, seed, col, scale, tMax) {
   const P = (i, j) => { const k = (j * w + i) * 3; return [pos[k], pos[k + 1], pos[k + 2]]; };
   for (let j = 0; j <= ring; j++) {
     for (let i = 0; i <= seg; i++) {
-      const i0 = Math.max(0, i - 1), i1 = Math.min(seg, i + 1);
+      const p = P(i, j);
+      if (j === 0) { geoVert(g, p[0], p[1], p[2], 0, 1, 0, col[0], col[1], col[2]); continue; }
+      if (j === ring && tM >= 1) { geoVert(g, p[0], p[1], p[2], 0, -1, 0, col[0], col[1], col[2]); continue; }
+      const i0 = i > 0 ? i - 1 : seg - 1, i1 = i < seg ? i + 1 : 1;     // wrap across the seam
       const j0 = Math.max(0, j - 1), j1 = Math.min(ring, j + 1);
       const A = P(i0, j), B = P(i1, j), C = P(i, j0), D = P(i, j1);
       const tx = B[0] - A[0], ty = B[1] - A[1], tz = B[2] - A[2];   // dP/du
       const sx = D[0] - C[0], sy = D[1] - C[1], sz = D[2] - C[2];   // dP/dv
       let nx = ty * sz - tz * sy, ny = tz * sx - tx * sz, nz = tx * sy - ty * sx;
       const l = Math.hypot(nx, ny, nz) || 1;
-      const p = P(i, j);
       geoVert(g, p[0], p[1], p[2], nx / l, ny / l, nz / l, col[0], col[1], col[2]);
     }
   }
@@ -2138,13 +2075,12 @@ function makeNeedleCanvas(W = 256, H = 128) {
     const a = dN[i * 4 + 3] / 255, tg = dT[i * 4 + 3] / 255;
     const sn = Math.max(drift, dS[i * 4 + 3] / 255 * 0.5);
     // snow only sits ON needles (plus a little bridging), it never becomes a solid sheet
-    const cov = a;
     d[i * 4] = a > 0 ? dN[i * 4] : 160;            // un-premultiplied shade
     d[i * 4 + 1] = Math.round(sn * 255);
     d[i * 4 + 2] = Math.round(tg * 255);
     // keep a clear 2-texel border so clamped edge texels never smear along the card rim
     const edge = x < 2 || y < 2 || x >= W - 2 || y >= H - 2;
-    d[i * 4 + 3] = edge ? 0 : Math.round(Math.min(1, cov) * 255);
+    d[i * 4 + 3] = edge ? 0 : Math.round(a * 255);
   }
   return { W, H, data: d };
 }
@@ -2318,8 +2254,8 @@ function geoBeam(g, a, b, w, h, col) {
   let dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2];
   const L = Math.hypot(dx, dy, dz) || 1; dx /= L; dy /= L; dz /= L;
   // side = dir × up (horizontal), up' = side × dir
-  let sx = -dz, sy = 0, sz = dx; let sl = Math.hypot(sx, sz) || 1; sx /= sl; sz /= sl;
-  if (sl < 1e-6) { sx = 1; sz = 0; }
+  let sx = -dz, sy = 0, sz = dx; const sl = Math.hypot(sx, sz);
+  if (sl < 1e-6) { sx = 1; sz = 0; } else { sx /= sl; sz /= sl; }   // vertical beams (posts) need a fallback side
   const ux = sy * dz - sz * dy, uy = sz * dx - sx * dz, uz = sx * dy - sy * dx;
   const hw = w / 2, hh = h / 2;
   const corner = (p, i, j) => [p[0] + sx * hw * i + ux * hh * j, p[1] + sy * hw * i + uy * hh * j, p[2] + sz * hw * i + uz * hh * j];
@@ -2349,7 +2285,7 @@ function geoFinishArch(g, z, halfW) {
   geoBeam(g, [halfW, yR - 0.3, z], [halfW, yR + 6.2, z], 0.35, 0.35, WHITE);
   geoBeam(g, [-halfW, yL + 5.4, z], [halfW, yR + 5.4, z], 0.12, 1.5, RED);
   for (let i = -3; i <= 3; i++) {                         // chequered strip under the banner
-    const x0 = (i / 3.5) * halfW, x1 = ((i + 1) / 3.5) * halfW;
+    const x0 = ((i - 0.5) / 3.5) * halfW, x1 = ((i + 0.5) / 3.5) * halfW;   // 7 squares spanning -halfW..+halfW
     geoBeam(g, [x0, lerp(yL, yR, (x0 / halfW + 1) / 2) + 4.5, z + 0.08], [Math.min(x1, halfW), lerp(yL, yR, (Math.min(x1, halfW) / halfW + 1) / 2) + 4.5, z + 0.08],
       0.06, 0.3, i % 2 ? WHITE : [0.08, 0.08, 0.1]);
   }
@@ -2516,7 +2452,7 @@ Level.define({
       } else if (f.k === 'rollers') {
         if (z < f.z0 || z > f.z1) continue;
         const s = Math.sin((z - f.z0) / f.wl * Math.PI);
-        h += f.amp * s * s * Math.min(1, (PARK.HALF + 2 - ax) / 4);
+        h += f.amp * s * s * clamp((PARK.HALF + 2 - ax) / 4, 0, 1);   // fade out (not invert) on the banks
       } else if (f.k === 'mini') {
         const env = miniEnv(f, z);
         if (env <= 0) continue;
@@ -2627,8 +2563,9 @@ const GL = {
   /* ---------------- buffers ---------------- */
   /* geo = {v:[], i:[]} → VAO with pos(0) normal(1) color(2), stride STRIDE.
      Every mesh in the game uses this one layout — including streamed terrain,
-     which writes white into the colour slots — so no per-mesh stride is needed
-     and no attribute slot can ever read past the end of a buffer. */
+     whose colour slots carry shader hints (forest, cavity, wall) — so no
+     per-mesh stride is needed and no attribute slot can read past a buffer.
+     Rider/board meshes add an optional aux stream at location 8. */
   upload(name, geo) {
     const gl = this.gl;
     const vao = gl.createVertexArray();
@@ -2827,7 +2764,6 @@ const GL = {
     if (!gl) throw new Error('WebGL2 is not available in this browser.');
     this.gl = gl;
     const floatExt = gl.getExtension('EXT_color_buffer_float') || gl.getExtension('EXT_color_buffer_half_float');
-    gl.getExtension('OES_texture_float_linear');
     this.hdr = !!floatExt;
 
     gl.enable(gl.DEPTH_TEST);
@@ -2837,22 +2773,12 @@ const GL = {
     gl.clearColor(0.05, 0.08, 0.13, 1);
     gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
 
-    // attribute bindings are identical for every standard mesh
-    this.PROG_VS_COMMON = `
-      precision highp float;
-      in vec3 aPos; in vec3 aNormal; in vec3 aColor;
-      out vec3 vNormal; out vec3 vColor; out vec3 vWorld;
-      uniform mat4 uProj, uView, uModel;
-      mat4 model(){ return uModel; }
-    `;
-
     this.buildShaders();
 
     // geometry
     buildRider();
     this.upload('board', buildBoard());
     for (const k in RiderGeo) this.upload(k, RiderGeo[k]);
-    this.upload('tree', buildTree());
     for (let sh = 0; sh < FIR_SHAPES.length; sh++) {
       this.upload('firFol' + sh, buildFirFoliage(sh, 0));
       this.upload('firFolLo' + sh, buildFirFoliage(sh, 1));
@@ -2952,7 +2878,6 @@ const GL = {
     const gl = this.gl;
     if (m) { gl.deleteVertexArray(m.vao); gl.deleteBuffer(m.vb); gl.deleteBuffer(m.ib); }
     m = this.upload('_chunk' + key, data);
-    m.key = key;
     this.chunkVAO.set(key, m);
     return m;
   },
@@ -3032,10 +2957,12 @@ const LIGHTING_GLSL = `
   // snow albedo: drifts, exposed rock, blue shadows in hollows
   vec3 snowAlbedo(vec3 wp, vec3 n, float ao){
     float steep = 1.0 - clamp(n.y, 0.0, 1.0);
-    float rockMask = smoothstep(0.42, 0.72, steep) * (0.55 + 0.45 * fbm(wp.xz * 0.09));
-    vec3 drift = mix(vec3(0.90,0.94,1.00), vec3(0.78,0.87,0.99), fbm(wp.xz * 0.035));
-    vec3 rock = mix(vec3(0.26,0.28,0.33), vec3(0.42,0.43,0.47), fbm(wp.xz * 0.6));
-    vec3 col = mix(drift, rock, rockMask);
+    vec3 col = mix(vec3(0.90,0.94,1.00), vec3(0.78,0.87,0.99), fbm(wp.xz * 0.035));   // drifts
+    if(steep > 0.42){                       // exposed rock only on steep ground (skip the noise elsewhere)
+      float rockMask = smoothstep(0.42, 0.72, steep) * (0.55 + 0.45 * fbm(wp.xz * 0.09));
+      vec3 rock = mix(vec3(0.26,0.28,0.33), vec3(0.42,0.43,0.47), fbm(wp.xz * 0.6));
+      col = mix(col, rock, rockMask);
+    }
     col *= 0.86 + 0.14 * ao;
     return col;
   }
@@ -3096,7 +3023,7 @@ GL.buildShaders = function () {
       vec4 wp = uModel * vec4(aPos, 1.0);
       vWorld = wp.xyz;
       vNormal = normalize(mat3(uModel) * aNormal);
-      vColor = vec3(1.0);
+      vColor = aColor;               // terrain hints: forest cover, cavity, valley wall (world.js)
       gl_Position = uProj * uView * wp;
     }`;
 
@@ -3200,7 +3127,11 @@ GL.buildShaders = function () {
     void main(){
       vec4 wp = uModel * vec4(aPos, 1.0);
       vWorld = wp.xyz;
-      vNormal = normalize(mat3(uModel) * aNormal);
+      // limbs/scarf are non-uniformly scaled (m4limb, m4axesS): normals need the
+      // inverse-transpose. The axes are orthogonal, so that is just dividing each
+      // component by its axis' squared length before transforming.
+      mat3 m = mat3(uModel);
+      vNormal = normalize(m * (aNormal / vec3(dot(m[0], m[0]), dot(m[1], m[1]), dot(m[2], m[2]))));
       vColor = aColor;
       vAux = aAux;
       gl_Position = uProj * uView * wp;
@@ -3230,15 +3161,19 @@ GL.buildShaders = function () {
       if(dot(n, V) < -0.2) n = -n;                       // thin/open shells seen from inside
       float dist = length(uCamPos - vWorld);
 
-      // puffy jacket: horizontal quilting baffles along the torso (v = metres up the part)
+      // puffy jacket: horizontal quilting baffles along the torso (v = metres up the part).
+      // Derivatives are taken BEFORE the per-slot branch: a 2x2 pixel quad can straddle
+      // a slot edge, and derivatives inside divergent control flow are undefined.
+      float per = 0.105;
+      float f = fract(vAux.z / per);
+      float fw = fwidth(vAux.z / per);
+      float near = 1.0 - smoothstep(6.0, 16.0, dist);
+      vec3 bumped = bumpN(n, vWorld, sin(3.14159 * f) * 0.010 * near, 1.0);
       if(slot == 0 || slot == 1){
-        float per = 0.105;
-        float f = fract(vAux.z / per);
-        float seam = 1.0 - smoothstep(0.0, 0.10 + fwidth(vAux.z / per) * 1.5, min(f, 1.0 - f));
-        float near = 1.0 - smoothstep(6.0, 16.0, dist);
+        float seam = 1.0 - smoothstep(0.0, 0.10 + fw * 1.5, min(f, 1.0 - f));
         base *= mix(1.0, 0.80, seam * near);
         ao *= mix(1.0, 0.86, seam * near);
-        n = bumpN(n, vWorld, sin(3.14159 * f) * 0.010 * near, 1.0);
+        n = bumped;
       }
 
       float NoL = dot(n, uSunDir), NoV = max(dot(n, V), 1e-3);
@@ -3530,7 +3465,10 @@ GL.buildShaders = function () {
       col *= mix(1.0, vig, uVignette);
       col += uFlash * vec3(1.0, 0.96, 0.9) * 0.55;
       // dither to kill banding on the snow
-      float dth = fract(sin(dot(uv * uRes, vec2(12.9898,78.233)) + uTime) * 43758.5453);
+      // sin-free hash (low-precision mobile sin() of large arguments makes visible patterns)
+      vec3 dp = fract(vec3(uv * uRes, fract(uTime * 0.37) * 97.0) * 0.1031);
+      dp += dot(dp, dp.yzx + 33.33);
+      float dth = fract((dp.x + dp.y) * dp.z);
       col += (dth - 0.5) / 255.0;
       fragColor = vec4(col, 1.0);
     }`;
@@ -3667,6 +3605,28 @@ const Cam = {
     m4lookAt(this.view, this.pos.x + sx, this.pos.y + sy, this.pos.z + sz,
       this.look.x, this.look.y, this.look.z, 0, 1, 0);
     m4mul(this.vp, this.proj, this.view);
+    this.extractPlanes();
+  },
+
+  /* view-frustum planes (Gribb–Hartmann) from the column-major view-projection */
+  planes: new Float32Array(24),
+  extractPlanes() {
+    const m = this.vp, P = this.planes;
+    const rows = (r) => [m[r], m[4 + r], m[8 + r], m[12 + r]];
+    const r0 = rows(0), r1 = rows(1), r2 = rows(2), r3 = rows(3);
+    const sets = [[1, r0], [-1, r0], [1, r1], [-1, r1], [1, r2], [-1, r2]];
+    for (let k = 0; k < 6; k++) {
+      const [sg, r] = sets[k];
+      let a = r3[0] + sg * r[0], b = r3[1] + sg * r[1], c = r3[2] + sg * r[2], d = r3[3] + sg * r[3];
+      const l = Math.hypot(a, b, c) || 1;
+      P[k * 4] = a / l; P[k * 4 + 1] = b / l; P[k * 4 + 2] = c / l; P[k * 4 + 3] = d / l;
+    }
+  },
+  /* is a sphere at least partly inside the view frustum? */
+  sees(x, y, z, r) {
+    const P = this.planes;
+    for (let k = 0; k < 24; k += 4) if (P[k] * x + P[k + 1] * y + P[k + 2] * z + P[k + 3] < -r) return false;
+    return true;
   },
 
   /* keep the camera out of the ground */
@@ -3689,12 +3649,15 @@ const Sun = {
   init() { V3.norm(this.dir, this.dir); },
 
   update(cx, cy, cz) {
-    const gl = GL.gl;
     const R = this.radius;
-    // snap to texel grid to reduce shadow shimmer
     // dir points surface → sun, so the light camera sits on the sun side
     const ex = cx + this.dir.x * 160, ey = cy + this.dir.y * 160, ez = cz + this.dir.z * 160;
     m4lookAt(this.lightView, ex, ey, ez, cx, cy, cz, 0, 1, 0);
+    // snap the light-space origin to whole shadow-map texels so shadow edges
+    // don't crawl as the rider moves
+    const texel = 2 * R / (GL.shadowSize || 2048), V = this.lightView;
+    V[12] -= V[12] - Math.round(V[12] / texel) * texel;
+    V[13] -= V[13] - Math.round(V[13] / texel) * texel;
     m4ortho(this.lightProj, -R, R, -R, R, 1, 330);
     m4mul(this.lightVP, this.lightProj, this.lightView);
   },
@@ -3739,7 +3702,6 @@ function drawMesh(prog, meshName, model) {
    ========================================================================= */
 const Render = {
   trees: [], rocks: [],
-  stats: { tris: 0, calls: 0 },
 
   /* free GPU chunk meshes that have not been drawn for a while. Driven by a
      monotonic frame counter (Game.frames resets every 0.5 s, so it cannot be
@@ -3771,7 +3733,7 @@ const Render = {
 
     const sp = GL.prog.shadow;
     sp.use();
-    Sun.setUniforms(sp);
+    gl.uniformMatrix4fv(sp.uLightVP, false, Sun.lightVP);   // depth-only: the light matrix is all it needs
     gl.uniformMatrix4fv(sp.uModel, false, IDENT);
     // terrain
     for (const c of World.visible) {
@@ -3793,13 +3755,13 @@ const Render = {
     // trees: trunks, then the needle cards (alpha-tested, both faces)
     const ip = GL.prog.shadowInst;
     ip.use();
-    Sun.setUniforms(ip);
+    gl.uniformMatrix4fv(ip.uLightVP, false, Sun.lightVP);
     gl.uniformMatrix4fv(ip.uModel, false, IDENT);
     this.fillTreeBuffer(P);                       // refreshes this.trees for this frame
     const groups = this.fillShadowTrees();
     this.drawTrees(ip, groups, 'trunk', 'shadowProps');
     const fp = GL.prog.shadowFol.use();
-    Sun.setUniforms(fp);
+    gl.uniformMatrix4fv(fp.uLightVP, false, Sun.lightVP);
     gl.uniformMatrix4fv(fp.uModel, false, IDENT);
     gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, GL.tex.needles);
     gl.uniform1i(fp.uNeedle, 2);
@@ -3833,6 +3795,7 @@ const Render = {
     const buckets = [[], [], [], []];
     const cx = Cam.pos.x, cz = Cam.pos.z, L2 = this.TREE_LOD_DIST * this.TREE_LOD_DIST;
     for (const t of this.trees) {
+      if (!Cam.sees(t.x, t.y + 3 * t.sc, t.z, 4.5 * t.sc)) continue;
       const far = (t.x - cx) * (t.x - cx) + (t.z - cz) * (t.z - cz) > L2 ? 1 : 0;
       buckets[(t.shape || 0) * 2 + far].push(t);
     }
@@ -3842,14 +3805,14 @@ const Render = {
       const first = n;
       for (const t of buckets[b]) {
         if (n >= ib.max) break;
-        const c = Math.cos(t.rot), s = Math.sin(t.rot), sc = t.sc;
+        const c = t.c, s = t.s, sc = t.sc;
         const o = n * 20;
         // column-major: scale * rotY (slightly taller than wide for variety)
         d[o] = c * sc;      d[o + 1] = 0;        d[o + 2] = -s * sc;  d[o + 3] = 0;
         d[o + 4] = 0;       d[o + 5] = sc * (t.tall || 1); d[o + 6] = 0; d[o + 7] = 0;
         d[o + 8] = s * sc;  d[o + 9] = 0;        d[o + 10] = c * sc;  d[o + 11] = 0;
         d[o + 12] = t.x;    d[o + 13] = t.y - 0.1; d[o + 14] = t.z;   d[o + 15] = 1;
-        const shade = 0.78 + hash2(Math.floor(t.x), Math.floor(t.z), 77) * 0.42;
+        const shade = t.shade;
         d[o + 16] = shade * (0.95 + t.sway * 0.016); d[o + 17] = shade; d[o + 18] = shade * 0.96; d[o + 19] = 1;
         n++;
       }
@@ -3884,7 +3847,7 @@ const Render = {
       const first = n;
       for (const t of lists[sh]) {
         if (n >= ib.max) break;
-        const c = Math.cos(t.rot), s = Math.sin(t.rot), sc = t.sc, o = n * 20;
+        const c = t.c, s = t.s, sc = t.sc, o = n * 20;
         d[o] = c * sc;  d[o + 1] = 0; d[o + 2] = -s * sc; d[o + 3] = 0;
         d[o + 4] = 0;   d[o + 5] = sc * (t.tall || 1); d[o + 6] = 0; d[o + 7] = 0;
         d[o + 8] = s * sc; d[o + 9] = 0; d[o + 10] = c * sc; d[o + 11] = 0;
@@ -3937,32 +3900,6 @@ const Render = {
     gl.clearColor(ap.clear[0], ap.clear[1], ap.clear[2], 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-    // ---- sky ----
-    // xyww pins depth to exactly 1.0; the default LESS test would fail
-    // against the 1.0 depth-buffer clear, so relax it just for the dome.
-    gl.depthMask(false);
-    gl.depthFunc(gl.LEQUAL);
-    gl.disable(gl.CULL_FACE);
-    const sky = GL.prog.sky.use();
-    gl.uniformMatrix4fv(sky.uProj, false, Cam.proj);
-    gl.uniformMatrix4fv(sky.uView, false, Cam.view);
-    gl.uniform3f(sky.uSunDir, Sun.dir.x, Sun.dir.y, Sun.dir.z);
-    gl.uniform3f(sky.uSunColor, Sun.color[0], Sun.color[1], Sun.color[2]);
-    gl.uniform3fv(sky.uZenith, ap.zenith);
-    gl.uniform3fv(sky.uHorizon, ap.horizon);
-    gl.uniform1f(sky.uStars, ap.stars);
-    gl.uniform1f(sky.uCloudLum, ap.cloudLum);
-    gl.uniform1f(sky.uTime, GL.time * 60);
-    const skyM = GL.mesh.sky;
-    gl.bindVertexArray(skyM.vao);
-    gl.drawElements(gl.TRIANGLES, skyM.count, gl.UNSIGNED_INT, 0);
-    gl.depthFunc(gl.LESS);
-    gl.depthMask(true);
-    gl.enable(gl.CULL_FACE);
-
-    // ---- distant peaks on the horizon ----
-    Scenery.drawMountains();
-
     // ---- terrain ----
     const wp = GL.prog.world.use();
     Sun.setUniforms(wp);
@@ -3970,6 +3907,7 @@ const Render = {
     gl.uniform1f(wp.uDetail, GL.quality < 1 ? 0 : 1);
     gl.uniformMatrix4fv(wp.uModel, false, IDENT);
     for (const c of World.visible) {
+      if (c.rad && !Cam.sees(c.x0 + CHUNK * 0.5, c.yMid, c.z0 + CHUNK * 0.5, c.rad)) continue;
       const lod = this.pickLod(c);
       const m = GL.chunkMesh(c, lod);
       if (!m) continue;
@@ -4055,6 +3993,33 @@ const Render = {
       const q = P.parts[i];
       drawMesh(rp, q.mesh, q.mat);
     }
+
+    // ---- distant ranges, then the sky: both drawn AFTER the opaque scene so early-Z
+    //      skips every pixel already covered (the dome sits at depth 1.0, behind all) ----
+    Scenery.drawMountains();
+
+    // xyww pins depth to exactly 1.0; the default LESS test would fail
+    // against the 1.0 depth-buffer clear, so relax it just for the dome.
+    gl.depthMask(false);
+    gl.depthFunc(gl.LEQUAL);
+    gl.disable(gl.CULL_FACE);
+    const sky = GL.prog.sky.use();
+    gl.uniformMatrix4fv(sky.uProj, false, Cam.proj);
+    gl.uniformMatrix4fv(sky.uView, false, Cam.view);
+    gl.uniform3f(sky.uSunDir, Sun.dir.x, Sun.dir.y, Sun.dir.z);
+    gl.uniform3f(sky.uSunColor, Sun.color[0], Sun.color[1], Sun.color[2]);
+    gl.uniform3fv(sky.uZenith, ap.zenith);
+    gl.uniform3fv(sky.uHorizon, ap.horizon);
+    gl.uniform1f(sky.uStars, ap.stars);
+    gl.uniform1f(sky.uCloudLum, ap.cloudLum);
+    gl.uniform1f(sky.uTime, GL.time * 60);
+    const skyM = GL.mesh.sky;
+    gl.bindVertexArray(skyM.vao);
+    gl.drawElements(gl.TRIANGLES, skyM.count, gl.UNSIGNED_INT, 0);
+    gl.depthFunc(gl.LESS);
+    gl.depthMask(true);
+    gl.enable(gl.CULL_FACE);
+
 
     // ---- particles ----
     // depthMask off: a snow cloud must not write depth, or every puff
@@ -4179,7 +4144,6 @@ const Render = {
     gl.uniform1i(bp.uTex, 0);
     gl.uniform1f(bp.uThresh, Atmos.p.bloomThresh);
     gl.bindVertexArray(tri.vao);
-    for (let l = 3; l < 8; l++) { gl.disableVertexAttribArray(l); gl.vertexAttribDivisor(l, 0); }
     gl.drawElements(gl.TRIANGLES, tri.count, gl.UNSIGNED_INT, 0);
 
     // two blur hits, ping-ponging
@@ -4863,26 +4827,26 @@ class Particles {
   }
 
   /* ---------- upload + draw ---------- */
-  draw(camRight, camUp) {
-    const gl = GL.gl;
+  draw() {
+    const gl = GL.gl, v = Cam.view;               // camera right / up = rows of the view matrix
     const ib = GL.buf.particles;
     const d = ib.data;
     const n = Math.min(this.n, ib.max);
     if (n === 0) return;
+    const pt = Atmos.p.spray || ONE3;              // snow spray is unlit: dim it at night
     for (let i = 0; i < n; i++) {
       const t = this.life[i] / this.maxLife[i];
       // fade in fast, out slow
       const fade = Math.min(1, t * 2.6) * Math.min(1, (1 - t) * 8 + 0.25);
       const o = i * 8;
       d[o] = this.px[i]; d[o + 1] = this.py[i]; d[o + 2] = this.pz[i]; d[o + 3] = Math.max(0.02, this.size[i]);
-      const pt = Atmos.p.spray || ONE3;          // snow spray is unlit: dim it at night
       d[o + 4] = this.r[i] * pt[0]; d[o + 5] = this.g[i] * pt[1]; d[o + 6] = this.b[i] * pt[2]; d[o + 7] = this.a[i] * fade;
     }
     const p = GL.prog.particle.use();
     gl.uniformMatrix4fv(p.uProj, false, Cam.proj);
     gl.uniformMatrix4fv(p.uView, false, Cam.view);
-    gl.uniform3f(p.uRight, camRight.x, camRight.y, camRight.z);
-    gl.uniform3f(p.uUp, camUp.x, camUp.y, camUp.z);
+    gl.uniform3f(p.uRight, v[0], v[4], v[8]);
+    gl.uniform3f(p.uUp, v[1], v[5], v[9]);
     const m = GL.mesh.particle;
     // VAO first: attribute pointers and divisors are per-VAO state, so they
     // must be written into the particle VAO, not whatever was bound last.
@@ -4924,7 +4888,6 @@ const Audio = {
     const len = ctx.sampleRate * 2;
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = buf.getChannelData(0);
-    let last = 0;
     for (let i = 0; i < len; i++) {
       const w = Math.random() * 2 - 1;
       d[i] = w * 0.6;
@@ -5000,6 +4963,14 @@ const Audio = {
     const w = (airborne ? 0.10 + speedN * 0.24 : speedN * 0.16) * m * (tuck ? 1.25 : 1);
     this.wind.gain.setTargetAtTime(w, t, 0.12);
     this.windBP.frequency.setTargetAtTime(280 + speedN * 700 + Math.sin(t * 0.7) * 90, t, 0.3);
+  },
+
+  /* fade the riding loops (carve hiss, wind) out — paused, results, menu */
+  quiet() {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    this.carve.gain.setTargetAtTime(0, t, 0.08);
+    this.wind.gain.setTargetAtTime(0, t, 0.15);
   },
 
   /* --- one-shots --- */
@@ -5099,13 +5070,11 @@ class Player {
     this.vel = V3(0, 0, 0);
     this.yaw = 0;             // heading of the board, radians
     this.lean = 0;            // edge angle, -1..1 (sign = which edge)
-    this.leanVel = 0;
     this.speed = 0;
     this.turnRate = 0;
     this.airborne = false;
     this.airTime = 0;
     this.groundY = 0;
-    this.unload = 0;          // 0 = planted, 1 = about to leave the ground
     this.load = 1;            // apparent load factor (for compression squash)
     this.tuck = 0;
     this.braking = 0;
@@ -5113,7 +5082,6 @@ class Player {
     this.crashTimer = 0;
     this.crashSpin = V3();
     this.invuln = 0;
-    this.landing = 0;         // impact strength of the most recent landing
     this.landedClean = false;
     this.jumpBuffer = 0;
     this.pumpCooldown = 0;
@@ -5149,7 +5117,17 @@ class Player {
     this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipVis = 0; this.grab = null; this.tuck = 0; this.invuln = 1.2;
     this._scarf = null;       // re-seed the scarf chain at the new spot
     this.grind = null;
+    // nothing from before the reset carries over (turn momentum, landing settle, skid pose, buffered jumps)
+    this.turnRate = 0; this.yawVis = 0; this.brakeVis = 0; this.jumpBuffer = 0; this.coyote = 0;
     this.updateBasis();
+  }
+
+  /* leaving the ground (ollie, crest, rail exit): a fresh air phase — no spin or
+     flip carried over, flips must be re-armed, and no leftover grace window */
+  _takeoff() {
+    this.airborne = true; this.airTime = 0; this.coyote = 0;
+    this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false;
+    this.autoYaw = null; this.airLabel = null;
   }
 
   _m() { const m = this._tmpM[this._mi % this._tmpM.length]; this._mi++; return m; }
@@ -5177,7 +5155,6 @@ class Player {
   /* ---------------- main step ---------------- */
   step(dt, input, fx) {
     this._mi = 0;
-    this.landing = 0;
     if (this.invuln > 0) this.invuln -= dt;
     if (this.crashTimer > 0) { this.stepCrash(dt, fx); return; }
     if (this.grind) { this.stepGrind(dt, input, fx); return; }
@@ -5211,9 +5188,7 @@ class Player {
         this.land(fx);
       }
     } else {
-      // stick to the surface (with a small tolerance so we don't sink on crests)
-      this.pos.y = gy + RIDE_H;
-      if (this.pos.y < gy + RIDE_H) this.pos.y = gy + RIDE_H;
+      this.pos.y = gy + RIDE_H;                 // ride on the surface
     }
 
     // foot positions (used by the particle emitters)
@@ -5222,7 +5197,7 @@ class Player {
     V3.set(this.backPos, this.pos.x - this.dir.x * half, this.pos.y, this.pos.z - this.dir.z * half);
 
     this.speed = Math.hypot(this.vel.x, this.vel.z);
-    if (Level.cur.rails) this.checkGrind(fx);
+    if (Level.cur.rails) this.checkGrind(dt, fx);
     if (this.airborne) this.flipVis = this.flip;
     else this.flipVis = damp(this.flipVis, 0, 14, dt);
     if (this.yawVis) this.yawVis = Math.abs(this.yawVis) < 1e-3 ? 0 : damp(this.yawVis, 0, 12, dt);
@@ -5299,12 +5274,11 @@ class Player {
         Game.onPump();
       } else {
         // OLLIE
-        this.airborne = true; this.airTime = 0;
+        this._takeoff();
         this.vel.x = fX * vFwd + rX * vSide;
         this.vel.z = fZ * vFwd + rZ * vSide;
         this.vel.y = this.popSpeed(sp) * (0.80 + Math.max(this.load, 1) * 0.24);   // a crest never weakens the pop
         this.jumpBuffer = 0; this.pumpCooldown = 0.26;
-        this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false; this.autoYaw = null; this.airLabel = null;
         fx.puff(this.pos.x, this.groundY, this.pos.z, 0.7 + this.load * 0.3);
         Audio.ollie();
         Cam.shake = Math.max(Cam.shake, 0.05);
@@ -5333,20 +5307,17 @@ class Player {
     // planted; air only comes from an ollie (hold Space, release near the top).
     // Built kickers (park tables) still throw you off their lips.
     if (centripetal < -G * 1.05 && !Level.cur.absorbCrests) {
-      this.airborne = true; this.airTime = 0;
+      this._takeoff();
       this.vel.x = fX * vFwd + rX * vSide;
       this.vel.z = fZ * vFwd + rZ * vSide;
       this.vel.y = Math.max(0, (hB - hC) / e) * sp;   // leave along the ramp we're coming off (the slope behind)
-      this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false; this.autoYaw = null; this.airLabel = null;
       this.coyote = 0.25;                            // a jump released just after leaving the lip still pops
-      this.unload = 1;
       return;
     }
 
     this.vel.x = fX * vFwd + rX * vSide;
     this.vel.z = fZ * vFwd + rZ * vSide;
     this.vel.y = 0;
-    this.unload = 0;
 
     // chatter: off-piste snow is rougher than the corduroy
     const d = Math.abs(this.pos.x - centerX(this.pos.z));
@@ -5410,6 +5381,7 @@ class Player {
   /* ---------------- touchdown ---------------- */
   land(fx) {
     this.autoYaw = null;
+    this.coyote = 0;              // a crest's grace window must not survive into the next ollie
     const n = this.nrm;
     normalAt(this.pos.x, this.pos.z, n);
     const vDown = this.vel.y;
@@ -5417,7 +5389,6 @@ class Player {
     // touching down on a downslope that matches your arc is soft, flat-to-flat is not
     const vN = this.vel.x * n.x + this.vel.y * n.y + this.vel.z * n.z;
     const impact = clamp(-vN / 12, 0.05, 2.4);
-    this.landing = impact;
     this.airborne = false;
     this.airTime = 0;
     this.pos.y = heightAt(this.pos.x, this.pos.z) + RIDE_H;
@@ -5467,7 +5438,6 @@ class Player {
     }
     this.yawVis = angDelta(this.yaw, oldYaw);   // render-only: ease the board round, no pop
     this.updateBasis();
-    this.landedSwitch = switchLanding;
     this.vel.y = 0;
     this.flipVis = angDelta(0, this.flip);      // ease the last few degrees out visually
     this.flip = 0; this.flipRate = 0;
@@ -5482,7 +5452,7 @@ class Player {
   }
 
   /* ---------------- rails ---------------- */
-  checkGrind(fx) {
+  checkGrind(dt, fx) {
     if (this.grind || this.crashTimer > 0) return;
     const p = this.pos, feet = p.y - RIDE_H;
     for (const r of Level.cur.rails) {
@@ -5494,7 +5464,7 @@ class Player {
       const top = railTop(r, t);
       // coming down just beside the rail: pull gently onto its line (a forgiving "magnet")
       if (this.airborne && this.vel.y < 3 && Math.abs(side) < 1.2 && feet > top - 0.3 && feet < top + 2.5) {
-        const pull = Math.min(Math.abs(side), 4.5 / 60) * Math.sign(side);
+        const pull = Math.min(Math.abs(side), 4.5 * dt) * Math.sign(side);   // magnet: 4.5 m/s
         this.pos.x += r.uz * pull; this.pos.z -= r.ux * pull;
       }
       if (Math.abs(side) > 0.6) continue;
@@ -5531,7 +5501,7 @@ class Player {
     this.tuck = damp(this.tuck, 0.4, 6, dt);
     this.updateBasis();
     if (this.jumpBuffer > 0) this.jumpBuffer -= dt;
-    if (input.jump) this.jumpBuffer = 0.14;
+    if (input.jump) { this.jumpBuffer = 0.14; this.jumpCharge = input.charge; }   // pop height follows THIS hold
     // metal sparks from the bar
     if (Math.random() < 0.6) {
       const a = rnd(TAU);
@@ -5544,11 +5514,10 @@ class Player {
       let ang = Math.abs(angDelta(railYaw, this.yaw)); if (ang > Math.PI / 2) ang = Math.PI - ang;
       Game.onGrind(g.time, ang);
       this.grind = null;
-      this.airborne = true; this.airTime = 0;
+      this._takeoff();
       const popped = this.jumpBuffer > 0;
       this.vel.y = popped ? Math.max(5.2, this.popSpeed(g.s) * 0.9) : Math.max(1.2, this.vel.y);
       this.jumpBuffer = 0;
-      this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false; this.autoYaw = null; this.airLabel = null;
       if (!off) Audio.ollie(); else this.coyote = 0.25;
     }
     const half = BOARD_L * 0.5 * 0.86;
@@ -5962,7 +5931,7 @@ const Pad = {
     const [rx, ry] = stick(gp.axes[2], gp.axes[3]);
     const lt = V(6), rt = V(7);
     if (now.some(Boolean) || lx || ly || rx || ry || lt > 0.1 || rt > 0.1) {
-      if (!this.active) { this.active = true; }
+      this.active = true;
       if (Game.state === 'play' || Game.state === 'menu') document.body.classList.add('pad');
       Audio.init(); Audio.resume();
     }
@@ -6001,7 +5970,7 @@ const Pad = {
       if (nav) this._navT = 0.28;
       if (st === 'menu' && Game.customizing) {
         if (edge(1) || edge(9)) Customize.close();
-        else if (edge(2)) { Outfit.randomize(); Outfit.save(); Customize.sync(); }
+        else if (edge(2)) { Outfit.randomize(); Customize.sync(); }
         else if (edge(4) || edge(5)) this.cyclePreset(edge(5) ? 1 : -1);
       } else if (st === 'menu') {
         if (nav) this.cycleLevel(nav);
@@ -6023,16 +5992,14 @@ const Pad = {
   cycleLevel(d) {
     const i = PAD_LEVELS.indexOf(Level.cur.id);
     Game.selectLevel(PAD_LEVELS[(i + d + PAD_LEVELS.length) % PAD_LEVELS.length]);
-    Audio.ui && Audio.ui(500);
+    Audio.ui(500);
   },
 
   cyclePreset(d) {
     const names = Object.keys(OUTFIT_PRESETS);
-    const cur = Outfit.presetName ? Outfit.presetName() : null;
-    const i = Math.max(0, names.indexOf(cur));
-    Outfit.applyPreset(names[(i + d + names.length) % names.length]);
-    Outfit.save && Outfit.save();
-    Customize.sync && Customize.sync();
+    const i = Math.max(0, names.indexOf(Outfit.presetName()));
+    Outfit.applyPreset(names[(i + d + names.length) % names.length]);   // applyPreset saves
+    Customize.sync();
   }
 };
 
@@ -6045,16 +6012,6 @@ const Pad = {
 
 /* tiny DOM helper (used everywhere) */
 const $ = (id) => document.getElementById(id);
-
-/* ---------------- compat shim for earlier modules ---------------- */
-/* particles need camera axes; supply them when called bare */
-const _pDraw = Particles.prototype.draw;
-Particles.prototype.draw = function () {
-  if (arguments.length === 0) {
-    const v = Cam.view;
-    _pDraw.call(this, V3(v[0], v[4], v[8]), V3(v[1], v[5], v[9]));
-  } else _pDraw.apply(this, arguments);
-};
 
 /* ---------------- input ---------------- */
 const Input = {
@@ -6070,12 +6027,19 @@ const Input = {
     };
     window.addEventListener('keydown', (e) => {
       if (e.repeat) return;
-      if (e.code === 'Space' || e.code.indexOf('Arrow') === 0) e.preventDefault();
       // Safari requires an AudioContext to be created/resumed inside the
       // user-gesture call stack — doing it from the rAF loop is blocked.
       Audio.init(); Audio.resume();
-      // customise panel: its own keys only (Esc closes); nothing reaches the game
+      document.body.classList.remove('pad');          // keyboard in use: show its help again
+      // customise panel: its own keys only (Esc closes); nothing reaches the game,
+      // and Space/arrows keep their normal meaning (press a button, scroll the panel)
       if (Game.customizing) { if (e.code === 'Escape') Customize.close(); return; }
+      if (e.code === 'Space' || e.code.indexOf('Arrow') === 0) e.preventDefault();
+      // shortcuts / app switching (Cmd-Tab, Ctrl-…, a bare Shift) never drop you into a run
+      if (e.metaKey || e.ctrlKey || e.altKey || /^(Meta|Control|Alt|Shift|Tab|CapsLock|Escape)/.test(e.code)) {
+        if (e.code === 'Escape' && (Game.state === 'over' || Game.state === 'pause')) Game.toMenu();
+        return;
+      }
       if (e.code === 'KeyC' && Game.state === 'menu') { Customize.open(); return; }
       const LV = { Digit1: 'mountain', Digit2: 'pipe', Digit3: 'park', Digit4: 'zen',
                    Numpad1: 'mountain', Numpad2: 'pipe', Numpad3: 'park', Numpad4: 'zen' };
@@ -6084,7 +6048,6 @@ const Input = {
         if (Game.state === 'over') Game.restart();
         return;
       }
-      if (e.code === 'Escape' && (Game.state === 'over' || Game.state === 'pause')) { Game.toMenu(); return; }
       // N (atmosphere) and M (mute) are settings, not "drop in"
       if (!(Game.state === 'menu' && (e.code === 'KeyN' || e.code === 'KeyM'))) this.anyKey = true;
       const k = keyMap[e.code];
@@ -6100,7 +6063,8 @@ const Input = {
       if (k === 'jump') this.releaseJump();
       this.down[k] = false;
     });
-    window.addEventListener('blur', () => { this.down = {}; Cam.dragging = false; });
+    window.addEventListener('blur', () => { this.down = {}; this.jumpHeld = false; Cam.dragging = false; });
+    window.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') document.body.classList.remove('pad'); }, true);
 
     // camera: hold right or middle mouse button and drag to orbit; wheel zooms
     window.addEventListener('mousedown', (e) => {
@@ -6133,10 +6097,12 @@ const Input = {
       Audio.init(); Audio.resume();   // user gesture: safe to start audio here
       this.anyKey = true;
     });
-    $('over').addEventListener('pointerdown', (e) => { if (e.button === 0 && Game.state === 'over') Game.restart(true); });
+    // results: ignore taps for a moment so a finger still mashing at the crash doesn't skip the stats
+    const overTap = () => Game.state === 'over' && performance.now() - Game.overAt > 650;
+    $('over').addEventListener('pointerdown', (e) => { if (e.button === 0 && overTap()) Game.restart(true); });
     // fallback: some touch stacks deliver only a synthesized click for a quick tap
     $('menu').addEventListener('click', () => { if (Game.state === 'menu' && performance.now() - Game.menuAt >= 450) { Audio.init(); Audio.resume(); this.anyKey = true; } });
-    $('over').addEventListener('click', () => { if (Game.state === 'over') Game.restart(true); });
+    $('over').addEventListener('click', () => { if (overTap()) Game.restart(true); });
     $('pause').addEventListener('pointerdown', (e) => { if (e.button === 0) Game.togglePause(); });
     // pause-screen buttons (stopPropagation so the screen's own tap-to-resume doesn't also fire)
     for (const [id, fn] of [['pResume', () => Game.togglePause()], ['pRestart', () => Game.restart(true)], ['pMenu', () => Game.toMenu()]]) {
@@ -6347,7 +6313,6 @@ const Customize = {
       inp.dataset.slot = slot;
       inp.setAttribute('aria-label', label + ' colour');
       inp.addEventListener('input', () => { Outfit.pick(slot, inp.value); this.sync(); });
-      inp.addEventListener('change', () => { Outfit.pick(slot, inp.value); this.sync(); });
       items.appendChild(l);
     }
     $('rRandom').addEventListener('click', () => { Outfit.randomize(); this.sync(); });
@@ -6401,8 +6366,9 @@ const Game = {
   lives: 3, combo: 1, comboTimer: 0,
   flash: 0, desat: 0, hintTimer: 14,
   air: { t: 0, spin: 0, flip: 0, grab: null, grabT: 0 },
-  lastZ: 0, startY: 0, t: 0, frames: 0, fps: 60, _fpsT: 0, _mt: 0,
+  lastZ: 0, startY: 0, frames: 0, fps: 60, _fpsT: 0, _mt: 0,
   menuAt: -1e9,                  // when the menu last opened (swallows that tap's trailing click)
+  overAt: -1e9,                  // when the results screen appeared (tap guard)
   customizing: false,            // rider colour panel open (menu only; render.js frames the rider)
   perf: { t: 0, n: 0, warm: 0, low: 0 },     // dynamic-resolution frame-rate monitor
   frameNo: 0,                    // monotonic; never reset (chunk cache ages on it)
@@ -6411,7 +6377,7 @@ const Game = {
     this.P = new Player();
     this.fx = new Particles();
     try { if (localStorage.getItem('powderline.muted') === '1') Audio.setMuted(true); } catch (e) { }
-    $('muteBtn').classList.toggle('muted', Audio.muted);
+    this.syncMuteBtn();
     this.buildLives();
     Sun.init();
     Atmos.load();
@@ -6458,6 +6424,7 @@ const Game = {
 
   toMenu() {
     this.state = 'menu'; this._deadTimer = 0; this.menuAt = performance.now();
+    Input.anyKey = false;                      // a key pressed on the results screen isn't "drop in"
     $('over').classList.add('hide'); $('pause').classList.add('hide'); $('menu').classList.remove('hide');
     $('hud').classList.remove('on');
     document.body.classList.remove('playing');
@@ -6487,14 +6454,14 @@ const Game = {
 
   start() {
     Audio.init(); Audio.resume();
-    this.perf.t = 0; this.perf.n = 0; this.perf.warm = 0; this.perf.low = 0;   // first window is shader warm-up
     $('menu').classList.add('hide');
     this.restart(true);
-    Input.jumpHeld = false; Input.jumpRelease = false;   // the key that dropped us in is not an ollie
     Audio.dropIn();
   },
 
   restart() {
+    this.perf.t = 0; this.perf.n = 0; this.perf.warm = 0; this.perf.low = 0;   // first window is shader warm-up
+    Input.jumpHeld = false; Input.jumpRelease = false;   // a key held into the run is not an ollie
     this.score = 0; this.distance = 0; this.topSpeed = 0; this.totalAir = 0;
     this.lands = 0; this.bestHit = 0; this.combo = 1; this.comboTimer = 0;
     this.flash = 0; this.desat = 0; this.hintTimer = 14;
@@ -6520,9 +6487,12 @@ const Game = {
   toggleMute() {
     Audio.setMuted(!Audio.muted);
     if (!Audio.muted) Audio.ui(700);
+    this.syncMuteBtn();
+    try { localStorage.setItem('powderline.muted', Audio.muted ? '1' : '0'); } catch (e) { }
+  },
+  syncMuteBtn() {
     $('muteBtn').classList.toggle('muted', Audio.muted);
     $('muteBtn').setAttribute('aria-label', Audio.muted ? 'Unmute' : 'Mute');
-    try { localStorage.setItem('powderline.muted', Audio.muted ? '1' : '0'); } catch (e) { }
   },
 
   togglePause() {
@@ -6544,7 +6514,7 @@ const Game = {
   onPump() { this.score += 15 * this.combo; },
 
   gameOver(finished) {
-    this.state = 'over';
+    this.state = 'over'; this.overAt = performance.now();
     $('overTitle').textContent = (finished ? 'Run complete · ' : 'Run over · ') + Level.cur.name;
     $('overHead').textContent = finished ? 'NICE RUN' : 'RUN DOWN';
     document.body.classList.remove('playing');
@@ -6736,20 +6706,28 @@ const Game = {
     $('gateDist').textContent = Math.round(Math.hypot(g.x - P.pos.x, dz)) + ' m';
   },
 
+  /* HUD writes go through put(): elements are looked up once and only touched
+     when the text actually changes (most values change a few times a second) */
+  _hud: {},
+  put(id, v, html) {
+    const h = this._hud[id] || (this._hud[id] = { el: $(id), v: null });
+    if (h.v === v) return;
+    h.v = v;
+    if (html) h.el.innerHTML = v; else h.el.textContent = v;
+  },
   hud() {
     const P = this.P;
     this.gateMarker();
-    $('dist').innerHTML = Math.round(this.distance) + '<span class="unit">m</span>';
-    $('drop').textContent = '\u25BC ' + Math.round(Math.max(0, this.startY - P.pos.y)) + ' m drop';
-    $('score').textContent = Math.round(this.score).toLocaleString();
-    $('speed').innerHTML = Math.round(P.speed * 3.6) + '<span class="unit">km/h</span>';
-    $('speedfill').style.width = clamp(P.speed / 30 * 100, 0, 100) + '%';
-    const c = $('combo');
-    if (this.combo > 1) { c.classList.add('on'); c.textContent = '\u00D7' + this.combo + ' COMBO'; }
-    else c.classList.remove('on');
-    const at = $('airtime');
-    if (P.airborne) { at.classList.add('on'); at.textContent = P.airTime.toFixed(2) + ' s'; }
-    else at.classList.remove('on');
+    this.put('dist', Math.round(this.distance) + '<span class="unit">m</span>', true);
+    this.put('drop', '\u25BC ' + Math.round(Math.max(0, this.startY - P.pos.y)) + ' m drop');
+    this.put('score', Math.round(this.score).toLocaleString());
+    this.put('speed', Math.round(P.speed * 3.6) + '<span class="unit">km/h</span>', true);
+    const fill = Math.round(clamp(P.speed / 30 * 100, 0, 100)) + '%';
+    if (this._fill !== fill) { this._fill = fill; $('speedfill').style.width = fill; }
+    $('combo').classList.toggle('on', this.combo > 1);
+    if (this.combo > 1) this.put('combo', '\u00D7' + this.combo + ' COMBO');
+    $('airtime').classList.toggle('on', P.airborne);
+    if (P.airborne) this.put('airtime', P.airTime.toFixed(2) + ' s');
     if ($('debug').classList.contains('on')) {
       $('debug').innerHTML =
         this.fps.toFixed(0) + ' fps · ' + World.chunks.size + ' chunks · ' + this.fx.n + 'p<br>' +
@@ -6803,6 +6781,9 @@ const Game = {
 
   window.addEventListener('resize', () => { try { GL.resize(); } catch (e) { } });
   canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); if (Game.state === 'play') Game.togglePause(); });
+  // every GPU resource is gone after a context loss (iOS backgrounding can do this);
+  // rebuilding it all in place isn't worth the code — a reload is clean and quick
+  canvas.addEventListener('webglcontextrestored', () => location.reload());
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && Game.state === 'play') Game.togglePause();
   });
@@ -6827,12 +6808,13 @@ const Game = {
       }
     }
     dt = Math.min(dt, 1 / 30);
-    GL.time += dt; Game.t += dt;
+    GL.time += dt;
     Game.frames++; Game._fpsT += dt; Game.frameNo++;
     if (Game._fpsT > 0.5) { Game.fps = Game.frames / Game._fpsT; Game.frames = 0; Game._fpsT = 0; }
 
     try {
       Pad.poll(dt);
+      if (Game.state !== 'play') Audio.quiet();        // no carve/wind hiss off the snow
       if (Game.state === 'menu') {
         if (Input.anyKey) { Input.anyKey = false; if (!Game.customizing) Game.start(); }
         // idle: drift down the mountain so the menu has a live backdrop
@@ -6850,6 +6832,7 @@ const Game = {
       }
       if (Game.state === 'pause') { Input.anyKey = false; return; }
       if (Game.state === 'over') {
+        Input.anyKey = false;
         // keep the scene alive behind the results panel
         World.update(Game.P.pos.x, Game.P.pos.z);
         Cam.update(dt, Game.P, 'over'); Cam.resolveGround();

@@ -6,16 +6,6 @@
 /* tiny DOM helper (used everywhere) */
 const $ = (id) => document.getElementById(id);
 
-/* ---------------- compat shim for earlier modules ---------------- */
-/* particles need camera axes; supply them when called bare */
-const _pDraw = Particles.prototype.draw;
-Particles.prototype.draw = function () {
-  if (arguments.length === 0) {
-    const v = Cam.view;
-    _pDraw.call(this, V3(v[0], v[4], v[8]), V3(v[1], v[5], v[9]));
-  } else _pDraw.apply(this, arguments);
-};
-
 /* ---------------- input ---------------- */
 const Input = {
   down: {}, steer: 0, jumpEdge: false, grab: null,
@@ -30,12 +20,19 @@ const Input = {
     };
     window.addEventListener('keydown', (e) => {
       if (e.repeat) return;
-      if (e.code === 'Space' || e.code.indexOf('Arrow') === 0) e.preventDefault();
       // Safari requires an AudioContext to be created/resumed inside the
       // user-gesture call stack — doing it from the rAF loop is blocked.
       Audio.init(); Audio.resume();
-      // customise panel: its own keys only (Esc closes); nothing reaches the game
+      document.body.classList.remove('pad');          // keyboard in use: show its help again
+      // customise panel: its own keys only (Esc closes); nothing reaches the game,
+      // and Space/arrows keep their normal meaning (press a button, scroll the panel)
       if (Game.customizing) { if (e.code === 'Escape') Customize.close(); return; }
+      if (e.code === 'Space' || e.code.indexOf('Arrow') === 0) e.preventDefault();
+      // shortcuts / app switching (Cmd-Tab, Ctrl-…, a bare Shift) never drop you into a run
+      if (e.metaKey || e.ctrlKey || e.altKey || /^(Meta|Control|Alt|Shift|Tab|CapsLock|Escape)/.test(e.code)) {
+        if (e.code === 'Escape' && (Game.state === 'over' || Game.state === 'pause')) Game.toMenu();
+        return;
+      }
       if (e.code === 'KeyC' && Game.state === 'menu') { Customize.open(); return; }
       const LV = { Digit1: 'mountain', Digit2: 'pipe', Digit3: 'park', Digit4: 'zen',
                    Numpad1: 'mountain', Numpad2: 'pipe', Numpad3: 'park', Numpad4: 'zen' };
@@ -44,7 +41,6 @@ const Input = {
         if (Game.state === 'over') Game.restart();
         return;
       }
-      if (e.code === 'Escape' && (Game.state === 'over' || Game.state === 'pause')) { Game.toMenu(); return; }
       // N (atmosphere) and M (mute) are settings, not "drop in"
       if (!(Game.state === 'menu' && (e.code === 'KeyN' || e.code === 'KeyM'))) this.anyKey = true;
       const k = keyMap[e.code];
@@ -60,7 +56,8 @@ const Input = {
       if (k === 'jump') this.releaseJump();
       this.down[k] = false;
     });
-    window.addEventListener('blur', () => { this.down = {}; Cam.dragging = false; });
+    window.addEventListener('blur', () => { this.down = {}; this.jumpHeld = false; Cam.dragging = false; });
+    window.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') document.body.classList.remove('pad'); }, true);
 
     // camera: hold right or middle mouse button and drag to orbit; wheel zooms
     window.addEventListener('mousedown', (e) => {
@@ -93,10 +90,12 @@ const Input = {
       Audio.init(); Audio.resume();   // user gesture: safe to start audio here
       this.anyKey = true;
     });
-    $('over').addEventListener('pointerdown', (e) => { if (e.button === 0 && Game.state === 'over') Game.restart(true); });
+    // results: ignore taps for a moment so a finger still mashing at the crash doesn't skip the stats
+    const overTap = () => Game.state === 'over' && performance.now() - Game.overAt > 650;
+    $('over').addEventListener('pointerdown', (e) => { if (e.button === 0 && overTap()) Game.restart(true); });
     // fallback: some touch stacks deliver only a synthesized click for a quick tap
     $('menu').addEventListener('click', () => { if (Game.state === 'menu' && performance.now() - Game.menuAt >= 450) { Audio.init(); Audio.resume(); this.anyKey = true; } });
-    $('over').addEventListener('click', () => { if (Game.state === 'over') Game.restart(true); });
+    $('over').addEventListener('click', () => { if (overTap()) Game.restart(true); });
     $('pause').addEventListener('pointerdown', (e) => { if (e.button === 0) Game.togglePause(); });
     // pause-screen buttons (stopPropagation so the screen's own tap-to-resume doesn't also fire)
     for (const [id, fn] of [['pResume', () => Game.togglePause()], ['pRestart', () => Game.restart(true)], ['pMenu', () => Game.toMenu()]]) {
@@ -307,7 +306,6 @@ const Customize = {
       inp.dataset.slot = slot;
       inp.setAttribute('aria-label', label + ' colour');
       inp.addEventListener('input', () => { Outfit.pick(slot, inp.value); this.sync(); });
-      inp.addEventListener('change', () => { Outfit.pick(slot, inp.value); this.sync(); });
       items.appendChild(l);
     }
     $('rRandom').addEventListener('click', () => { Outfit.randomize(); this.sync(); });
@@ -361,8 +359,9 @@ const Game = {
   lives: 3, combo: 1, comboTimer: 0,
   flash: 0, desat: 0, hintTimer: 14,
   air: { t: 0, spin: 0, flip: 0, grab: null, grabT: 0 },
-  lastZ: 0, startY: 0, t: 0, frames: 0, fps: 60, _fpsT: 0, _mt: 0,
+  lastZ: 0, startY: 0, frames: 0, fps: 60, _fpsT: 0, _mt: 0,
   menuAt: -1e9,                  // when the menu last opened (swallows that tap's trailing click)
+  overAt: -1e9,                  // when the results screen appeared (tap guard)
   customizing: false,            // rider colour panel open (menu only; render.js frames the rider)
   perf: { t: 0, n: 0, warm: 0, low: 0 },     // dynamic-resolution frame-rate monitor
   frameNo: 0,                    // monotonic; never reset (chunk cache ages on it)
@@ -371,7 +370,7 @@ const Game = {
     this.P = new Player();
     this.fx = new Particles();
     try { if (localStorage.getItem('powderline.muted') === '1') Audio.setMuted(true); } catch (e) { }
-    $('muteBtn').classList.toggle('muted', Audio.muted);
+    this.syncMuteBtn();
     this.buildLives();
     Sun.init();
     Atmos.load();
@@ -418,6 +417,7 @@ const Game = {
 
   toMenu() {
     this.state = 'menu'; this._deadTimer = 0; this.menuAt = performance.now();
+    Input.anyKey = false;                      // a key pressed on the results screen isn't "drop in"
     $('over').classList.add('hide'); $('pause').classList.add('hide'); $('menu').classList.remove('hide');
     $('hud').classList.remove('on');
     document.body.classList.remove('playing');
@@ -447,14 +447,14 @@ const Game = {
 
   start() {
     Audio.init(); Audio.resume();
-    this.perf.t = 0; this.perf.n = 0; this.perf.warm = 0; this.perf.low = 0;   // first window is shader warm-up
     $('menu').classList.add('hide');
     this.restart(true);
-    Input.jumpHeld = false; Input.jumpRelease = false;   // the key that dropped us in is not an ollie
     Audio.dropIn();
   },
 
   restart() {
+    this.perf.t = 0; this.perf.n = 0; this.perf.warm = 0; this.perf.low = 0;   // first window is shader warm-up
+    Input.jumpHeld = false; Input.jumpRelease = false;   // a key held into the run is not an ollie
     this.score = 0; this.distance = 0; this.topSpeed = 0; this.totalAir = 0;
     this.lands = 0; this.bestHit = 0; this.combo = 1; this.comboTimer = 0;
     this.flash = 0; this.desat = 0; this.hintTimer = 14;
@@ -480,9 +480,12 @@ const Game = {
   toggleMute() {
     Audio.setMuted(!Audio.muted);
     if (!Audio.muted) Audio.ui(700);
+    this.syncMuteBtn();
+    try { localStorage.setItem('powderline.muted', Audio.muted ? '1' : '0'); } catch (e) { }
+  },
+  syncMuteBtn() {
     $('muteBtn').classList.toggle('muted', Audio.muted);
     $('muteBtn').setAttribute('aria-label', Audio.muted ? 'Unmute' : 'Mute');
-    try { localStorage.setItem('powderline.muted', Audio.muted ? '1' : '0'); } catch (e) { }
   },
 
   togglePause() {
@@ -504,7 +507,7 @@ const Game = {
   onPump() { this.score += 15 * this.combo; },
 
   gameOver(finished) {
-    this.state = 'over';
+    this.state = 'over'; this.overAt = performance.now();
     $('overTitle').textContent = (finished ? 'Run complete · ' : 'Run over · ') + Level.cur.name;
     $('overHead').textContent = finished ? 'NICE RUN' : 'RUN DOWN';
     document.body.classList.remove('playing');
@@ -696,20 +699,28 @@ const Game = {
     $('gateDist').textContent = Math.round(Math.hypot(g.x - P.pos.x, dz)) + ' m';
   },
 
+  /* HUD writes go through put(): elements are looked up once and only touched
+     when the text actually changes (most values change a few times a second) */
+  _hud: {},
+  put(id, v, html) {
+    const h = this._hud[id] || (this._hud[id] = { el: $(id), v: null });
+    if (h.v === v) return;
+    h.v = v;
+    if (html) h.el.innerHTML = v; else h.el.textContent = v;
+  },
   hud() {
     const P = this.P;
     this.gateMarker();
-    $('dist').innerHTML = Math.round(this.distance) + '<span class="unit">m</span>';
-    $('drop').textContent = '\u25BC ' + Math.round(Math.max(0, this.startY - P.pos.y)) + ' m drop';
-    $('score').textContent = Math.round(this.score).toLocaleString();
-    $('speed').innerHTML = Math.round(P.speed * 3.6) + '<span class="unit">km/h</span>';
-    $('speedfill').style.width = clamp(P.speed / 30 * 100, 0, 100) + '%';
-    const c = $('combo');
-    if (this.combo > 1) { c.classList.add('on'); c.textContent = '\u00D7' + this.combo + ' COMBO'; }
-    else c.classList.remove('on');
-    const at = $('airtime');
-    if (P.airborne) { at.classList.add('on'); at.textContent = P.airTime.toFixed(2) + ' s'; }
-    else at.classList.remove('on');
+    this.put('dist', Math.round(this.distance) + '<span class="unit">m</span>', true);
+    this.put('drop', '\u25BC ' + Math.round(Math.max(0, this.startY - P.pos.y)) + ' m drop');
+    this.put('score', Math.round(this.score).toLocaleString());
+    this.put('speed', Math.round(P.speed * 3.6) + '<span class="unit">km/h</span>', true);
+    const fill = Math.round(clamp(P.speed / 30 * 100, 0, 100)) + '%';
+    if (this._fill !== fill) { this._fill = fill; $('speedfill').style.width = fill; }
+    $('combo').classList.toggle('on', this.combo > 1);
+    if (this.combo > 1) this.put('combo', '\u00D7' + this.combo + ' COMBO');
+    $('airtime').classList.toggle('on', P.airborne);
+    if (P.airborne) this.put('airtime', P.airTime.toFixed(2) + ' s');
     if ($('debug').classList.contains('on')) {
       $('debug').innerHTML =
         this.fps.toFixed(0) + ' fps · ' + World.chunks.size + ' chunks · ' + this.fx.n + 'p<br>' +
@@ -763,6 +774,9 @@ const Game = {
 
   window.addEventListener('resize', () => { try { GL.resize(); } catch (e) { } });
   canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); if (Game.state === 'play') Game.togglePause(); });
+  // every GPU resource is gone after a context loss (iOS backgrounding can do this);
+  // rebuilding it all in place isn't worth the code — a reload is clean and quick
+  canvas.addEventListener('webglcontextrestored', () => location.reload());
   document.addEventListener('visibilitychange', () => {
     if (document.hidden && Game.state === 'play') Game.togglePause();
   });
@@ -787,12 +801,13 @@ const Game = {
       }
     }
     dt = Math.min(dt, 1 / 30);
-    GL.time += dt; Game.t += dt;
+    GL.time += dt;
     Game.frames++; Game._fpsT += dt; Game.frameNo++;
     if (Game._fpsT > 0.5) { Game.fps = Game.frames / Game._fpsT; Game.frames = 0; Game._fpsT = 0; }
 
     try {
       Pad.poll(dt);
+      if (Game.state !== 'play') Audio.quiet();        // no carve/wind hiss off the snow
       if (Game.state === 'menu') {
         if (Input.anyKey) { Input.anyKey = false; if (!Game.customizing) Game.start(); }
         // idle: drift down the mountain so the menu has a live backdrop
@@ -810,6 +825,7 @@ const Game = {
       }
       if (Game.state === 'pause') { Input.anyKey = false; return; }
       if (Game.state === 'over') {
+        Input.anyKey = false;
         // keep the scene alive behind the results panel
         World.update(Game.P.pos.x, Game.P.pos.z);
         Cam.update(dt, Game.P, 'over'); Cam.resolveGround();

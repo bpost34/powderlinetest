@@ -15,8 +15,8 @@ function geoBeam(g, a, b, w, h, col) {
   let dx = b[0] - a[0], dy = b[1] - a[1], dz = b[2] - a[2];
   const L = Math.hypot(dx, dy, dz) || 1; dx /= L; dy /= L; dz /= L;
   // side = dir × up (horizontal), up' = side × dir
-  let sx = -dz, sy = 0, sz = dx; let sl = Math.hypot(sx, sz) || 1; sx /= sl; sz /= sl;
-  if (sl < 1e-6) { sx = 1; sz = 0; }
+  let sx = -dz, sy = 0, sz = dx; const sl = Math.hypot(sx, sz);
+  if (sl < 1e-6) { sx = 1; sz = 0; } else { sx /= sl; sz /= sl; }   // vertical beams (posts) need a fallback side
   const ux = sy * dz - sz * dy, uy = sz * dx - sx * dz, uz = sx * dy - sy * dx;
   const hw = w / 2, hh = h / 2;
   const corner = (p, i, j) => [p[0] + sx * hw * i + ux * hh * j, p[1] + sy * hw * i + uy * hh * j, p[2] + sz * hw * i + uz * hh * j];
@@ -46,7 +46,7 @@ function geoFinishArch(g, z, halfW) {
   geoBeam(g, [halfW, yR - 0.3, z], [halfW, yR + 6.2, z], 0.35, 0.35, WHITE);
   geoBeam(g, [-halfW, yL + 5.4, z], [halfW, yR + 5.4, z], 0.12, 1.5, RED);
   for (let i = -3; i <= 3; i++) {                         // chequered strip under the banner
-    const x0 = (i / 3.5) * halfW, x1 = ((i + 1) / 3.5) * halfW;
+    const x0 = ((i - 0.5) / 3.5) * halfW, x1 = ((i + 0.5) / 3.5) * halfW;   // 7 squares spanning -halfW..+halfW
     geoBeam(g, [x0, lerp(yL, yR, (x0 / halfW + 1) / 2) + 4.5, z + 0.08], [Math.min(x1, halfW), lerp(yL, yR, (Math.min(x1, halfW) / halfW + 1) / 2) + 4.5, z + 0.08],
       0.06, 0.3, i % 2 ? WHITE : [0.08, 0.08, 0.1]);
   }
@@ -213,7 +213,7 @@ Level.define({
       } else if (f.k === 'rollers') {
         if (z < f.z0 || z > f.z1) continue;
         const s = Math.sin((z - f.z0) / f.wl * Math.PI);
-        h += f.amp * s * s * Math.min(1, (PARK.HALF + 2 - ax) / 4);
+        h += f.amp * s * s * clamp((PARK.HALF + 2 - ax) / 4, 0, 1);   // fade out (not invert) on the banks
       } else if (f.k === 'mini') {
         const env = miniEnv(f, z);
         if (env <= 0) continue;

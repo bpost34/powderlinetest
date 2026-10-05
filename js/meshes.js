@@ -407,7 +407,8 @@ function buildBoard() {
    Every part is built in its own local frame:
      torso / pelvis / head : +Y up, +Z = the way the chest/face points,
                              +X = the lead shoulder side.  Origin at the base.
-     limb meshes           : unit radius, unit length along +Y (m4limb scales them).
+     limb meshes           : ≈unit radius, ≈unit length along +Y (m4limb scales them;
+                             cuffs/folds bulge a little past 1).
      mitten                : origin at the wrist, +Y up the forearm, +X = thumb side.
      boot                  : +X = board nose, +Z = toes, origin at the sole.
      scarf                 : unit strip along +Y, width on X, thickness on Z.
@@ -415,7 +416,7 @@ function buildBoard() {
    only a shade multiplier, using these greys for fixed details.             */
 const RiderGeo = {};
 const RIDER_COL = {
-  base: 1.0, seam: 0.62, edge: 0.55, under: 0.42, inner: 0.30, sole: 0.34
+  seam: 0.62, edge: 0.55, under: 0.42, inner: 0.30, sole: 0.34
 };
 
 function buildRider() {
@@ -647,62 +648,10 @@ function buildRider() {
 }
 
 /* ---------------- vegetation + rocks (instanced) ---------------- */
-function buildTree() {
-  /* Snowy fir: a trunk plus five drooping, star-shaped branch tiers. Flat-shaded
-     facets; each tier's upper surface fades from snow at the top to needles at
-     the tips, the underside is dark. Unit scale: ~4.6 m tall. */
-  const g = Geo();
-  geoCyl(g, 0, 0, 0, 0.15, 0.08, 1.3, [0.30, 0.21, 0.15], 7, false, false);
-  const SNOW = [0.93, 0.96, 1.0], UNDER = [0.08, 0.20, 0.14];
-  const face = (A, B, C, ca, cb, cc, hint) => {
-    let ux = B[0] - A[0], uy = B[1] - A[1], uz = B[2] - A[2], wx = C[0] - A[0], wy = C[1] - A[1], wz = C[2] - A[2];
-    let nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
-    if (nx * hint[0] + ny * hint[1] + nz * hint[2] < 0) { [B, C] = [C, B]; [cb, cc] = [cc, cb]; nx = -nx; ny = -ny; nz = -nz; }
-    const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
-    geoTri(g, geoVert(g, A[0], A[1], A[2], nx, ny, nz, ...ca),
-              geoVert(g, B[0], B[1], B[2], nx, ny, nz, ...cb),
-              geoVert(g, C[0], C[1], C[2], nx, ny, nz, ...cc));
-  };
-  const K = 10, TIERS = 5;
-  for (let t = 0; t < TIERS; t++) {
-    const k = t / (TIERS - 1);
-    const y0 = 0.95 + t * 0.74;                     // tier skirt height
-    const R = 1.5 * (1 - k * 0.72);                 // radius shrinks up the tree
-    const yTop = y0 + 1.15 - k * 0.15;
-    const rTop = t === TIERS - 1 ? 0.0 : R * 0.16;
-    const green = [0.10 + k * 0.03, 0.30 + k * 0.06, 0.19 + k * 0.03];
-    const tip = [], top = [];
-    for (let i = 0; i < K; i++) {
-      const a = (i + t * 0.5) / K * TAU;            // twist each tier a little
-      const out = i % 2 === 0;
-      const r = out ? R : R * 0.62;
-      const droop = out ? 0.22 : 0.0;
-      tip.push([Math.cos(a) * r, y0 - droop, Math.sin(a) * r]);
-      top.push([Math.cos(a) * rTop, yTop, Math.sin(a) * rTop]);
-    }
-    const snowMix = (c, m) => [lerp(c[0], SNOW[0], m), lerp(c[1], SNOW[1], m), lerp(c[2], SNOW[2], m)];
-    const tipCol = snowMix(green, 0.12), midCol = snowMix(green, 0.55);
-    for (let i = 0; i < K; i++) {
-      const j = (i + 1) % K;
-      const A = top[i], B = top[j], C = tip[i], D = tip[j];
-      const hint = [(C[0] + D[0]) * 0.5, 0.8, (C[2] + D[2]) * 0.5];   // outward + up
-      if (rTop > 0) face(A, D, C, SNOW, i % 2 ? tipCol : midCol, i % 2 ? midCol : tipCol, hint);
-      face(A, B, D, SNOW, SNOW, j % 2 ? midCol : tipCol, hint);
-      if (rTop === 0) face(A, D, C, SNOW, tipCol, tipCol, hint);
-      // underside back to the trunk
-      face(C, D, [0, y0 + 0.28, 0], UNDER, UNDER, UNDER, [(C[0] + D[0]) * 0.5, -1.2, (C[2] + D[2]) * 0.5]);
-    }
-  }
-  return g;
-}
-/* A displaced sphere shell with CORRECT normals.
-   The previous version faked them with Math.abs(ny), which flipped the entire
-   lower hemisphere to point upward — under backface culling that both lit the
-   underside wrongly and failed the winding agreement test (127/162 = 78%).
-   Normals are now central differences of the displaced grid itself:
-   n = cross(dP/du, dP/dv), which is exactly the direction the a,b,c / b,d,c
-   face winding produces. Verified analytically at the equator: a vertex at
-   (1,0,0) gets n = (+,0,0). */
+/* A noise-displaced sphere shell (tMax < 1 covers only the top of the pole).
+   The noise wraps around the seam and each pole collapses to one point, so the
+   shell is closed; normals are central differences of the displaced grid,
+   wrapping across the seam. */
 function geoBoulder(g, ring, ampLo, ampHi, seed, col, scale, tMax) {
   const seg = 9, w = seg + 1;
   const base = g.v.length / STRIDE;
@@ -711,8 +660,10 @@ function geoBoulder(g, ring, ampLo, ampHi, seed, col, scale, tMax) {
   for (let j = 0; j <= ring; j++) {
     const v = (j / ring) * tM, th = v * Math.PI;
     for (let i = 0; i <= seg; i++) {
-      const ph = i / seg * TAU;
-      const n = ampLo + ampHi * fbm(Math.cos(ph) * 3 + i, Math.sin(ph) * 3 + j * 2, 2, seed);
+      const pole = j === 0 || (j === ring && tM >= 1);
+      const ii = pole ? 0 : i % seg;                 // seam column = first column; poles = one point
+      const ph = ii / seg * TAU;
+      const n = ampLo + ampHi * fbm(Math.cos(ph) * 3 + ii, Math.sin(ph) * 3 + j * 2, 2, seed);
       pos.push(Math.sin(th) * Math.cos(ph) * n * scale,
                Math.cos(th) * n * 0.72 * scale,
                Math.sin(th) * Math.sin(ph) * n * scale);
@@ -721,14 +672,16 @@ function geoBoulder(g, ring, ampLo, ampHi, seed, col, scale, tMax) {
   const P = (i, j) => { const k = (j * w + i) * 3; return [pos[k], pos[k + 1], pos[k + 2]]; };
   for (let j = 0; j <= ring; j++) {
     for (let i = 0; i <= seg; i++) {
-      const i0 = Math.max(0, i - 1), i1 = Math.min(seg, i + 1);
+      const p = P(i, j);
+      if (j === 0) { geoVert(g, p[0], p[1], p[2], 0, 1, 0, col[0], col[1], col[2]); continue; }
+      if (j === ring && tM >= 1) { geoVert(g, p[0], p[1], p[2], 0, -1, 0, col[0], col[1], col[2]); continue; }
+      const i0 = i > 0 ? i - 1 : seg - 1, i1 = i < seg ? i + 1 : 1;     // wrap across the seam
       const j0 = Math.max(0, j - 1), j1 = Math.min(ring, j + 1);
       const A = P(i0, j), B = P(i1, j), C = P(i, j0), D = P(i, j1);
       const tx = B[0] - A[0], ty = B[1] - A[1], tz = B[2] - A[2];   // dP/du
       const sx = D[0] - C[0], sy = D[1] - C[1], sz = D[2] - C[2];   // dP/dv
       let nx = ty * sz - tz * sy, ny = tz * sx - tx * sz, nz = tx * sy - ty * sx;
       const l = Math.hypot(nx, ny, nz) || 1;
-      const p = P(i, j);
       geoVert(g, p[0], p[1], p[2], nx / l, ny / l, nz / l, col[0], col[1], col[2]);
     }
   }
@@ -1039,13 +992,12 @@ function makeNeedleCanvas(W = 256, H = 128) {
     const a = dN[i * 4 + 3] / 255, tg = dT[i * 4 + 3] / 255;
     const sn = Math.max(drift, dS[i * 4 + 3] / 255 * 0.5);
     // snow only sits ON needles (plus a little bridging), it never becomes a solid sheet
-    const cov = a;
     d[i * 4] = a > 0 ? dN[i * 4] : 160;            // un-premultiplied shade
     d[i * 4 + 1] = Math.round(sn * 255);
     d[i * 4 + 2] = Math.round(tg * 255);
     // keep a clear 2-texel border so clamped edge texels never smear along the card rim
     const edge = x < 2 || y < 2 || x >= W - 2 || y >= H - 2;
-    d[i * 4 + 3] = edge ? 0 : Math.round(Math.min(1, cov) * 255);
+    d[i * 4 + 3] = edge ? 0 : Math.round(a * 255);
   }
   return { W, H, data: d };
 }

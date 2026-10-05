@@ -113,6 +113,28 @@ const Cam = {
     m4lookAt(this.view, this.pos.x + sx, this.pos.y + sy, this.pos.z + sz,
       this.look.x, this.look.y, this.look.z, 0, 1, 0);
     m4mul(this.vp, this.proj, this.view);
+    this.extractPlanes();
+  },
+
+  /* view-frustum planes (Gribb–Hartmann) from the column-major view-projection */
+  planes: new Float32Array(24),
+  extractPlanes() {
+    const m = this.vp, P = this.planes;
+    const rows = (r) => [m[r], m[4 + r], m[8 + r], m[12 + r]];
+    const r0 = rows(0), r1 = rows(1), r2 = rows(2), r3 = rows(3);
+    const sets = [[1, r0], [-1, r0], [1, r1], [-1, r1], [1, r2], [-1, r2]];
+    for (let k = 0; k < 6; k++) {
+      const [sg, r] = sets[k];
+      let a = r3[0] + sg * r[0], b = r3[1] + sg * r[1], c = r3[2] + sg * r[2], d = r3[3] + sg * r[3];
+      const l = Math.hypot(a, b, c) || 1;
+      P[k * 4] = a / l; P[k * 4 + 1] = b / l; P[k * 4 + 2] = c / l; P[k * 4 + 3] = d / l;
+    }
+  },
+  /* is a sphere at least partly inside the view frustum? */
+  sees(x, y, z, r) {
+    const P = this.planes;
+    for (let k = 0; k < 24; k += 4) if (P[k] * x + P[k + 1] * y + P[k + 2] * z + P[k + 3] < -r) return false;
+    return true;
   },
 
   /* keep the camera out of the ground */
@@ -135,12 +157,15 @@ const Sun = {
   init() { V3.norm(this.dir, this.dir); },
 
   update(cx, cy, cz) {
-    const gl = GL.gl;
     const R = this.radius;
-    // snap to texel grid to reduce shadow shimmer
     // dir points surface → sun, so the light camera sits on the sun side
     const ex = cx + this.dir.x * 160, ey = cy + this.dir.y * 160, ez = cz + this.dir.z * 160;
     m4lookAt(this.lightView, ex, ey, ez, cx, cy, cz, 0, 1, 0);
+    // snap the light-space origin to whole shadow-map texels so shadow edges
+    // don't crawl as the rider moves
+    const texel = 2 * R / (GL.shadowSize || 2048), V = this.lightView;
+    V[12] -= V[12] - Math.round(V[12] / texel) * texel;
+    V[13] -= V[13] - Math.round(V[13] / texel) * texel;
     m4ortho(this.lightProj, -R, R, -R, R, 1, 330);
     m4mul(this.lightVP, this.lightProj, this.lightView);
   },
@@ -185,7 +210,6 @@ function drawMesh(prog, meshName, model) {
    ========================================================================= */
 const Render = {
   trees: [], rocks: [],
-  stats: { tris: 0, calls: 0 },
 
   /* free GPU chunk meshes that have not been drawn for a while. Driven by a
      monotonic frame counter (Game.frames resets every 0.5 s, so it cannot be
@@ -217,7 +241,7 @@ const Render = {
 
     const sp = GL.prog.shadow;
     sp.use();
-    Sun.setUniforms(sp);
+    gl.uniformMatrix4fv(sp.uLightVP, false, Sun.lightVP);   // depth-only: the light matrix is all it needs
     gl.uniformMatrix4fv(sp.uModel, false, IDENT);
     // terrain
     for (const c of World.visible) {
@@ -239,13 +263,13 @@ const Render = {
     // trees: trunks, then the needle cards (alpha-tested, both faces)
     const ip = GL.prog.shadowInst;
     ip.use();
-    Sun.setUniforms(ip);
+    gl.uniformMatrix4fv(ip.uLightVP, false, Sun.lightVP);
     gl.uniformMatrix4fv(ip.uModel, false, IDENT);
     this.fillTreeBuffer(P);                       // refreshes this.trees for this frame
     const groups = this.fillShadowTrees();
     this.drawTrees(ip, groups, 'trunk', 'shadowProps');
     const fp = GL.prog.shadowFol.use();
-    Sun.setUniforms(fp);
+    gl.uniformMatrix4fv(fp.uLightVP, false, Sun.lightVP);
     gl.uniformMatrix4fv(fp.uModel, false, IDENT);
     gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, GL.tex.needles);
     gl.uniform1i(fp.uNeedle, 2);
@@ -279,6 +303,7 @@ const Render = {
     const buckets = [[], [], [], []];
     const cx = Cam.pos.x, cz = Cam.pos.z, L2 = this.TREE_LOD_DIST * this.TREE_LOD_DIST;
     for (const t of this.trees) {
+      if (!Cam.sees(t.x, t.y + 3 * t.sc, t.z, 4.5 * t.sc)) continue;
       const far = (t.x - cx) * (t.x - cx) + (t.z - cz) * (t.z - cz) > L2 ? 1 : 0;
       buckets[(t.shape || 0) * 2 + far].push(t);
     }
@@ -288,14 +313,14 @@ const Render = {
       const first = n;
       for (const t of buckets[b]) {
         if (n >= ib.max) break;
-        const c = Math.cos(t.rot), s = Math.sin(t.rot), sc = t.sc;
+        const c = t.c, s = t.s, sc = t.sc;
         const o = n * 20;
         // column-major: scale * rotY (slightly taller than wide for variety)
         d[o] = c * sc;      d[o + 1] = 0;        d[o + 2] = -s * sc;  d[o + 3] = 0;
         d[o + 4] = 0;       d[o + 5] = sc * (t.tall || 1); d[o + 6] = 0; d[o + 7] = 0;
         d[o + 8] = s * sc;  d[o + 9] = 0;        d[o + 10] = c * sc;  d[o + 11] = 0;
         d[o + 12] = t.x;    d[o + 13] = t.y - 0.1; d[o + 14] = t.z;   d[o + 15] = 1;
-        const shade = 0.78 + hash2(Math.floor(t.x), Math.floor(t.z), 77) * 0.42;
+        const shade = t.shade;
         d[o + 16] = shade * (0.95 + t.sway * 0.016); d[o + 17] = shade; d[o + 18] = shade * 0.96; d[o + 19] = 1;
         n++;
       }
@@ -330,7 +355,7 @@ const Render = {
       const first = n;
       for (const t of lists[sh]) {
         if (n >= ib.max) break;
-        const c = Math.cos(t.rot), s = Math.sin(t.rot), sc = t.sc, o = n * 20;
+        const c = t.c, s = t.s, sc = t.sc, o = n * 20;
         d[o] = c * sc;  d[o + 1] = 0; d[o + 2] = -s * sc; d[o + 3] = 0;
         d[o + 4] = 0;   d[o + 5] = sc * (t.tall || 1); d[o + 6] = 0; d[o + 7] = 0;
         d[o + 8] = s * sc; d[o + 9] = 0; d[o + 10] = c * sc; d[o + 11] = 0;
@@ -383,32 +408,6 @@ const Render = {
     gl.clearColor(ap.clear[0], ap.clear[1], ap.clear[2], 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-    // ---- sky ----
-    // xyww pins depth to exactly 1.0; the default LESS test would fail
-    // against the 1.0 depth-buffer clear, so relax it just for the dome.
-    gl.depthMask(false);
-    gl.depthFunc(gl.LEQUAL);
-    gl.disable(gl.CULL_FACE);
-    const sky = GL.prog.sky.use();
-    gl.uniformMatrix4fv(sky.uProj, false, Cam.proj);
-    gl.uniformMatrix4fv(sky.uView, false, Cam.view);
-    gl.uniform3f(sky.uSunDir, Sun.dir.x, Sun.dir.y, Sun.dir.z);
-    gl.uniform3f(sky.uSunColor, Sun.color[0], Sun.color[1], Sun.color[2]);
-    gl.uniform3fv(sky.uZenith, ap.zenith);
-    gl.uniform3fv(sky.uHorizon, ap.horizon);
-    gl.uniform1f(sky.uStars, ap.stars);
-    gl.uniform1f(sky.uCloudLum, ap.cloudLum);
-    gl.uniform1f(sky.uTime, GL.time * 60);
-    const skyM = GL.mesh.sky;
-    gl.bindVertexArray(skyM.vao);
-    gl.drawElements(gl.TRIANGLES, skyM.count, gl.UNSIGNED_INT, 0);
-    gl.depthFunc(gl.LESS);
-    gl.depthMask(true);
-    gl.enable(gl.CULL_FACE);
-
-    // ---- distant peaks on the horizon ----
-    Scenery.drawMountains();
-
     // ---- terrain ----
     const wp = GL.prog.world.use();
     Sun.setUniforms(wp);
@@ -416,6 +415,7 @@ const Render = {
     gl.uniform1f(wp.uDetail, GL.quality < 1 ? 0 : 1);
     gl.uniformMatrix4fv(wp.uModel, false, IDENT);
     for (const c of World.visible) {
+      if (c.rad && !Cam.sees(c.x0 + CHUNK * 0.5, c.yMid, c.z0 + CHUNK * 0.5, c.rad)) continue;
       const lod = this.pickLod(c);
       const m = GL.chunkMesh(c, lod);
       if (!m) continue;
@@ -501,6 +501,33 @@ const Render = {
       const q = P.parts[i];
       drawMesh(rp, q.mesh, q.mat);
     }
+
+    // ---- distant ranges, then the sky: both drawn AFTER the opaque scene so early-Z
+    //      skips every pixel already covered (the dome sits at depth 1.0, behind all) ----
+    Scenery.drawMountains();
+
+    // xyww pins depth to exactly 1.0; the default LESS test would fail
+    // against the 1.0 depth-buffer clear, so relax it just for the dome.
+    gl.depthMask(false);
+    gl.depthFunc(gl.LEQUAL);
+    gl.disable(gl.CULL_FACE);
+    const sky = GL.prog.sky.use();
+    gl.uniformMatrix4fv(sky.uProj, false, Cam.proj);
+    gl.uniformMatrix4fv(sky.uView, false, Cam.view);
+    gl.uniform3f(sky.uSunDir, Sun.dir.x, Sun.dir.y, Sun.dir.z);
+    gl.uniform3f(sky.uSunColor, Sun.color[0], Sun.color[1], Sun.color[2]);
+    gl.uniform3fv(sky.uZenith, ap.zenith);
+    gl.uniform3fv(sky.uHorizon, ap.horizon);
+    gl.uniform1f(sky.uStars, ap.stars);
+    gl.uniform1f(sky.uCloudLum, ap.cloudLum);
+    gl.uniform1f(sky.uTime, GL.time * 60);
+    const skyM = GL.mesh.sky;
+    gl.bindVertexArray(skyM.vao);
+    gl.drawElements(gl.TRIANGLES, skyM.count, gl.UNSIGNED_INT, 0);
+    gl.depthFunc(gl.LESS);
+    gl.depthMask(true);
+    gl.enable(gl.CULL_FACE);
+
 
     // ---- particles ----
     // depthMask off: a snow cloud must not write depth, or every puff
@@ -625,7 +652,6 @@ const Render = {
     gl.uniform1i(bp.uTex, 0);
     gl.uniform1f(bp.uThresh, Atmos.p.bloomThresh);
     gl.bindVertexArray(tri.vao);
-    for (let l = 3; l < 8; l++) { gl.disableVertexAttribArray(l); gl.vertexAttribDivisor(l, 0); }
     gl.drawElements(gl.TRIANGLES, tri.count, gl.UNSIGNED_INT, 0);
 
     // two blur hits, ping-ponging

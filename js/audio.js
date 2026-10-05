@@ -27,7 +27,6 @@ const Audio = {
     const len = ctx.sampleRate * 2;
     const buf = ctx.createBuffer(1, len, ctx.sampleRate);
     const d = buf.getChannelData(0);
-    let last = 0;
     for (let i = 0; i < len; i++) {
       const w = Math.random() * 2 - 1;
       d[i] = w * 0.6;
@@ -103,6 +102,14 @@ const Audio = {
     const w = (airborne ? 0.10 + speedN * 0.24 : speedN * 0.16) * m * (tuck ? 1.25 : 1);
     this.wind.gain.setTargetAtTime(w, t, 0.12);
     this.windBP.frequency.setTargetAtTime(280 + speedN * 700 + Math.sin(t * 0.7) * 90, t, 0.3);
+  },
+
+  /* fade the riding loops (carve hiss, wind) out — paused, results, menu */
+  quiet() {
+    if (!this.ready) return;
+    const t = this.ctx.currentTime;
+    this.carve.gain.setTargetAtTime(0, t, 0.08);
+    this.wind.gain.setTargetAtTime(0, t, 0.15);
   },
 
   /* --- one-shots --- */

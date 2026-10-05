@@ -18,17 +18,12 @@ const sign = (v) => v < 0 ? -1 : 1;
 /* ---------------- vec3 (plain objects: {x,y,z}) ---------------- */
 function V3(x = 0, y = 0, z = 0) { return { x, y, z }; }
 V3.set = function (o, x, y, z) { o.x = x; o.y = y; o.z = z; return o; };
-V3.copy = function (o, a) { o.x = a.x; o.y = a.y; o.z = a.z; return o; };
-V3.add = function (o, a, b) { o.x = a.x + b.x; o.y = a.y + b.y; o.z = a.z + b.z; return o; };
-V3.sub = function (o, a, b) { o.x = a.x - b.x; o.y = a.y - b.y; o.z = a.z - b.z; return o; };
 V3.scale = function (o, a, s) { o.x = a.x * s; o.y = a.y * s; o.z = a.z * s; return o; };
 V3.dot = function (a, b) { return a.x * b.x + a.y * b.y + a.z * b.z; };
 V3.cross = function (o, a, b) {
   const ax = a.x, ay = a.y, az = a.z, bx = b.x, by = b.y, bz = b.z;
   o.x = ay * bz - az * by; o.y = az * bx - ax * bz; o.z = ax * by - ay * bx; return o;
 };
-V3.len = function (a) { return Math.hypot(a.x, a.y, a.z); };
-V3.dist = function (a, b) { return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z); };
 V3.norm = function (o, a) {
   const l = Math.hypot(a.x, a.y, a.z);
   if (l > 1e-8) { o.x = a.x / l; o.y = a.y / l; o.z = a.z / l; }
@@ -130,15 +125,6 @@ function m4invert(o, a) {
   return o;
 }
 
-/* Build a rigid matrix from an orthonormal basis (columns = images of X,Y,Z). */
-function m4basis(o, r, u, f, px, py, pz) {
-  o[0] = r.x; o[1] = r.y; o[2] = r.z; o[3] = 0;
-  o[4] = u.x; o[5] = u.y; o[6] = u.z; o[7] = 0;
-  o[8] = -f.x; o[9] = -f.y; o[10] = -f.z; o[11] = 0; // local forward is -Z (GL convention)
-  o[12] = px; o[13] = py; o[14] = pz; o[15] = 1;
-  return o;
-}
-
 /* Set a matrix directly from three basis vectors (columns = images of X,Y,Z).
    NOTE: X,Y,Z must form a RIGHT-HANDED frame (Z = X × Y) or winding flips. */
 function m4axes(o, X, Y, Z, px, py, pz, scale) {
@@ -184,12 +170,6 @@ function m4point(out, m, x, y, z) {
   out.x = (m[0] * x + m[4] * y + m[8] * z + m[12]) / w;
   out.y = (m[1] * x + m[5] * y + m[9] * z + m[13]) / w;
   out.z = (m[2] * x + m[6] * y + m[10] * z + m[14]) / w;
-  return out;
-}
-function m4dir(out, m, x, y, z) {
-  out.x = m[0] * x + m[4] * y + m[8] * z;
-  out.y = m[1] * x + m[5] * y + m[9] * z;
-  out.z = m[2] * x + m[6] * y + m[10] * z;
   return out;
 }
 

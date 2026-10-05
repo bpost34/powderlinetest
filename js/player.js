@@ -24,13 +24,11 @@ class Player {
     this.vel = V3(0, 0, 0);
     this.yaw = 0;             // heading of the board, radians
     this.lean = 0;            // edge angle, -1..1 (sign = which edge)
-    this.leanVel = 0;
     this.speed = 0;
     this.turnRate = 0;
     this.airborne = false;
     this.airTime = 0;
     this.groundY = 0;
-    this.unload = 0;          // 0 = planted, 1 = about to leave the ground
     this.load = 1;            // apparent load factor (for compression squash)
     this.tuck = 0;
     this.braking = 0;
@@ -38,7 +36,6 @@ class Player {
     this.crashTimer = 0;
     this.crashSpin = V3();
     this.invuln = 0;
-    this.landing = 0;         // impact strength of the most recent landing
     this.landedClean = false;
     this.jumpBuffer = 0;
     this.pumpCooldown = 0;
@@ -74,7 +71,17 @@ class Player {
     this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipVis = 0; this.grab = null; this.tuck = 0; this.invuln = 1.2;
     this._scarf = null;       // re-seed the scarf chain at the new spot
     this.grind = null;
+    // nothing from before the reset carries over (turn momentum, landing settle, skid pose, buffered jumps)
+    this.turnRate = 0; this.yawVis = 0; this.brakeVis = 0; this.jumpBuffer = 0; this.coyote = 0;
     this.updateBasis();
+  }
+
+  /* leaving the ground (ollie, crest, rail exit): a fresh air phase — no spin or
+     flip carried over, flips must be re-armed, and no leftover grace window */
+  _takeoff() {
+    this.airborne = true; this.airTime = 0; this.coyote = 0;
+    this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false;
+    this.autoYaw = null; this.airLabel = null;
   }
 
   _m() { const m = this._tmpM[this._mi % this._tmpM.length]; this._mi++; return m; }
@@ -102,7 +109,6 @@ class Player {
   /* ---------------- main step ---------------- */
   step(dt, input, fx) {
     this._mi = 0;
-    this.landing = 0;
     if (this.invuln > 0) this.invuln -= dt;
     if (this.crashTimer > 0) { this.stepCrash(dt, fx); return; }
     if (this.grind) { this.stepGrind(dt, input, fx); return; }
@@ -136,9 +142,7 @@ class Player {
         this.land(fx);
       }
     } else {
-      // stick to the surface (with a small tolerance so we don't sink on crests)
-      this.pos.y = gy + RIDE_H;
-      if (this.pos.y < gy + RIDE_H) this.pos.y = gy + RIDE_H;
+      this.pos.y = gy + RIDE_H;                 // ride on the surface
     }
 
     // foot positions (used by the particle emitters)
@@ -147,7 +151,7 @@ class Player {
     V3.set(this.backPos, this.pos.x - this.dir.x * half, this.pos.y, this.pos.z - this.dir.z * half);
 
     this.speed = Math.hypot(this.vel.x, this.vel.z);
-    if (Level.cur.rails) this.checkGrind(fx);
+    if (Level.cur.rails) this.checkGrind(dt, fx);
     if (this.airborne) this.flipVis = this.flip;
     else this.flipVis = damp(this.flipVis, 0, 14, dt);
     if (this.yawVis) this.yawVis = Math.abs(this.yawVis) < 1e-3 ? 0 : damp(this.yawVis, 0, 12, dt);
@@ -224,12 +228,11 @@ class Player {
         Game.onPump();
       } else {
         // OLLIE
-        this.airborne = true; this.airTime = 0;
+        this._takeoff();
         this.vel.x = fX * vFwd + rX * vSide;
         this.vel.z = fZ * vFwd + rZ * vSide;
         this.vel.y = this.popSpeed(sp) * (0.80 + Math.max(this.load, 1) * 0.24);   // a crest never weakens the pop
         this.jumpBuffer = 0; this.pumpCooldown = 0.26;
-        this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false; this.autoYaw = null; this.airLabel = null;
         fx.puff(this.pos.x, this.groundY, this.pos.z, 0.7 + this.load * 0.3);
         Audio.ollie();
         Cam.shake = Math.max(Cam.shake, 0.05);
@@ -258,20 +261,17 @@ class Player {
     // planted; air only comes from an ollie (hold Space, release near the top).
     // Built kickers (park tables) still throw you off their lips.
     if (centripetal < -G * 1.05 && !Level.cur.absorbCrests) {
-      this.airborne = true; this.airTime = 0;
+      this._takeoff();
       this.vel.x = fX * vFwd + rX * vSide;
       this.vel.z = fZ * vFwd + rZ * vSide;
       this.vel.y = Math.max(0, (hB - hC) / e) * sp;   // leave along the ramp we're coming off (the slope behind)
-      this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false; this.autoYaw = null; this.airLabel = null;
       this.coyote = 0.25;                            // a jump released just after leaving the lip still pops
-      this.unload = 1;
       return;
     }
 
     this.vel.x = fX * vFwd + rX * vSide;
     this.vel.z = fZ * vFwd + rZ * vSide;
     this.vel.y = 0;
-    this.unload = 0;
 
     // chatter: off-piste snow is rougher than the corduroy
     const d = Math.abs(this.pos.x - centerX(this.pos.z));
@@ -335,6 +335,7 @@ class Player {
   /* ---------------- touchdown ---------------- */
   land(fx) {
     this.autoYaw = null;
+    this.coyote = 0;              // a crest's grace window must not survive into the next ollie
     const n = this.nrm;
     normalAt(this.pos.x, this.pos.z, n);
     const vDown = this.vel.y;
@@ -342,7 +343,6 @@ class Player {
     // touching down on a downslope that matches your arc is soft, flat-to-flat is not
     const vN = this.vel.x * n.x + this.vel.y * n.y + this.vel.z * n.z;
     const impact = clamp(-vN / 12, 0.05, 2.4);
-    this.landing = impact;
     this.airborne = false;
     this.airTime = 0;
     this.pos.y = heightAt(this.pos.x, this.pos.z) + RIDE_H;
@@ -392,7 +392,6 @@ class Player {
     }
     this.yawVis = angDelta(this.yaw, oldYaw);   // render-only: ease the board round, no pop
     this.updateBasis();
-    this.landedSwitch = switchLanding;
     this.vel.y = 0;
     this.flipVis = angDelta(0, this.flip);      // ease the last few degrees out visually
     this.flip = 0; this.flipRate = 0;
@@ -407,7 +406,7 @@ class Player {
   }
 
   /* ---------------- rails ---------------- */
-  checkGrind(fx) {
+  checkGrind(dt, fx) {
     if (this.grind || this.crashTimer > 0) return;
     const p = this.pos, feet = p.y - RIDE_H;
     for (const r of Level.cur.rails) {
@@ -419,7 +418,7 @@ class Player {
       const top = railTop(r, t);
       // coming down just beside the rail: pull gently onto its line (a forgiving "magnet")
       if (this.airborne && this.vel.y < 3 && Math.abs(side) < 1.2 && feet > top - 0.3 && feet < top + 2.5) {
-        const pull = Math.min(Math.abs(side), 4.5 / 60) * Math.sign(side);
+        const pull = Math.min(Math.abs(side), 4.5 * dt) * Math.sign(side);   // magnet: 4.5 m/s
         this.pos.x += r.uz * pull; this.pos.z -= r.ux * pull;
       }
       if (Math.abs(side) > 0.6) continue;
@@ -456,7 +455,7 @@ class Player {
     this.tuck = damp(this.tuck, 0.4, 6, dt);
     this.updateBasis();
     if (this.jumpBuffer > 0) this.jumpBuffer -= dt;
-    if (input.jump) this.jumpBuffer = 0.14;
+    if (input.jump) { this.jumpBuffer = 0.14; this.jumpCharge = input.charge; }   // pop height follows THIS hold
     // metal sparks from the bar
     if (Math.random() < 0.6) {
       const a = rnd(TAU);
@@ -469,11 +468,10 @@ class Player {
       let ang = Math.abs(angDelta(railYaw, this.yaw)); if (ang > Math.PI / 2) ang = Math.PI - ang;
       Game.onGrind(g.time, ang);
       this.grind = null;
-      this.airborne = true; this.airTime = 0;
+      this._takeoff();
       const popped = this.jumpBuffer > 0;
       this.vel.y = popped ? Math.max(5.2, this.popSpeed(g.s) * 0.9) : Math.max(1.2, this.vel.y);
       this.jumpBuffer = 0;
-      this.spin = 0; this.flip = 0; this.flipRate = 0; this.flipArmed = false; this.autoYaw = null; this.airLabel = null;
       if (!off) Audio.ollie(); else this.coyote = 0.25;
     }
     const half = BOARD_L * 0.5 * 0.86;

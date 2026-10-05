@@ -86,7 +86,7 @@ const Pad = {
     const [rx, ry] = stick(gp.axes[2], gp.axes[3]);
     const lt = V(6), rt = V(7);
     if (now.some(Boolean) || lx || ly || rx || ry || lt > 0.1 || rt > 0.1) {
-      if (!this.active) { this.active = true; }
+      this.active = true;
       if (Game.state === 'play' || Game.state === 'menu') document.body.classList.add('pad');
       Audio.init(); Audio.resume();
     }
@@ -125,7 +125,7 @@ const Pad = {
       if (nav) this._navT = 0.28;
       if (st === 'menu' && Game.customizing) {
         if (edge(1) || edge(9)) Customize.close();
-        else if (edge(2)) { Outfit.randomize(); Outfit.save(); Customize.sync(); }
+        else if (edge(2)) { Outfit.randomize(); Customize.sync(); }
         else if (edge(4) || edge(5)) this.cyclePreset(edge(5) ? 1 : -1);
       } else if (st === 'menu') {
         if (nav) this.cycleLevel(nav);
@@ -147,15 +147,13 @@ const Pad = {
   cycleLevel(d) {
     const i = PAD_LEVELS.indexOf(Level.cur.id);
     Game.selectLevel(PAD_LEVELS[(i + d + PAD_LEVELS.length) % PAD_LEVELS.length]);
-    Audio.ui && Audio.ui(500);
+    Audio.ui(500);
   },
 
   cyclePreset(d) {
     const names = Object.keys(OUTFIT_PRESETS);
-    const cur = Outfit.presetName ? Outfit.presetName() : null;
-    const i = Math.max(0, names.indexOf(cur));
-    Outfit.applyPreset(names[(i + d + names.length) % names.length]);
-    Outfit.save && Outfit.save();
-    Customize.sync && Customize.sync();
+    const i = Math.max(0, names.indexOf(Outfit.presetName()));
+    Outfit.applyPreset(names[(i + d + names.length) % names.length]);   // applyPreset saves
+    Customize.sync();
   }
 };

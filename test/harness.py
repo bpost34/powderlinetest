@@ -88,7 +88,7 @@ TESTS = r"""
   counts.board = check(buildBoard(), 'board');
   buildRider();
   for (var rk in RiderGeo) counts[rk] = check(RiderGeo[rk], rk);
-  counts.tree = check(buildTree(), 'tree');
+  counts.firTrunk = check(buildFirTrunk(0), 'firTrunk');
   counts.rock = check(buildRock(), 'rock');
   counts.pipe = check(buildPipe(), 'pipe');
   counts.gate = check(buildGate(), 'gate');
@@ -312,7 +312,7 @@ TESTS = r"""
   out.board  = winding(buildBoard(), 'board');
   for (var rk2 in RiderGeo) out[rk2] = winding(RiderGeo[rk2], rk2);
   out.banner = winding(buildBanner(), 'banner');
-  out.tree   = winding(buildTree(), 'tree');
+  out.firTrunk = winding(buildFirTrunk(0), 'firTrunk');
   out.rock   = winding(buildRock(), 'rock');
   out.pipe   = winding(buildPipe(), 'pipe');
   out.gate   = winding(buildGate(), 'gate');
