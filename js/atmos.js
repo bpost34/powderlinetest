@@ -9,13 +9,14 @@
 
 const ATMOS_PRESETS = {
   day: {
-    sunDir: [-0.42, 0.62, -0.55], sunColor: [1.30, 1.16, 0.94],
-    skyTint: [0.42, 0.55, 0.78], groundTint: [0.30, 0.35, 0.44],
-    fogColor: [0.72, 0.81, 0.93], fogDensity: 0.0026,
-    zenith: [0.13, 0.32, 0.68], horizon: [0.78, 0.86, 0.96], clear: [0.62, 0.74, 0.90],
-    haze: [0.76, 0.84, 0.95], mtnAmbLo: [0.34, 0.42, 0.58], mtnAmbHi: [0.62, 0.72, 0.90],
-    exposure: 1.02, bloomThresh: 1.05, stars: 0, cloudLum: 1, neon: 0,
-    trail: [0.42, 0.53, 0.74], trailAdd: false, flake: [1, 1, 1, 0.85], lamps: null, riderLight: null
+    // low, warm winter sun: long tree shadows and raking light that shows the snow relief
+    sunDir: [-0.55, 0.42, -0.62], sunColor: [1.75, 1.52, 1.18],
+    skyTint: [0.30, 0.40, 0.60], groundTint: [0.24, 0.28, 0.36],
+    fogColor: [0.66, 0.76, 0.90], fogDensity: 0.0022,
+    zenith: [0.10, 0.27, 0.62], horizon: [0.74, 0.83, 0.95], clear: [0.60, 0.72, 0.90],
+    haze: [0.70, 0.79, 0.92], mtnAmbLo: [0.26, 0.33, 0.48], mtnAmbHi: [0.52, 0.62, 0.82],
+    exposure: 0.92, bloomThresh: 1.05, stars: 0, cloudLum: 1, neon: 0,
+    trail: [0.58, 0.66, 0.84], trailAdd: false, flake: [1, 1, 1, 0.85], lamps: null, riderLight: null
   },
   night: {
     sunDir: [0.30, 0.55, -0.62], sunColor: [0.30, 0.38, 0.62],        // the moon
@@ -24,7 +25,7 @@ const ATMOS_PRESETS = {
     zenith: [0.008, 0.016, 0.05], horizon: [0.07, 0.10, 0.19], clear: [0.065, 0.09, 0.175],
     haze: [0.065, 0.09, 0.17], mtnAmbLo: [0.05, 0.06, 0.10], mtnAmbHi: [0.13, 0.16, 0.27],
     exposure: 1.3, bloomThresh: 0.7, stars: 1, cloudLum: 0.10, neon: 0,
-    trail: [0.10, 0.14, 0.30], trailAdd: false, flake: [0.80, 0.86, 1.0, 0.55],
+    trail: [0.45, 0.52, 0.72], trailAdd: false, flake: [0.80, 0.86, 1.0, 0.55],
     lamps: 'warm', riderLight: [0.30, 0.40, 0.65, 11], spray: [0.42, 0.48, 0.66]
   },
   neon: {
@@ -58,8 +59,10 @@ const Atmos = {
     this.mode = Level.cur.zen ? this.zenMode : 'day';
     this.p = ATMOS_PRESETS[this.mode];
     const p = this.p;
-    V3.norm(Sun.dir, V3(p.sunDir[0], p.sunDir[1], p.sunDir[2]));
-    Sun.color = p.sunColor.slice(); Sun.skyTint = p.skyTint.slice(); Sun.groundTint = p.groundTint.slice();
+    const sd = (this.mode === 'day' && Level.cur.sunDir) || p.sunDir;   // built courses want a high sun
+    V3.norm(Sun.dir, V3(sd[0], sd[1], sd[2]));
+    const ss = (this.mode === 'day' && Level.cur.sunScale) || 1;
+    Sun.color = p.sunColor.map(c => c * ss); Sun.skyTint = p.skyTint.slice(); Sun.groundTint = p.groundTint.slice();
     Sun.fogColor = p.fogColor.slice(); Sun.fogDensity = p.fogDensity;
     document.body.classList.toggle('night', this.mode !== 'day');
     const b = document.getElementById('atmosBtn');

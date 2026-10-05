@@ -7,7 +7,7 @@
 
 const GL = {
   canvas: null, gl: null, dpr: 1, w: 1, h: 1,
-  prog: {}, mesh: {}, vao: {}, buf: {},
+  prog: {}, mesh: {}, vao: {}, buf: {}, tex: {},
   shadowSize: 2048,
   time: 0,
   quality: 1,          // 1 = full, 0.75 = reduced
@@ -85,18 +85,18 @@ const GL = {
     return this.buf[name];
   },
   /* instance layout A: mat4 (loc base..base+3) + vec4 tint (base+4), stride 20 */
-  bindInstancing(prog, ibName, baseLoc, stride) {
+  bindInstancing(prog, ibName, baseLoc, stride, first = 0) {
     const gl = this.gl;
     const ib = this.buf[ibName];
     gl.bindBuffer(gl.ARRAY_BUFFER, ib.buf);
-    const F = stride * 4;
+    const F = stride * 4, o = first * F;        // first: start at instance #first (no baseInstance in WebGL2)
     for (let c = 0; c < 4; c++) {
       gl.enableVertexAttribArray(baseLoc + c);
-      gl.vertexAttribPointer(baseLoc + c, 4, gl.FLOAT, false, F, c * 16);
+      gl.vertexAttribPointer(baseLoc + c, 4, gl.FLOAT, false, F, o + c * 16);
       gl.vertexAttribDivisor(baseLoc + c, 1);
     }
     gl.enableVertexAttribArray(baseLoc + 4);
-    gl.vertexAttribPointer(baseLoc + 4, 4, gl.FLOAT, false, F, 64);
+    gl.vertexAttribPointer(baseLoc + 4, 4, gl.FLOAT, false, F, o + 64);
     gl.vertexAttribDivisor(baseLoc + 4, 1);
   },
 
@@ -151,6 +151,62 @@ const GL = {
     const t = { fb, color, depth, w, h };
     this.vao[name] = t;
     return t;
+  },
+
+  /* RGBA8 texture from raw pixels, mipmapped + anisotropic (foliage cards) */
+  makeTexture(name, img) {
+    const gl = this.gl;
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, img.W, img.H, 0, gl.RGBA, gl.UNSIGNED_BYTE, img.data);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const af = gl.getExtension('EXT_texture_filter_anisotropic');
+    if (af) gl.texParameterf(gl.TEXTURE_2D, af.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(af.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+    this.tex[name] = t;
+    return t;
+  },
+
+  /* Multisampled scene target (resolved into 'scene' each frame). MSAA is what
+     lets the foliage cards use alpha-to-coverage: soft, stable needle edges
+     with no sorting. Returns false (and we render single-sampled) if the
+     driver can't do multisampled float colour. */
+  makeMSTarget(w, h) {
+    const gl = this.gl;
+    const samples = Math.min(4, gl.getParameter(gl.MAX_SAMPLES) || 0);
+    if (samples < 2) return false;
+    const fb = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    const color = gl.createRenderbuffer();
+    gl.bindRenderbuffer(gl.RENDERBUFFER, color);
+    gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, this.hdr ? gl.RGBA16F : gl.RGBA8, w, h);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, color);
+    const depth = gl.createRenderbuffer();
+    gl.bindRenderbuffer(gl.RENDERBUFFER, depth);
+    gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.DEPTH_COMPONENT24, w, h);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depth);
+    const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    if (!ok) { gl.deleteFramebuffer(fb); gl.deleteRenderbuffer(color); gl.deleteRenderbuffer(depth); return false; }
+    this.vao.sceneMS = { fb, colorRB: color, depthRB: depth, w, h, samples };
+    return true;
+  },
+
+  /* where the 3D scene is drawn this frame */
+  sceneFB() { return this.vao.sceneMS ? this.vao.sceneMS.fb : this.vao.scene.fb; },
+
+  /* multisampled → texture, before post-processing reads it */
+  resolveScene() {
+    const ms = this.vao.sceneMS; if (!ms) return;
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, ms.fb);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.vao.scene.fb);
+    gl.blitFramebuffer(0, 0, ms.w, ms.h, 0, 0, ms.w, ms.h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
   },
 
   makeShadowMap(w, h) {
@@ -215,6 +271,12 @@ const GL = {
     this.upload('board', buildBoard());
     for (const k in RiderGeo) this.upload(k, RiderGeo[k]);
     this.upload('tree', buildTree());
+    for (let sh = 0; sh < FIR_SHAPES.length; sh++) {
+      this.upload('firFol' + sh, buildFirFoliage(sh, 0));
+      this.upload('firFolLo' + sh, buildFirFoliage(sh, 1));
+      this.upload('firTrunk' + sh, buildFirTrunk(sh));
+    }
+    this.makeTexture('needles', makeNeedleCanvas());
     this.upload('rock', buildRock());
     this.upload('pipe', buildPipe());
     this.upload('gate', buildGate());
@@ -225,7 +287,7 @@ const GL = {
     this.upload('lampPost', buildLampPost());
     this.upload('lampHead', buildLampHead());
 
-    this.instanceBuffer('props', 3000, 20);
+    this.instanceBuffer('props', 6000, 20);
     this.instanceBuffer('parts', 96, 20);
     this.instanceBuffer('particles', 3000, 8);
 
@@ -246,6 +308,8 @@ const GL = {
     gl.viewport(0, 0, w, h);
     // release the previous targets first, or every resize leaks three
     // textures + fbo + rbo at full display resolution
+    const ms = this.vao.sceneMS;
+    if (ms) { gl.deleteFramebuffer(ms.fb); gl.deleteRenderbuffer(ms.colorRB); gl.deleteRenderbuffer(ms.depthRB); delete this.vao.sceneMS; }
     for (const nm of ['scene', 'bloomA', 'bloomB']) {
       const t = this.vao[nm]; if (!t) continue;
       if (t.color) gl.deleteTexture(t.color);
@@ -254,11 +318,21 @@ const GL = {
       delete this.vao[nm];
     }
     const bw = Math.max(2, w >> 1), bh = Math.max(2, h >> 1);
-    this.makeTarget('scene', w, h, { hdr: this.hdr, depth: true });
+    const msaa = this.msaa !== false && this.makeMSTarget(w, h);
+    this.makeTarget('scene', w, h, { hdr: this.hdr, depth: !msaa });
     this.makeTarget('bloomA', bw, bh, { hdr: this.hdr });
     this.makeTarget('bloomB', bw, bh, { hdr: this.hdr });
   },
   maxDPR() { return this.quality < 1 ? 1.0 : 1.75; },
+
+  /* called by the adaptive-quality monitor in game.js */
+  degrade(level) {
+    if (level >= 1) this.msaa = false;
+    if (level >= 2) { this.quality = 0.75; Render.TREE_LOD_DIST = 55; }
+    this.w = 0;                                   // force the targets to rebuild
+    this.resize();
+    if (window.console) console.info('POWDER LINE: lowered graphics quality to step ' + level);
+  },
 
   /* chunk mesh → GPU, cached by chunk+lod identity */
   /* free every cached terrain chunk (level switch) */
@@ -305,6 +379,7 @@ const LIGHTING_GLSL = `
   uniform float uFogDensity;
   uniform vec3 uFogColor;
   uniform float uSparkle;
+  uniform float uDetail;     // 1 = full surface detail, 0 = low-spec devices
   // soft point lights (night lamps, rider glow): xyz = position, w = radius / rgb = colour
   uniform vec4 uPL[8]; uniform vec4 uPLc[8]; uniform int uPLn;
   // neon mode: grid traced on the snow
@@ -328,6 +403,15 @@ const LIGHTING_GLSL = `
     for(int i=0;i<4;i++){ s += vnoise(p)*a; p *= 2.03; a *= 0.5; }
     return s/0.9375;
   }
+  // 3D value noise: no stretching on steep walls (2D xz noise smears into streaks)
+  float hash13(vec3 p3){ p3 = fract(p3 * 0.1031); p3 += dot(p3, p3.zyx + 31.32); return fract((p3.x + p3.y) * p3.z); }
+  float vnoise3(vec3 p){
+    vec3 i = floor(p), f = fract(p); vec3 u = f*f*(3.0-2.0*f);
+    float a = mix(mix(hash13(i), hash13(i+vec3(1,0,0)), u.x), mix(hash13(i+vec3(0,1,0)), hash13(i+vec3(1,1,0)), u.x), u.y);
+    float b = mix(mix(hash13(i+vec3(0,0,1)), hash13(i+vec3(1,0,1)), u.x), mix(hash13(i+vec3(0,1,1)), hash13(i+vec3(1,1,1)), u.x), u.y);
+    return mix(a, b, u.z);
+  }
+  float fbm3(vec3 p){ return (vnoise3(p) * 0.5 + vnoise3(p * 2.03 + 7.1) * 0.25 + vnoise3(p * 4.1 + 3.3) * 0.125) / 0.875; }
 
   float shadowFactor(vec3 wp, float ndl){
     vec4 lp = uLightVP * vec4(wp, 1.0);
@@ -421,13 +505,50 @@ GL.buildShaders = function () {
   const TERRAIN_FS = LIGHTING_GLSL + `
     in vec3 vNormal; in vec3 vColor; in vec3 vWorld;
     out vec4 fragColor;
+    // wind-packed snow relief: soft drifts plus sastrugi ripples (height in metres)
+    float snowRelief(vec2 q){
+      float drift = fbm(q * 0.22) * 0.30;
+      float warp = fbm(q * 0.05) * 7.0;
+      float rip = sin(dot(q, vec2(0.83, 0.55)) * 2.1 + warp) * 0.5 + 0.5;
+      rip = rip * rip * 0.035 * (0.4 + fbm(q * 0.11));
+      return drift + rip + vnoise(q * 2.3) * 0.012;
+    }
     void main(){
       vec3 n = normalize(vNormal);
-      // cheap cavity/contact AO from slope curvature proxy
-      float ao = 0.72 + 0.28 * clamp(n.y, 0.0, 1.0);
-      vec3 alb = snowAlbedo(vWorld, n, ao);
       float dist = length(uCamPos - vWorld);
-      vec3 col = shade(alb, n, vWorld, ao, 0.55, smoothstep(0.55, 1.0, n.y));
+      float forest = vColor.r, cav = vColor.g, wall = vColor.b;
+      // micro relief → perturbed normal (fades out with distance, where it would alias)
+      float rel = (1.0 - smoothstep(25.0, 90.0, dist)) * uDetail;
+      if(rel > 0.0){
+        vec2 q = vWorld.xz; float e = 0.12;
+        float h0 = snowRelief(q);
+        vec2 g = vec2(snowRelief(q + vec2(e, 0.0)) - h0, snowRelief(q + vec2(0.0, e)) - h0) / e;
+        n = normalize(n + vec3(-g.x, 0.0, -g.y) * rel * 0.55);
+      }
+      // hollows hold cool shadow, crests catch light
+      float ao = clamp(0.80 + (cav - 0.5) * 0.9, 0.55, 1.05) * (0.86 + 0.14 * clamp(n.y, 0.0, 1.0));
+      vec3 alb = snowAlbedo(vWorld, n, ao);
+      // valley walls: rock bands and gullies break through the snow on the steep parts
+      float steep = 1.0 - clamp(n.y, 0.0, 1.0);
+      float rock = 0.0;
+      if(wall > 0.0 && steep > 0.15){
+        float strata = fbm3(vec3(vWorld.x * 0.03, vWorld.y * 0.20, vWorld.z * 0.03));
+        float gully = vnoise3(vec3(vWorld.x * 0.02, vWorld.y * 0.015, vWorld.z * 0.07));
+        rock = wall * smoothstep(0.30, 0.55, steep + (strata - 0.5) * 0.45) * smoothstep(0.32, 0.6, gully);
+        vec3 rockCol = mix(vec3(0.20, 0.20, 0.22), vec3(0.38, 0.37, 0.38), vnoise3(vWorld * 0.35));
+        alb = mix(alb, rockCol, clamp(rock, 0.0, 1.0) * 0.9);
+      }
+      // distant forest canopy: past the real trees' range the cover is painted on,
+      // as clumped dark crowns dusted with snow
+      float fd = forest * smoothstep(60.0, 150.0, dist);
+      if(fd > 0.0){
+        float clump = fbm3(vWorld * 0.42) + vnoise3(vWorld * 0.045) * 0.45;
+        float canopy = smoothstep(0.44, 0.62, clump) * fd;
+        vec3 crown = mix(vec3(0.040, 0.068, 0.052), vec3(0.50, 0.55, 0.58), smoothstep(0.6, 0.9, vnoise3(vWorld * 1.1)) * 0.5);
+        alb = mix(alb, crown, canopy * 0.92);
+      }
+      vec3 col = shade(alb, n, vWorld, ao, 0.55, smoothstep(0.55, 1.0, n.y) * (1.0 - rock));
+      col *= mix(1.0, ao, 0.6);
       // groomed corduroy banding down the piste
       float cx = vWorld.x; // visual only
       col *= 1.0 + 0.022 * sin(cx * 1.1 + vWorld.z * 0.02);
@@ -490,6 +611,76 @@ GL.buildShaders = function () {
       col = applyFog(col, vWorld, normalize(uCamPos - vWorld), dist * (1.0 - min(vEmis, 1.0) * 0.6));
       fragColor = vec4(col, 1.0);
     }`;
+
+  /* ---------- card foliage (instanced firs) ----------
+     colour attribute = (u, v, ao); normal = the card's face normal. A soft
+     volume normal (radial + up from the trunk) does most of the lighting so
+     the crown reads as one rounded mass. Alpha-to-coverage under MSAA gives
+     ragged, stable needle edges; without MSAA it falls back to alpha test. */
+  const FOL_VS = V_HEAD + `
+    out vec3 vNormal; out vec3 vVol; out vec3 vUVA; out vec3 vWorld; out vec3 vTint;
+    in vec4 aIM0; in vec4 aIM1; in vec4 aIM2; in vec4 aIM3; in vec4 aTint;
+    uniform float uWind, uTime;
+    void main(){
+      mat4 M = mat4(aIM0, aIM1, aIM2, aIM3);
+      vec3 p = aPos;
+      // branch tips bob a little in the wind (more out on the tips, higher up)
+      float sway = sin(uTime * 1.3 + aIM3.x * 0.37 + aIM3.z * 0.21 + p.y * 0.6) * uWind;
+      p.y += sway * aColor.x * 0.05;
+      p.xz += sway * aColor.x * 0.035 * normalize(p.xz + 1e-4);
+      vec4 wp = uModel * M * vec4(p, 1.0);
+      vWorld = wp.xyz;
+      vNormal = normalize(mat3(M) * aNormal);
+      vec3 radial = vec3(p.x, 0.0, p.z);
+      float rl = length(radial);
+      vVol = normalize(mat3(M) * (rl > 1e-3 ? radial / rl * 0.85 + vec3(0.0, 0.75, 0.0) : vec3(0.0, 1.0, 0.0)));
+      vUVA = aColor;
+      vTint = aTint.rgb;
+      gl_Position = uProj * uView * wp;
+    }`;
+  const FOL_FS = LIGHTING_GLSL + `
+    in vec3 vNormal; in vec3 vVol; in vec3 vUVA; in vec3 vWorld; in vec3 vTint;
+    out vec4 fragColor;
+    uniform sampler2D uNeedle; uniform float uA2C, uSnowLoad;
+    void main(){
+      vec4 tx = texture(uNeedle, vUVA.xy);
+      // mip levels average the coverage down, thinning distant crowns: lift it back
+      vec2 tp = vUVA.xy * vec2(textureSize(uNeedle, 0));
+      float lod = max(0.0, 0.5 * log2(max(dot(dFdx(tp), dFdx(tp)), dot(dFdy(tp), dFdy(tp)))));
+      float a = tx.a * (1.0 + lod * 0.32);
+      if(uA2C > 0.5) a = (a - 0.45) / max(fwidth(a), 1e-4) + 0.5;
+      else if(a < 0.5) discard;
+      vec3 V = normalize(uCamPos - vWorld);
+      vec3 cn = normalize(vNormal);
+      float top = step(0.0, dot(cn, V));               // looking at the upper face?
+      float ao = vUVA.z;
+      vec3 needle = mix(vec3(0.022, 0.050, 0.036), vec3(0.070, 0.135, 0.085), tx.r) * vTint;
+      needle = mix(needle, vec3(0.16, 0.11, 0.08), tx.b * 0.8);
+      float snow = clamp(tx.g * mix(0.15, 0.85, top) * uSnowLoad * (0.55 + 0.45 * ao), 0.0, 1.0);
+      vec3 alb = mix(needle, vec3(0.90, 0.94, 1.0), snow);
+      vec3 fn = top > 0.5 ? cn : -cn;
+      // undersides lean on the soft volume normal (they catch bounce light off the snow)
+      vec3 n = normalize(mix(normalize(vVol), fn, top > 0.5 ? 0.30 + snow * 0.45 : 0.12));
+      vec3 col = shade(alb, n, vWorld, ao, mix(0.92, 0.6, snow), snow * 0.5);
+      col *= mix(ao, 1.0, 0.5 + snow * 0.4);
+      float dist = length(uCamPos - vWorld);
+      col = applyFog(col, vWorld, V, dist);
+      fragColor = vec4(col, clamp(a, 0.0, 1.0));
+    }`;
+  const SHADOW_FOL_VS = V_HEAD + `
+    uniform mat4 uLightVP;
+    out vec2 vUV;
+    in vec4 aIM0; in vec4 aIM1; in vec4 aIM2; in vec4 aIM3; in vec4 aTint;
+    void main(){
+      mat4 M = mat4(aIM0, aIM1, aIM2, aIM3);
+      vUV = aColor.xy;
+      gl_Position = uLightVP * (uModel * M * vec4(aPos, 1.0));
+    }`;
+  const SHADOW_FOL_FS = `
+    precision highp float;
+    in vec2 vUV; out vec4 fragColor;
+    uniform sampler2D uNeedle;
+    void main(){ if(texture(uNeedle, vUV).a < 0.4) discard; fragColor = vec4(1.0); }`;
 
   /* ---------- shadow depth ---------- */
   const SHADOW_VS = V_HEAD + `
@@ -653,6 +844,8 @@ GL.buildShaders = function () {
   this.prog.inst = this.link(INST_VS, INST_FS, 'inst');
   this.prog.shadow = this.link(SHADOW_VS, SHADOW_FS, 'shadow');
   this.prog.shadowInst = this.link(SHADOW_INST_VS, SHADOW_FS, 'shadowInst');
+  this.prog.foliage = this.link(FOL_VS, FOL_FS, 'foliage');
+  this.prog.shadowFol = this.link(SHADOW_FOL_VS, SHADOW_FOL_FS, 'shadowFol');
   this.prog.sky = this.link(SKY_VS, SKY_FS, 'sky');
   this.prog.particle = this.link(PART_VS, PART_FS, 'particle');
   this.prog.bright = this.link(FS_VS, BRIGHT_FS, 'bright');

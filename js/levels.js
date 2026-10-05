@@ -108,6 +108,7 @@ Level.define({
   id: 'pipe', name: 'Half-pipe', blurb: 'Competition pipe · carve the walls · boost the lip',
   clearHalf: 26, gates: false, finishZ: PIPE.LEN + 70, spawnZ: 4, airMin: 0.6,
   spawnSpeed: 12.5, wallAssist: 0.8,
+  sunDir: [-0.30, 0.78, -0.45], sunScale: 0.8,   // high sun: the pipe floor isn't lost in the wall's shadow
   lod: [80, 40, 20],
   cam: { lockHeading: true, dist: 1.25, elev: 0.58 },
   centerX: () => 0,
@@ -189,6 +190,7 @@ Level.define({
   id: 'park', name: 'Park', blurb: 'Tabletops · rollers · mini-pipe · rails to grind',
   clearHalf: 30, gates: false, finishZ: PARK.LEN, spawnZ: 4, airMin: 0.7,
   spawnSpeed: 9, wallAssist: 0.8,
+  sunDir: [-0.30, 0.78, -0.45], sunScale: 0.8,
   lod: [80, 40, 20],
   cam: { lockHeading: false, dist: 1.1, elev: 0.48 },
   rails: PARK_RAILS,

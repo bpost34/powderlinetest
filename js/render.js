@@ -224,20 +224,22 @@ const Render = {
       const q = P.parts[i];
       drawMesh(sp, q.mesh, q.mat);
     }
-    // trees near the rider
+    // trees: trunks, then the needle cards (alpha-tested, both faces)
     const ip = GL.prog.shadowInst;
     ip.use();
     Sun.setUniforms(ip);
     gl.uniformMatrix4fv(ip.uModel, false, IDENT);
-    const n = this.fillPropBuffer(P);
-    if (n > 0) {
-      const ib = GL.buf.props;
-      const m = GL.mesh.tree;
-      gl.bindVertexArray(m.vao);          // VAO first: attribute state is per-VAO
-      GL.bindInstancing(ip, 'props', 3, 20);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, ib.data, 0, n * 20);
-      gl.drawElementsInstanced(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0, n);
-    }
+    const groups = this.fillTreeBuffer(P);
+    this.drawTrees(ip, groups, 'trunk');
+    const fp = GL.prog.shadowFol.use();
+    Sun.setUniforms(fp);
+    gl.uniformMatrix4fv(fp.uModel, false, IDENT);
+    gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, GL.tex.needles);
+    gl.uniform1i(fp.uNeedle, 2);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.disable(gl.CULL_FACE);
+    this.drawTrees(fp, groups, 'shadow');
+    gl.enable(gl.CULL_FACE);
     gl.cullFace(gl.BACK);
   },
 
@@ -250,35 +252,80 @@ const Render = {
     return -1;
   },
 
-  /* pack trees into the shared instance buffer; also refreshes this.rocks */
-  fillPropBuffer(P) {
+  /* Pack visible trees into the shared instance buffer, grouped as
+     [shape0 near | shape0 far | shape1 near | shape1 far] so each mesh draws
+     one contiguous range. Also refreshes this.rocks. Cached per frame (the
+     shadow and main passes share it). */
+  TREE_LOD_DIST: 95,
+  fillTreeBuffer(P) {
+    if (this._treeFrame === Game.frameNo && this._groups) return this._groups;
+    this._treeFrame = Game.frameNo;
     const ib = GL.buf.props, d = ib.data;
-    let n = 0;
     const span = VIEW_R * CHUNK;
     World.propsNear(P.pos.x, P.pos.z, span, this.trees, this.rocks);
-    const m = _m4.a;
+    const buckets = [[], [], [], []];
+    const cx = Cam.pos.x, cz = Cam.pos.z, L2 = this.TREE_LOD_DIST * this.TREE_LOD_DIST;
     for (const t of this.trees) {
-      if (n >= ib.max) break;
-      const sway = Math.sin(GL.time * 1.1 + t.sway) * 0.022 * clamp(P.speed / 12, 0, 1);
-      const c = Math.cos(t.rot + sway), s = Math.sin(t.rot + sway);
-      const sc = t.sc;
-      const o = n * 20;
-      // column-major: scale * rotY
-      d[o] = c * sc;      d[o + 1] = 0;        d[o + 2] = -s * sc;  d[o + 3] = 0;
-      d[o + 4] = 0;       d[o + 5] = sc;       d[o + 6] = 0;        d[o + 7] = 0;
-      d[o + 8] = s * sc;  d[o + 9] = 0;        d[o + 10] = c * sc;  d[o + 11] = 0;
-      d[o + 12] = t.x;    d[o + 13] = t.y - 0.15; d[o + 14] = t.z;  d[o + 15] = 1;
-      const shade = 0.86 + hash2(Math.floor(t.x), Math.floor(t.z), 77) * 0.28;
-      d[o + 16] = shade; d[o + 17] = shade; d[o + 18] = shade; d[o + 19] = 1;
-      n++;
+      const far = (t.x - cx) * (t.x - cx) + (t.z - cz) * (t.z - cz) > L2 ? 1 : 0;
+      buckets[(t.shape || 0) * 2 + far].push(t);
     }
-    return n;
+    const groups = [];
+    let n = 0;
+    for (let b = 0; b < 4; b++) {
+      const first = n;
+      for (const t of buckets[b]) {
+        if (n >= ib.max) break;
+        const c = Math.cos(t.rot), s = Math.sin(t.rot), sc = t.sc;
+        const o = n * 20;
+        // column-major: scale * rotY (slightly taller than wide for variety)
+        d[o] = c * sc;      d[o + 1] = 0;        d[o + 2] = -s * sc;  d[o + 3] = 0;
+        d[o + 4] = 0;       d[o + 5] = sc * (t.tall || 1); d[o + 6] = 0; d[o + 7] = 0;
+        d[o + 8] = s * sc;  d[o + 9] = 0;        d[o + 10] = c * sc;  d[o + 11] = 0;
+        d[o + 12] = t.x;    d[o + 13] = t.y - 0.1; d[o + 14] = t.z;   d[o + 15] = 1;
+        const shade = 0.78 + hash2(Math.floor(t.x), Math.floor(t.z), 77) * 0.42;
+        d[o + 16] = shade * (0.95 + t.sway * 0.016); d[o + 17] = shade; d[o + 18] = shade * 0.96; d[o + 19] = 1;
+        n++;
+      }
+      groups.push({ shape: b >> 1, far: b & 1, first, count: n - first });
+    }
+    if (n) {
+      const gl = GL.gl;
+      gl.bindBuffer(gl.ARRAY_BUFFER, ib.buf);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, d, 0, n * 20);
+    }
+    this._groups = groups;
+    return groups;
+  },
+
+  /* what: 'trunk' (opaque trunks), 'foliage' / 'shadow' (needle cards) */
+  drawTrees(prog, groups, what) {
+    const gl = GL.gl;
+    for (let sh = 0; sh < FIR_SHAPES.length; sh++) {
+      if (what === 'trunk') {
+        const g0 = groups[sh * 2], g1 = groups[sh * 2 + 1];
+        const cnt = g0.count + g1.count;
+        if (!cnt) continue;
+        const m = GL.mesh['firTrunk' + sh];
+        gl.bindVertexArray(m.vao);
+        GL.bindInstancing(prog, 'props', 3, 20, g0.first);
+        gl.drawElementsInstanced(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0, cnt);
+        continue;
+      }
+      for (let far = 0; far < 2; far++) {
+        const g = groups[sh * 2 + far];
+        if (!g.count) continue;
+        const m = GL.mesh[(far ? 'firFolLo' : 'firFol') + sh];
+        gl.bindVertexArray(m.vao);
+        GL.bindInstancing(prog, 'props', 3, 20, g.first);
+        gl.drawElementsInstanced(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0, g.count);
+      }
+    }
   },
 
   /* ---------- pass 2: main scene ---------- */
   scene(P, fx, state) {
     const gl = GL.gl;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, GL.vao.scene.fb);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, GL.sceneFB());
     gl.viewport(0, 0, GL.w, GL.h);
     const ap = Atmos.p;
     gl.clearColor(ap.clear[0], ap.clear[1], ap.clear[2], 1);
@@ -314,6 +361,7 @@ const Render = {
     const wp = GL.prog.world.use();
     Sun.setUniforms(wp);
     gl.uniform1f(wp.uSparkle, 1.0);
+    gl.uniform1f(wp.uDetail, GL.quality < 1 ? 0 : 1);
     gl.uniformMatrix4fv(wp.uModel, false, IDENT);
     for (const c of World.visible) {
       const lod = this.pickLod(c);
@@ -332,14 +380,26 @@ const Render = {
     Sun.setUniforms(ip);
     gl.uniform1f(ip.uSparkle, 0.0);
     gl.uniformMatrix4fv(ip.uModel, false, IDENT);
-    const n = this.fillPropBuffer(P);
-    if (n > 0) {
-      const ib = GL.buf.props;
-      const m = GL.mesh.tree;
-      gl.bindVertexArray(m.vao);
-      GL.bindInstancing(ip, 'props', 3, 20);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, ib.data, 0, n * 20);
-      gl.drawElementsInstanced(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0, n);
+    const groups = this.fillTreeBuffer(P);
+    this.drawTrees(ip, groups, 'trunk');
+    {
+      const fp = GL.prog.foliage.use();
+      Sun.setUniforms(fp);
+      gl.uniform1f(fp.uSparkle, 1.0);
+      gl.uniformMatrix4fv(fp.uModel, false, IDENT);
+      gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, GL.tex.needles);
+      gl.uniform1i(fp.uNeedle, 2);
+      gl.activeTexture(gl.TEXTURE0);
+      const a2c = !!GL.vao.sceneMS;
+      gl.uniform1f(fp.uA2C, a2c ? 1 : 0);
+      gl.uniform1f(fp.uSnowLoad, Level.cur.zen && Atmos.mode === 'neon' ? 0.6 : 1.0);
+      gl.uniform1f(fp.uWind, 0.6);
+      gl.disable(gl.CULL_FACE);
+      if (a2c) gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
+      this.drawTrees(fp, groups, 'foliage');
+      if (a2c) gl.disable(gl.SAMPLE_ALPHA_TO_COVERAGE);
+      gl.enable(gl.CULL_FACE);
+      ip.use();
     }
     // rocks
     if (this.rocks.length) {
@@ -492,6 +552,7 @@ const Render = {
   /* ---------- pass 3+4: bloom + composite ---------- */
   post(speedN, flash, desat) {
     const gl = GL.gl;
+    GL.resolveScene();
     const bw = GL.vao.bloomA.w, bh = GL.vao.bloomA.h;
 
     gl.disable(gl.DEPTH_TEST);

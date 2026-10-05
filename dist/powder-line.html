@@ -752,21 +752,25 @@ class Chunk {
   /* trees + boulders, deterministic per chunk */
   scatter() {
     const t = [], b = [];
-    const n = 46;
+    const n = Level.cur.height === mtnHeightAt ? 78 : 46;
     for (let i = 0; i < n; i++) {
       const rx = hash2(this.ix * 31 + i, this.iz * 17 + 3, 101);
       const rz = hash2(this.ix * 13 + i, this.iz * 29 + 7, 202);
       const x = this.x0 + rx * CHUNK, z = this.z0 + rz * CHUNK;
       const cx = centerX(z), d = Math.abs(x - cx);
       const clear = Level.cur.clearHalf;
-      if (d < clear || d > WALL_START + 46) continue;
+      // the forest climbs the valley walls (thinning out toward the ridgeline)
+      if (d < clear || d > WALL_START + 125) continue;
       const y = heightAt(x, z);
       const nz = normalAt(x, z, { x: 0, y: 0, z: 0 });
-      if (nz.y < 0.78) continue;
-      const dense = sstep(clear, clear + 12, d);
+      if (nz.y < 0.5) continue;
+      const wall = sstep(WALL_START, WALL_START + 125, d);
+      const dense = sstep(clear, clear + 12, d) * (1 - wall * 0.55) * sstep(0.5, 0.62, nz.y)
+        * (0.55 + 0.45 * fbm(x * 0.012, z * 0.012, 2, 31) * 2 - 0.45);     // glades and stands
       if (hash2(i, this.ix + this.iz * 7, 303) > dense * 0.92) continue;
       const sc = 0.75 + hash2(i, 9, 404) * 0.85;
-      t.push({ x, y, z, sc, rot: hash2(i, 5, 505) * TAU, sway: hash2(i, 7, 606) * TAU });
+      t.push({ x, y, z, sc, rot: hash2(i, 5, 505) * TAU, sway: hash2(i, 7, 606) * TAU,
+               shape: hash2(i, this.ix * 3 + this.iz, 707) < 0.55 ? 0 : 1, tall: 0.9 + hash2(i, 11, 808) * 0.25 });
     }
     // occasional boulders on the rideable slope beside the run — never up on the
     // valley walls (where they read as floating snowballs) or on steep ground.
@@ -808,9 +812,11 @@ class Chunk {
     // per vertex that normalAt() would have made (~5x fewer evals, and this
     // loop is what made prewarm cost seconds).
     const skirt = cell * 1.2 + 0.25;
+    const mtn = Level.cur.height === mtnHeightAt, clear = Level.cur.clearHalf || 0;
     let p = 0;
     for (let j = 0; j < n; j++) {
       const gz = j - 1;
+      const zRow = this.z0 + gz * cell, cxRow = centerX(zRow);
       for (let i = 0; i < n; i++) {
         const gx = i - 1;
         const idx = j * n + i;
@@ -825,7 +831,19 @@ class Chunk {
         if (gx < 0 || gz < 0 || gx > res || gz > res) y -= skirt;   // drop the skirt ring
         v[p++] = this.x0 + gx * cell; v[p++] = y; v[p++] = this.z0 + gz * cell;
         v[p++] = nx / l; v[p++] = ny / l; v[p++] = nz / l;
-        v[p++] = 1; v[p++] = 1; v[p++] = 1;   // albedo comes from the shader
+        // colour carries terrain hints for the shader (albedo itself is procedural):
+        //  r = forest cover (matches the tree scatter; painted as distant canopy)
+        //  g = cavity: 0.5 flat, < 0.5 hollow, > 0.5 crest (from the height Laplacian)
+        //  b = valley-wall factor (exposed rock bands)
+        const xv = this.x0 + gx * cell, d = Math.abs(xv - cxRow);
+        let forest = 0, wall = 0;
+        if (mtn) {
+          wall = sstep(WALL_START, WALL_START + 70, d);
+          forest = sstep(clear + 4, clear + 20, d) * (1 - sstep(WALL_START + 70, WALL_START + 150, d))
+            * sstep(0.48, 0.62, ny / l) * clamp(0.35 + fbm(xv * 0.012, zRow * 0.012, 2, 31) * 1.1, 0, 1);
+        }
+        const lap = (h[iL] + h[iR] + h[jD] + h[jU] - 4 * h[idx]) / (cell * cell);
+        v[p++] = forest; v[p++] = clamp(0.5 - lap * 1.6, 0, 1); v[p++] = wall;
       }
     }
     // n×n vertices (including the skirt ring) → (n-1)² quads
@@ -1413,6 +1431,230 @@ function buildFsTri() {
   return g;
 }
 
+/* =====================================================================
+   CARD FOLIAGE CONIFERS
+   Each fir is a trunk plus dozens of drooping "branch cards": bent quads
+   textured with a procedurally painted needle spray (see makeNeedleCanvas),
+   rendered alpha-to-coverage so the silhouette is ragged and organic
+   instead of faceted. Vertex layout is the shared STRIDE one, re-purposed:
+     normal = the card's own (upward-ish) face normal
+     colour = (u along the branch, v across it, ambient occlusion)
+   The shader derives a soft "volume" normal from the position (radial + up),
+   so the crown shades like one rounded mass rather than flat cards.
+   ===================================================================== */
+function seededRand(seed) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6D2B79F5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* shapes: 0 = spruce (tall, narrow, heavy droop), 1 = fir (fuller, layered) */
+const FIR_SHAPES = [
+  { H: 6.2, R: 1.85, whorls: 16, per: 9, droop: 0.42, lift: 0.10, curve: 1.0 },
+  { H: 5.4, R: 2.15, whorls: 13, per: 10, droop: 0.26, lift: 0.18, curve: 0.8 }
+];
+
+function buildFirFoliage(shape, lod) {
+  const S = FIR_SHAPES[shape], g = Geo(), R = seededRand(1337 + shape * 71 + lod * 7);
+  const whorls = lod ? Math.ceil(S.whorls * 0.5) : S.whorls;
+  const per = lod ? Math.max(4, S.per - 3) : S.per;
+  const segs = lod ? 1 : 3;
+  const y0 = S.H * 0.07, y1 = S.H * 0.93;
+  // two layers: the outer branches, then (full detail only) a shorter, darker
+  // inner fill so the trunk doesn't show through the gaps
+  for (let layer = 0; layer < (lod ? 1 : 2); layer++)
+  for (let w = 0; w < whorls; w++) {
+    const t = w / (whorls - 1);                     // 0 = bottom whorl, 1 = top
+    const y = lerp(y0, y1, Math.pow(t, 0.92));
+    const Rw = (S.R * Math.pow(1 - t, 0.95) + 0.22) * (lod ? 1.08 : 1) * (layer ? 0.55 : 1);
+    const n = Math.max(3, Math.round(per * (1 - t * 0.45) * (layer ? 0.6 : 1)));
+    const twist = R() * TAU;
+    for (let b = 0; b < n; b++) {
+      const a = twist + (b + R() * 0.5) / n * TAU;
+      const L = Rw * (0.82 + R() * 0.32);
+      const W = clamp(L * 0.85, 0.55, 1.7) * (lod ? 1.3 : 1);
+      const ca = Math.cos(a), sa = Math.sin(a);
+      const px = -sa, pz = ca;                      // across the branch (horizontal)
+      const roll = (R() - 0.5) * 0.5;               // tilt the card around its length
+      const droop = S.droop * (0.7 + R() * 0.6) * (0.6 + 0.4 * (1 - t));
+      const ao = lerp(0.5, 1.0, Math.pow(t, 0.7)) * (layer ? 0.6 : 1);
+      const base = g.v.length / STRIDE;
+      for (let k = 0; k <= segs; k++) {
+        const u = k / segs;
+        // branch rises a touch off the trunk, then sags toward the tip
+        const r = 0.06 + u * L;
+        const dy = S.lift * u * L - droop * Math.pow(u, 1.0 + S.curve) * L;
+        const cx = ca * r, cy = y + dy, cz = sa * r;
+        // card frame: along = outward (with the sag slope), across = horizontal + roll
+        const slope = S.lift - droop * (1 + S.curve) * Math.pow(u, S.curve);
+        let ax = px, ay = roll, az = pz;
+        const half = W * 0.5 * (0.35 + 0.65 * Math.sin(Math.min(1, u * 1.15 + 0.12) * Math.PI * 0.5 + 0.0));
+        // face normal = across × along, oriented upward
+        let lx = ca, ly = slope, lz = sa;
+        let nx = ay * lz - az * ly, ny = az * lx - ax * lz, nz = ax * ly - ay * lx;
+        if (ny < 0) { nx = -nx; ny = -ny; nz = -nz; }
+        const nl = Math.hypot(nx, ny, nz) || 1; nx /= nl; ny /= nl; nz /= nl;
+        const occ = ao * lerp(0.55, 1.0, u);
+        geoVert(g, cx - ax * half, cy - ay * half, cz - az * half, nx, ny, nz, u, 0, occ);
+        geoVert(g, cx + ax * half, cy + ay * half, cz + az * half, nx, ny, nz, u, 1, occ);
+      }
+      for (let k = 0; k < segs; k++) {
+        const i0 = base + k * 2;
+        geoQuad(g, i0, i0 + 2, i0 + 3, i0 + 1);
+      }
+    }
+  }
+  // leader: two crossed vertical cards at the very top
+  const top = S.H, lh = S.H * 0.16;
+  for (let c = 0; c < 2; c++) {
+    const a = c * Math.PI * 0.5, ax = Math.cos(a) * 0.32, az = Math.sin(a) * 0.32;
+    const base = g.v.length / STRIDE;
+    const nx = -Math.sin(a), nz = Math.cos(a);
+    geoVert(g, -ax, top - lh, -az, nx, 0.3, nz, 0.05, 0, 0.95);
+    geoVert(g, ax, top - lh, az, nx, 0.3, nz, 0.05, 1, 0.95);
+    geoVert(g, ax * 0.2, top + 0.15, az * 0.2, nx, 0.3, nz, 0.98, 1, 1.0);
+    geoVert(g, -ax * 0.2, top + 0.15, -az * 0.2, nx, 0.3, nz, 0.98, 0, 1.0);
+    geoQuad(g, base, base + 1, base + 2, base + 3);
+  }
+  return g;
+}
+
+function buildFirTrunk(shape) {
+  const S = FIR_SHAPES[shape], g = Geo();
+  geoCyl(g, 0, -0.3, 0, 0.17, 0.03, S.H * 0.72, [0.15, 0.11, 0.085], 7, false, false);
+  return g;
+}
+
+/* Paint one needle spray into a canvas. Channels of the result:
+   R = needle shade variation, G = snow load (upper face only, in the shader),
+   B = bare twig, A = coverage. u (x) runs trunk → tip, v (y) across. */
+function makeNeedleCanvas(W = 256, H = 128) {
+  const R = seededRand(4242);
+  const mk = () => { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; };
+  const cN = mk(), cS = mk(), cT = mk();
+  const n = cN.getContext('2d'), s = cS.getContext('2d'), tw = cT.getContext('2d');
+  n.lineCap = s.lineCap = tw.lineCap = 'round';
+  // a twig is a polyline; needles sprout off both sides along it
+  const twigs = [];
+  const main = [];
+  for (let i = 0; i <= 12; i++) {
+    const u = 0.02 + i / 12 * 0.94;
+    main.push([u * W, H * (0.5 + Math.sin(u * 3.0) * 0.035)]);
+  }
+  twigs.push({ pts: main, w: 3.2 });
+  // side shoots, angled toward the tip, shorter further out
+  for (let i = 0; i < 9; i++) {
+    const u0 = 0.12 + i * 0.088 + R() * 0.03;
+    for (const side of [-1, 1]) {
+      if (R() < 0.12) continue;
+      const len = (0.34 - u0 * 0.22) * W * (0.8 + R() * 0.4);
+      const ang = side * (0.78 + R() * 0.3);
+      const x0 = u0 * W, y0 = H * (0.5 + Math.sin(u0 * 3.0) * 0.035);
+      const pts = [];
+      for (let k = 0; k <= 5; k++) {
+        const f = k / 5;
+        pts.push([x0 + Math.cos(ang * (1 - f * 0.35)) * len * f, y0 + Math.sin(ang * (1 - f * 0.35)) * len * f * 0.95]);
+      }
+      twigs.push({ pts, w: 1.8 });
+      // a couple of small shoots off each side shoot
+      for (const k of [2, 4]) {
+        if (R() < 0.3) continue;
+        const [bx, by] = pts[k], a2 = ang + side * (0.5 + R() * 0.3) * (R() < 0.5 ? 1 : -1) * 0.8;
+        const l2 = len * (0.35 + R() * 0.15), q = [];
+        for (let m = 0; m <= 3; m++) q.push([bx + Math.cos(a2) * l2 * m / 3, by + Math.sin(a2) * l2 * m / 3 * 0.95]);
+        twigs.push({ pts: q, w: 1.2 });
+      }
+    }
+  }
+  const env = (x, y) => {                          // keep the spray inside a leaf-like envelope
+    const u = x / W, v = Math.abs(y / H - 0.5) * 2;
+    const half = 0.98 * Math.sin(Math.min(1, u * 1.08 + 0.1) * Math.PI) ** 0.7;
+    return v < half;
+  };
+  for (const t of twigs) {
+    tw.strokeStyle = '#fff'; tw.lineWidth = t.w; tw.beginPath();
+    t.pts.forEach((p, i) => i ? tw.lineTo(p[0], p[1]) : tw.moveTo(p[0], p[1])); tw.stroke();
+    n.strokeStyle = 'rgb(90,90,90)'; n.lineWidth = t.w; n.beginPath();
+    t.pts.forEach((p, i) => i ? n.lineTo(p[0], p[1]) : n.moveTo(p[0], p[1])); n.stroke();
+    // needles
+    for (let k = 0; k < t.pts.length - 1; k++) {
+      const [xa, ya] = t.pts[k], [xb, yb] = t.pts[k + 1];
+      const dx = xb - xa, dy = yb - ya, dl = Math.hypot(dx, dy) || 1;
+      const cnt = Math.ceil(dl / 2.1);
+      for (let q = 0; q < cnt; q++) {
+        const f = q / cnt, x = xa + dx * f, y = ya + dy * f;
+        for (const side of [-1, 1]) {
+          const nl = (t.w > 3 ? 11 : t.w > 1.5 ? 8.5 : 6.5) * (0.7 + R() * 0.5);
+          const a = Math.atan2(dy, dx) + side * (0.9 + R() * 0.45);
+          const ex = x + Math.cos(a) * nl, ey = y + Math.sin(a) * nl;
+          if (!env(ex, ey)) continue;
+          const g8 = Math.floor(120 + R() * 135);
+          n.strokeStyle = 'rgb(' + g8 + ',' + g8 + ',' + g8 + ')';
+          n.lineWidth = 1.0 + R() * 0.6;
+          n.beginPath(); n.moveTo(x, y); n.lineTo(ex, ey); n.stroke();
+        }
+      }
+    }
+  }
+  // snow clumps: soft blobs riding along the twigs, heavier mid-branch
+  for (let i = 0; i < 40; i++) {
+    const t = twigs[Math.floor(R() * twigs.length)];
+    const k = Math.floor(R() * (t.pts.length - 1));
+    const f = R(), p = [lerp(t.pts[k][0], t.pts[k + 1][0], f), lerp(t.pts[k][1], t.pts[k + 1][1], f)];
+    const u = p[0] / W;
+    if (R() > Math.sin(Math.min(1, u * 1.2) * Math.PI) * 0.9) continue;
+    const dabs = 2 + Math.floor(R() * 4);
+    for (let q = 0; q < dabs; q++) {
+      const r = (1.8 + R() * 3.8) * (t.w > 3 ? 1.25 : 1);
+      const x = p[0] + (R() - 0.5) * 7, y = p[1] + (R() - 0.5) * 5;
+      const gr = s.createRadialGradient(x, y, 0, x, y, r);
+      gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.55, 'rgba(255,255,255,0.9)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+      s.fillStyle = gr; s.beginPath(); s.arc(x, y, r, 0, TAU); s.fill();
+    }
+  }
+  const out = mk(), o = out.getContext('2d');
+  const dN = n.getImageData(0, 0, W, H).data, dS = s.getImageData(0, 0, W, H).data, dT = tw.getImageData(0, 0, W, H).data;
+  // snow load: a blurred copy of the needle coverage (snow bridges the gaps
+  // between needles), broken up by soft low-frequency noise, so it lies in
+  // continuous lumpy drifts along each shoot instead of polka dots
+  const cov = new Float32Array(W * H), tmp = new Float32Array(W * H), blur = new Float32Array(W * H);
+  for (let i = 0; i < W * H; i++) cov[i] = dT[i * 4 + 3] / 255;   // twig skeleton
+  const RB = 4;
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let acc = 0, c = 0;
+    for (let k = -RB; k <= RB; k++) { const xx = x + k; if (xx >= 0 && xx < W) { acc += cov[y * W + xx]; c++; } }
+    tmp[y * W + x] = acc / c;
+  }
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let acc = 0, c = 0;
+    for (let k = -RB; k <= RB; k++) { const yy = y + k; if (yy >= 0 && yy < H) { acc += tmp[yy * W + x]; c++; } }
+    blur[y * W + x] = acc / c;
+  }
+  const img = o.createImageData(W, H), d = img.data;
+  for (let i = 0; i < W * H; i++) {
+    const x = i % W, y = (i / W) | 0;
+    const lump = fbm(x * 0.045, y * 0.07, 3, 91);                  // world.js value-noise fbm
+    const tipFade = 1 - Math.max(0, x / W - 0.78) * 4;              // tips stay green
+    const drift = clamp((blur[i] * 5.0 - 0.85 + (lump - 0.5) * 1.4) * 1.8, 0, 1) * clamp(tipFade, 0, 1) * (dN[i * 4 + 3] > 20 ? 1 : 0);
+    const a = dN[i * 4 + 3] / 255, tg = dT[i * 4 + 3] / 255;
+    const sn = Math.max(drift, dS[i * 4 + 3] / 255 * 0.5);
+    // snow only sits ON needles (plus a little bridging), it never becomes a solid sheet
+    const cov = a;
+    d[i * 4] = a > 0 ? dN[i * 4] : 160;            // un-premultiplied shade
+    d[i * 4 + 1] = Math.round(sn * 255);
+    d[i * 4 + 2] = Math.round(tg * 255);
+    // keep a clear 2-texel border so clamped edge texels never smear along the card rim
+    const edge = x < 2 || y < 2 || x >= W - 2 || y >= H - 2;
+    d[i * 4 + 3] = edge ? 0 : Math.round(Math.min(1, cov) * 255);
+  }
+  return { W, H, data: d };
+}
+
 </script>
 <script>/* js/levels.js */
 /* =====================================================================
@@ -1525,6 +1767,7 @@ Level.define({
   id: 'pipe', name: 'Half-pipe', blurb: 'Competition pipe · carve the walls · boost the lip',
   clearHalf: 26, gates: false, finishZ: PIPE.LEN + 70, spawnZ: 4, airMin: 0.6,
   spawnSpeed: 12.5, wallAssist: 0.8,
+  sunDir: [-0.30, 0.78, -0.45], sunScale: 0.8,   // high sun: the pipe floor isn't lost in the wall's shadow
   lod: [80, 40, 20],
   cam: { lockHeading: true, dist: 1.25, elev: 0.58 },
   centerX: () => 0,
@@ -1606,6 +1849,7 @@ Level.define({
   id: 'park', name: 'Park', blurb: 'Tabletops · rollers · mini-pipe · rails to grind',
   clearHalf: 30, gates: false, finishZ: PARK.LEN, spawnZ: 4, airMin: 0.7,
   spawnSpeed: 9, wallAssist: 0.8,
+  sunDir: [-0.30, 0.78, -0.45], sunScale: 0.8,
   lod: [80, 40, 20],
   cam: { lockHeading: false, dist: 1.1, elev: 0.48 },
   rails: PARK_RAILS,
@@ -1692,7 +1936,7 @@ Level.define({
 
 const GL = {
   canvas: null, gl: null, dpr: 1, w: 1, h: 1,
-  prog: {}, mesh: {}, vao: {}, buf: {},
+  prog: {}, mesh: {}, vao: {}, buf: {}, tex: {},
   shadowSize: 2048,
   time: 0,
   quality: 1,          // 1 = full, 0.75 = reduced
@@ -1770,18 +2014,18 @@ const GL = {
     return this.buf[name];
   },
   /* instance layout A: mat4 (loc base..base+3) + vec4 tint (base+4), stride 20 */
-  bindInstancing(prog, ibName, baseLoc, stride) {
+  bindInstancing(prog, ibName, baseLoc, stride, first = 0) {
     const gl = this.gl;
     const ib = this.buf[ibName];
     gl.bindBuffer(gl.ARRAY_BUFFER, ib.buf);
-    const F = stride * 4;
+    const F = stride * 4, o = first * F;        // first: start at instance #first (no baseInstance in WebGL2)
     for (let c = 0; c < 4; c++) {
       gl.enableVertexAttribArray(baseLoc + c);
-      gl.vertexAttribPointer(baseLoc + c, 4, gl.FLOAT, false, F, c * 16);
+      gl.vertexAttribPointer(baseLoc + c, 4, gl.FLOAT, false, F, o + c * 16);
       gl.vertexAttribDivisor(baseLoc + c, 1);
     }
     gl.enableVertexAttribArray(baseLoc + 4);
-    gl.vertexAttribPointer(baseLoc + 4, 4, gl.FLOAT, false, F, 64);
+    gl.vertexAttribPointer(baseLoc + 4, 4, gl.FLOAT, false, F, o + 64);
     gl.vertexAttribDivisor(baseLoc + 4, 1);
   },
 
@@ -1836,6 +2080,62 @@ const GL = {
     const t = { fb, color, depth, w, h };
     this.vao[name] = t;
     return t;
+  },
+
+  /* RGBA8 texture from raw pixels, mipmapped + anisotropic (foliage cards) */
+  makeTexture(name, img) {
+    const gl = this.gl;
+    const t = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, t);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, img.W, img.H, 0, gl.RGBA, gl.UNSIGNED_BYTE, img.data);
+    gl.generateMipmap(gl.TEXTURE_2D);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    const af = gl.getExtension('EXT_texture_filter_anisotropic');
+    if (af) gl.texParameterf(gl.TEXTURE_2D, af.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(af.MAX_TEXTURE_MAX_ANISOTROPY_EXT)));
+    this.tex[name] = t;
+    return t;
+  },
+
+  /* Multisampled scene target (resolved into 'scene' each frame). MSAA is what
+     lets the foliage cards use alpha-to-coverage: soft, stable needle edges
+     with no sorting. Returns false (and we render single-sampled) if the
+     driver can't do multisampled float colour. */
+  makeMSTarget(w, h) {
+    const gl = this.gl;
+    const samples = Math.min(4, gl.getParameter(gl.MAX_SAMPLES) || 0);
+    if (samples < 2) return false;
+    const fb = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    const color = gl.createRenderbuffer();
+    gl.bindRenderbuffer(gl.RENDERBUFFER, color);
+    gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, this.hdr ? gl.RGBA16F : gl.RGBA8, w, h);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, color);
+    const depth = gl.createRenderbuffer();
+    gl.bindRenderbuffer(gl.RENDERBUFFER, depth);
+    gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.DEPTH_COMPONENT24, w, h);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depth);
+    const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    if (!ok) { gl.deleteFramebuffer(fb); gl.deleteRenderbuffer(color); gl.deleteRenderbuffer(depth); return false; }
+    this.vao.sceneMS = { fb, colorRB: color, depthRB: depth, w, h, samples };
+    return true;
+  },
+
+  /* where the 3D scene is drawn this frame */
+  sceneFB() { return this.vao.sceneMS ? this.vao.sceneMS.fb : this.vao.scene.fb; },
+
+  /* multisampled → texture, before post-processing reads it */
+  resolveScene() {
+    const ms = this.vao.sceneMS; if (!ms) return;
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, ms.fb);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, this.vao.scene.fb);
+    gl.blitFramebuffer(0, 0, ms.w, ms.h, 0, 0, ms.w, ms.h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, null);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
   },
 
   makeShadowMap(w, h) {
@@ -1900,6 +2200,12 @@ const GL = {
     this.upload('board', buildBoard());
     for (const k in RiderGeo) this.upload(k, RiderGeo[k]);
     this.upload('tree', buildTree());
+    for (let sh = 0; sh < FIR_SHAPES.length; sh++) {
+      this.upload('firFol' + sh, buildFirFoliage(sh, 0));
+      this.upload('firFolLo' + sh, buildFirFoliage(sh, 1));
+      this.upload('firTrunk' + sh, buildFirTrunk(sh));
+    }
+    this.makeTexture('needles', makeNeedleCanvas());
     this.upload('rock', buildRock());
     this.upload('pipe', buildPipe());
     this.upload('gate', buildGate());
@@ -1910,7 +2216,7 @@ const GL = {
     this.upload('lampPost', buildLampPost());
     this.upload('lampHead', buildLampHead());
 
-    this.instanceBuffer('props', 3000, 20);
+    this.instanceBuffer('props', 6000, 20);
     this.instanceBuffer('parts', 96, 20);
     this.instanceBuffer('particles', 3000, 8);
 
@@ -1931,6 +2237,8 @@ const GL = {
     gl.viewport(0, 0, w, h);
     // release the previous targets first, or every resize leaks three
     // textures + fbo + rbo at full display resolution
+    const ms = this.vao.sceneMS;
+    if (ms) { gl.deleteFramebuffer(ms.fb); gl.deleteRenderbuffer(ms.colorRB); gl.deleteRenderbuffer(ms.depthRB); delete this.vao.sceneMS; }
     for (const nm of ['scene', 'bloomA', 'bloomB']) {
       const t = this.vao[nm]; if (!t) continue;
       if (t.color) gl.deleteTexture(t.color);
@@ -1939,11 +2247,21 @@ const GL = {
       delete this.vao[nm];
     }
     const bw = Math.max(2, w >> 1), bh = Math.max(2, h >> 1);
-    this.makeTarget('scene', w, h, { hdr: this.hdr, depth: true });
+    const msaa = this.msaa !== false && this.makeMSTarget(w, h);
+    this.makeTarget('scene', w, h, { hdr: this.hdr, depth: !msaa });
     this.makeTarget('bloomA', bw, bh, { hdr: this.hdr });
     this.makeTarget('bloomB', bw, bh, { hdr: this.hdr });
   },
   maxDPR() { return this.quality < 1 ? 1.0 : 1.75; },
+
+  /* called by the adaptive-quality monitor in game.js */
+  degrade(level) {
+    if (level >= 1) this.msaa = false;
+    if (level >= 2) { this.quality = 0.75; Render.TREE_LOD_DIST = 55; }
+    this.w = 0;                                   // force the targets to rebuild
+    this.resize();
+    if (window.console) console.info('POWDER LINE: lowered graphics quality to step ' + level);
+  },
 
   /* chunk mesh → GPU, cached by chunk+lod identity */
   /* free every cached terrain chunk (level switch) */
@@ -1990,6 +2308,7 @@ const LIGHTING_GLSL = `
   uniform float uFogDensity;
   uniform vec3 uFogColor;
   uniform float uSparkle;
+  uniform float uDetail;     // 1 = full surface detail, 0 = low-spec devices
   // soft point lights (night lamps, rider glow): xyz = position, w = radius / rgb = colour
   uniform vec4 uPL[8]; uniform vec4 uPLc[8]; uniform int uPLn;
   // neon mode: grid traced on the snow
@@ -2013,6 +2332,15 @@ const LIGHTING_GLSL = `
     for(int i=0;i<4;i++){ s += vnoise(p)*a; p *= 2.03; a *= 0.5; }
     return s/0.9375;
   }
+  // 3D value noise: no stretching on steep walls (2D xz noise smears into streaks)
+  float hash13(vec3 p3){ p3 = fract(p3 * 0.1031); p3 += dot(p3, p3.zyx + 31.32); return fract((p3.x + p3.y) * p3.z); }
+  float vnoise3(vec3 p){
+    vec3 i = floor(p), f = fract(p); vec3 u = f*f*(3.0-2.0*f);
+    float a = mix(mix(hash13(i), hash13(i+vec3(1,0,0)), u.x), mix(hash13(i+vec3(0,1,0)), hash13(i+vec3(1,1,0)), u.x), u.y);
+    float b = mix(mix(hash13(i+vec3(0,0,1)), hash13(i+vec3(1,0,1)), u.x), mix(hash13(i+vec3(0,1,1)), hash13(i+vec3(1,1,1)), u.x), u.y);
+    return mix(a, b, u.z);
+  }
+  float fbm3(vec3 p){ return (vnoise3(p) * 0.5 + vnoise3(p * 2.03 + 7.1) * 0.25 + vnoise3(p * 4.1 + 3.3) * 0.125) / 0.875; }
 
   float shadowFactor(vec3 wp, float ndl){
     vec4 lp = uLightVP * vec4(wp, 1.0);
@@ -2106,13 +2434,50 @@ GL.buildShaders = function () {
   const TERRAIN_FS = LIGHTING_GLSL + `
     in vec3 vNormal; in vec3 vColor; in vec3 vWorld;
     out vec4 fragColor;
+    // wind-packed snow relief: soft drifts plus sastrugi ripples (height in metres)
+    float snowRelief(vec2 q){
+      float drift = fbm(q * 0.22) * 0.30;
+      float warp = fbm(q * 0.05) * 7.0;
+      float rip = sin(dot(q, vec2(0.83, 0.55)) * 2.1 + warp) * 0.5 + 0.5;
+      rip = rip * rip * 0.035 * (0.4 + fbm(q * 0.11));
+      return drift + rip + vnoise(q * 2.3) * 0.012;
+    }
     void main(){
       vec3 n = normalize(vNormal);
-      // cheap cavity/contact AO from slope curvature proxy
-      float ao = 0.72 + 0.28 * clamp(n.y, 0.0, 1.0);
-      vec3 alb = snowAlbedo(vWorld, n, ao);
       float dist = length(uCamPos - vWorld);
-      vec3 col = shade(alb, n, vWorld, ao, 0.55, smoothstep(0.55, 1.0, n.y));
+      float forest = vColor.r, cav = vColor.g, wall = vColor.b;
+      // micro relief → perturbed normal (fades out with distance, where it would alias)
+      float rel = (1.0 - smoothstep(25.0, 90.0, dist)) * uDetail;
+      if(rel > 0.0){
+        vec2 q = vWorld.xz; float e = 0.12;
+        float h0 = snowRelief(q);
+        vec2 g = vec2(snowRelief(q + vec2(e, 0.0)) - h0, snowRelief(q + vec2(0.0, e)) - h0) / e;
+        n = normalize(n + vec3(-g.x, 0.0, -g.y) * rel * 0.55);
+      }
+      // hollows hold cool shadow, crests catch light
+      float ao = clamp(0.80 + (cav - 0.5) * 0.9, 0.55, 1.05) * (0.86 + 0.14 * clamp(n.y, 0.0, 1.0));
+      vec3 alb = snowAlbedo(vWorld, n, ao);
+      // valley walls: rock bands and gullies break through the snow on the steep parts
+      float steep = 1.0 - clamp(n.y, 0.0, 1.0);
+      float rock = 0.0;
+      if(wall > 0.0 && steep > 0.15){
+        float strata = fbm3(vec3(vWorld.x * 0.03, vWorld.y * 0.20, vWorld.z * 0.03));
+        float gully = vnoise3(vec3(vWorld.x * 0.02, vWorld.y * 0.015, vWorld.z * 0.07));
+        rock = wall * smoothstep(0.30, 0.55, steep + (strata - 0.5) * 0.45) * smoothstep(0.32, 0.6, gully);
+        vec3 rockCol = mix(vec3(0.20, 0.20, 0.22), vec3(0.38, 0.37, 0.38), vnoise3(vWorld * 0.35));
+        alb = mix(alb, rockCol, clamp(rock, 0.0, 1.0) * 0.9);
+      }
+      // distant forest canopy: past the real trees' range the cover is painted on,
+      // as clumped dark crowns dusted with snow
+      float fd = forest * smoothstep(60.0, 150.0, dist);
+      if(fd > 0.0){
+        float clump = fbm3(vWorld * 0.42) + vnoise3(vWorld * 0.045) * 0.45;
+        float canopy = smoothstep(0.44, 0.62, clump) * fd;
+        vec3 crown = mix(vec3(0.040, 0.068, 0.052), vec3(0.50, 0.55, 0.58), smoothstep(0.6, 0.9, vnoise3(vWorld * 1.1)) * 0.5);
+        alb = mix(alb, crown, canopy * 0.92);
+      }
+      vec3 col = shade(alb, n, vWorld, ao, 0.55, smoothstep(0.55, 1.0, n.y) * (1.0 - rock));
+      col *= mix(1.0, ao, 0.6);
       // groomed corduroy banding down the piste
       float cx = vWorld.x; // visual only
       col *= 1.0 + 0.022 * sin(cx * 1.1 + vWorld.z * 0.02);
@@ -2175,6 +2540,76 @@ GL.buildShaders = function () {
       col = applyFog(col, vWorld, normalize(uCamPos - vWorld), dist * (1.0 - min(vEmis, 1.0) * 0.6));
       fragColor = vec4(col, 1.0);
     }`;
+
+  /* ---------- card foliage (instanced firs) ----------
+     colour attribute = (u, v, ao); normal = the card's face normal. A soft
+     volume normal (radial + up from the trunk) does most of the lighting so
+     the crown reads as one rounded mass. Alpha-to-coverage under MSAA gives
+     ragged, stable needle edges; without MSAA it falls back to alpha test. */
+  const FOL_VS = V_HEAD + `
+    out vec3 vNormal; out vec3 vVol; out vec3 vUVA; out vec3 vWorld; out vec3 vTint;
+    in vec4 aIM0; in vec4 aIM1; in vec4 aIM2; in vec4 aIM3; in vec4 aTint;
+    uniform float uWind, uTime;
+    void main(){
+      mat4 M = mat4(aIM0, aIM1, aIM2, aIM3);
+      vec3 p = aPos;
+      // branch tips bob a little in the wind (more out on the tips, higher up)
+      float sway = sin(uTime * 1.3 + aIM3.x * 0.37 + aIM3.z * 0.21 + p.y * 0.6) * uWind;
+      p.y += sway * aColor.x * 0.05;
+      p.xz += sway * aColor.x * 0.035 * normalize(p.xz + 1e-4);
+      vec4 wp = uModel * M * vec4(p, 1.0);
+      vWorld = wp.xyz;
+      vNormal = normalize(mat3(M) * aNormal);
+      vec3 radial = vec3(p.x, 0.0, p.z);
+      float rl = length(radial);
+      vVol = normalize(mat3(M) * (rl > 1e-3 ? radial / rl * 0.85 + vec3(0.0, 0.75, 0.0) : vec3(0.0, 1.0, 0.0)));
+      vUVA = aColor;
+      vTint = aTint.rgb;
+      gl_Position = uProj * uView * wp;
+    }`;
+  const FOL_FS = LIGHTING_GLSL + `
+    in vec3 vNormal; in vec3 vVol; in vec3 vUVA; in vec3 vWorld; in vec3 vTint;
+    out vec4 fragColor;
+    uniform sampler2D uNeedle; uniform float uA2C, uSnowLoad;
+    void main(){
+      vec4 tx = texture(uNeedle, vUVA.xy);
+      // mip levels average the coverage down, thinning distant crowns: lift it back
+      vec2 tp = vUVA.xy * vec2(textureSize(uNeedle, 0));
+      float lod = max(0.0, 0.5 * log2(max(dot(dFdx(tp), dFdx(tp)), dot(dFdy(tp), dFdy(tp)))));
+      float a = tx.a * (1.0 + lod * 0.32);
+      if(uA2C > 0.5) a = (a - 0.45) / max(fwidth(a), 1e-4) + 0.5;
+      else if(a < 0.5) discard;
+      vec3 V = normalize(uCamPos - vWorld);
+      vec3 cn = normalize(vNormal);
+      float top = step(0.0, dot(cn, V));               // looking at the upper face?
+      float ao = vUVA.z;
+      vec3 needle = mix(vec3(0.022, 0.050, 0.036), vec3(0.070, 0.135, 0.085), tx.r) * vTint;
+      needle = mix(needle, vec3(0.16, 0.11, 0.08), tx.b * 0.8);
+      float snow = clamp(tx.g * mix(0.15, 0.85, top) * uSnowLoad * (0.55 + 0.45 * ao), 0.0, 1.0);
+      vec3 alb = mix(needle, vec3(0.90, 0.94, 1.0), snow);
+      vec3 fn = top > 0.5 ? cn : -cn;
+      // undersides lean on the soft volume normal (they catch bounce light off the snow)
+      vec3 n = normalize(mix(normalize(vVol), fn, top > 0.5 ? 0.30 + snow * 0.45 : 0.12));
+      vec3 col = shade(alb, n, vWorld, ao, mix(0.92, 0.6, snow), snow * 0.5);
+      col *= mix(ao, 1.0, 0.5 + snow * 0.4);
+      float dist = length(uCamPos - vWorld);
+      col = applyFog(col, vWorld, V, dist);
+      fragColor = vec4(col, clamp(a, 0.0, 1.0));
+    }`;
+  const SHADOW_FOL_VS = V_HEAD + `
+    uniform mat4 uLightVP;
+    out vec2 vUV;
+    in vec4 aIM0; in vec4 aIM1; in vec4 aIM2; in vec4 aIM3; in vec4 aTint;
+    void main(){
+      mat4 M = mat4(aIM0, aIM1, aIM2, aIM3);
+      vUV = aColor.xy;
+      gl_Position = uLightVP * (uModel * M * vec4(aPos, 1.0));
+    }`;
+  const SHADOW_FOL_FS = `
+    precision highp float;
+    in vec2 vUV; out vec4 fragColor;
+    uniform sampler2D uNeedle;
+    void main(){ if(texture(uNeedle, vUV).a < 0.4) discard; fragColor = vec4(1.0); }`;
 
   /* ---------- shadow depth ---------- */
   const SHADOW_VS = V_HEAD + `
@@ -2338,6 +2773,8 @@ GL.buildShaders = function () {
   this.prog.inst = this.link(INST_VS, INST_FS, 'inst');
   this.prog.shadow = this.link(SHADOW_VS, SHADOW_FS, 'shadow');
   this.prog.shadowInst = this.link(SHADOW_INST_VS, SHADOW_FS, 'shadowInst');
+  this.prog.foliage = this.link(FOL_VS, FOL_FS, 'foliage');
+  this.prog.shadowFol = this.link(SHADOW_FOL_VS, SHADOW_FOL_FS, 'shadowFol');
   this.prog.sky = this.link(SKY_VS, SKY_FS, 'sky');
   this.prog.particle = this.link(PART_VS, PART_FS, 'particle');
   this.prog.bright = this.link(FS_VS, BRIGHT_FS, 'bright');
@@ -2573,20 +3010,22 @@ const Render = {
       const q = P.parts[i];
       drawMesh(sp, q.mesh, q.mat);
     }
-    // trees near the rider
+    // trees: trunks, then the needle cards (alpha-tested, both faces)
     const ip = GL.prog.shadowInst;
     ip.use();
     Sun.setUniforms(ip);
     gl.uniformMatrix4fv(ip.uModel, false, IDENT);
-    const n = this.fillPropBuffer(P);
-    if (n > 0) {
-      const ib = GL.buf.props;
-      const m = GL.mesh.tree;
-      gl.bindVertexArray(m.vao);          // VAO first: attribute state is per-VAO
-      GL.bindInstancing(ip, 'props', 3, 20);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, ib.data, 0, n * 20);
-      gl.drawElementsInstanced(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0, n);
-    }
+    const groups = this.fillTreeBuffer(P);
+    this.drawTrees(ip, groups, 'trunk');
+    const fp = GL.prog.shadowFol.use();
+    Sun.setUniforms(fp);
+    gl.uniformMatrix4fv(fp.uModel, false, IDENT);
+    gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, GL.tex.needles);
+    gl.uniform1i(fp.uNeedle, 2);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.disable(gl.CULL_FACE);
+    this.drawTrees(fp, groups, 'shadow');
+    gl.enable(gl.CULL_FACE);
     gl.cullFace(gl.BACK);
   },
 
@@ -2599,35 +3038,80 @@ const Render = {
     return -1;
   },
 
-  /* pack trees into the shared instance buffer; also refreshes this.rocks */
-  fillPropBuffer(P) {
+  /* Pack visible trees into the shared instance buffer, grouped as
+     [shape0 near | shape0 far | shape1 near | shape1 far] so each mesh draws
+     one contiguous range. Also refreshes this.rocks. Cached per frame (the
+     shadow and main passes share it). */
+  TREE_LOD_DIST: 95,
+  fillTreeBuffer(P) {
+    if (this._treeFrame === Game.frameNo && this._groups) return this._groups;
+    this._treeFrame = Game.frameNo;
     const ib = GL.buf.props, d = ib.data;
-    let n = 0;
     const span = VIEW_R * CHUNK;
     World.propsNear(P.pos.x, P.pos.z, span, this.trees, this.rocks);
-    const m = _m4.a;
+    const buckets = [[], [], [], []];
+    const cx = Cam.pos.x, cz = Cam.pos.z, L2 = this.TREE_LOD_DIST * this.TREE_LOD_DIST;
     for (const t of this.trees) {
-      if (n >= ib.max) break;
-      const sway = Math.sin(GL.time * 1.1 + t.sway) * 0.022 * clamp(P.speed / 12, 0, 1);
-      const c = Math.cos(t.rot + sway), s = Math.sin(t.rot + sway);
-      const sc = t.sc;
-      const o = n * 20;
-      // column-major: scale * rotY
-      d[o] = c * sc;      d[o + 1] = 0;        d[o + 2] = -s * sc;  d[o + 3] = 0;
-      d[o + 4] = 0;       d[o + 5] = sc;       d[o + 6] = 0;        d[o + 7] = 0;
-      d[o + 8] = s * sc;  d[o + 9] = 0;        d[o + 10] = c * sc;  d[o + 11] = 0;
-      d[o + 12] = t.x;    d[o + 13] = t.y - 0.15; d[o + 14] = t.z;  d[o + 15] = 1;
-      const shade = 0.86 + hash2(Math.floor(t.x), Math.floor(t.z), 77) * 0.28;
-      d[o + 16] = shade; d[o + 17] = shade; d[o + 18] = shade; d[o + 19] = 1;
-      n++;
+      const far = (t.x - cx) * (t.x - cx) + (t.z - cz) * (t.z - cz) > L2 ? 1 : 0;
+      buckets[(t.shape || 0) * 2 + far].push(t);
     }
-    return n;
+    const groups = [];
+    let n = 0;
+    for (let b = 0; b < 4; b++) {
+      const first = n;
+      for (const t of buckets[b]) {
+        if (n >= ib.max) break;
+        const c = Math.cos(t.rot), s = Math.sin(t.rot), sc = t.sc;
+        const o = n * 20;
+        // column-major: scale * rotY (slightly taller than wide for variety)
+        d[o] = c * sc;      d[o + 1] = 0;        d[o + 2] = -s * sc;  d[o + 3] = 0;
+        d[o + 4] = 0;       d[o + 5] = sc * (t.tall || 1); d[o + 6] = 0; d[o + 7] = 0;
+        d[o + 8] = s * sc;  d[o + 9] = 0;        d[o + 10] = c * sc;  d[o + 11] = 0;
+        d[o + 12] = t.x;    d[o + 13] = t.y - 0.1; d[o + 14] = t.z;   d[o + 15] = 1;
+        const shade = 0.78 + hash2(Math.floor(t.x), Math.floor(t.z), 77) * 0.42;
+        d[o + 16] = shade * (0.95 + t.sway * 0.016); d[o + 17] = shade; d[o + 18] = shade * 0.96; d[o + 19] = 1;
+        n++;
+      }
+      groups.push({ shape: b >> 1, far: b & 1, first, count: n - first });
+    }
+    if (n) {
+      const gl = GL.gl;
+      gl.bindBuffer(gl.ARRAY_BUFFER, ib.buf);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, d, 0, n * 20);
+    }
+    this._groups = groups;
+    return groups;
+  },
+
+  /* what: 'trunk' (opaque trunks), 'foliage' / 'shadow' (needle cards) */
+  drawTrees(prog, groups, what) {
+    const gl = GL.gl;
+    for (let sh = 0; sh < FIR_SHAPES.length; sh++) {
+      if (what === 'trunk') {
+        const g0 = groups[sh * 2], g1 = groups[sh * 2 + 1];
+        const cnt = g0.count + g1.count;
+        if (!cnt) continue;
+        const m = GL.mesh['firTrunk' + sh];
+        gl.bindVertexArray(m.vao);
+        GL.bindInstancing(prog, 'props', 3, 20, g0.first);
+        gl.drawElementsInstanced(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0, cnt);
+        continue;
+      }
+      for (let far = 0; far < 2; far++) {
+        const g = groups[sh * 2 + far];
+        if (!g.count) continue;
+        const m = GL.mesh[(far ? 'firFolLo' : 'firFol') + sh];
+        gl.bindVertexArray(m.vao);
+        GL.bindInstancing(prog, 'props', 3, 20, g.first);
+        gl.drawElementsInstanced(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0, g.count);
+      }
+    }
   },
 
   /* ---------- pass 2: main scene ---------- */
   scene(P, fx, state) {
     const gl = GL.gl;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, GL.vao.scene.fb);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, GL.sceneFB());
     gl.viewport(0, 0, GL.w, GL.h);
     const ap = Atmos.p;
     gl.clearColor(ap.clear[0], ap.clear[1], ap.clear[2], 1);
@@ -2663,6 +3147,7 @@ const Render = {
     const wp = GL.prog.world.use();
     Sun.setUniforms(wp);
     gl.uniform1f(wp.uSparkle, 1.0);
+    gl.uniform1f(wp.uDetail, GL.quality < 1 ? 0 : 1);
     gl.uniformMatrix4fv(wp.uModel, false, IDENT);
     for (const c of World.visible) {
       const lod = this.pickLod(c);
@@ -2681,14 +3166,26 @@ const Render = {
     Sun.setUniforms(ip);
     gl.uniform1f(ip.uSparkle, 0.0);
     gl.uniformMatrix4fv(ip.uModel, false, IDENT);
-    const n = this.fillPropBuffer(P);
-    if (n > 0) {
-      const ib = GL.buf.props;
-      const m = GL.mesh.tree;
-      gl.bindVertexArray(m.vao);
-      GL.bindInstancing(ip, 'props', 3, 20);
-      gl.bufferSubData(gl.ARRAY_BUFFER, 0, ib.data, 0, n * 20);
-      gl.drawElementsInstanced(gl.TRIANGLES, m.count, gl.UNSIGNED_INT, 0, n);
+    const groups = this.fillTreeBuffer(P);
+    this.drawTrees(ip, groups, 'trunk');
+    {
+      const fp = GL.prog.foliage.use();
+      Sun.setUniforms(fp);
+      gl.uniform1f(fp.uSparkle, 1.0);
+      gl.uniformMatrix4fv(fp.uModel, false, IDENT);
+      gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, GL.tex.needles);
+      gl.uniform1i(fp.uNeedle, 2);
+      gl.activeTexture(gl.TEXTURE0);
+      const a2c = !!GL.vao.sceneMS;
+      gl.uniform1f(fp.uA2C, a2c ? 1 : 0);
+      gl.uniform1f(fp.uSnowLoad, Level.cur.zen && Atmos.mode === 'neon' ? 0.6 : 1.0);
+      gl.uniform1f(fp.uWind, 0.6);
+      gl.disable(gl.CULL_FACE);
+      if (a2c) gl.enable(gl.SAMPLE_ALPHA_TO_COVERAGE);
+      this.drawTrees(fp, groups, 'foliage');
+      if (a2c) gl.disable(gl.SAMPLE_ALPHA_TO_COVERAGE);
+      gl.enable(gl.CULL_FACE);
+      ip.use();
     }
     // rocks
     if (this.rocks.length) {
@@ -2841,6 +3338,7 @@ const Render = {
   /* ---------- pass 3+4: bloom + composite ---------- */
   post(speedN, flash, desat) {
     const gl = GL.gl;
+    GL.resolveScene();
     const bw = GL.vao.bloomA.w, bh = GL.vao.bloomA.h;
 
     gl.disable(gl.DEPTH_TEST);
@@ -2924,28 +3422,58 @@ const Scenery = {
         void main(){ vA = aAlpha; vD = length(uCamPos - aPos); gl_Position = uProj * uView * vec4(aPos, 1.0); }`, `
         precision highp float;
         in float vA; in float vD; out vec4 fragColor;
-        uniform vec3 uCol;
-        void main(){ fragColor = vec4(uCol, vA * exp(-vD * 0.008)); }`, 'trail'),
+        uniform vec3 uCol; uniform float uMul;
+        void main(){
+          float a = vA * exp(-vD * 0.008);
+          // multiply mode: darken whatever light/shadow the snow already has (a pressed groove);
+          // additive mode (neon) keeps the glowing trace
+          fragColor = uMul > 0.5 ? vec4(mix(vec3(1.0), uCol, a), 1.0) : vec4(uCol, a);
+        }`, 'trail'),
 
       mtn: GL.link(`
         precision highp float;
         in vec3 aPos; in vec3 aNormal; in vec3 aColor;
         uniform mat4 uProj, uView, uModel;
-        out vec3 vN; out vec3 vC; out float vH;
+        out vec3 vN; out vec3 vP; out vec3 vW;
         void main(){
-          vN = aNormal; vC = aColor; vH = aPos.y;
-          gl_Position = uProj * uView * (uModel * vec4(aPos, 1.0));
+          vN = aNormal; vP = aPos;
+          vec4 w = uModel * vec4(aPos, 1.0); vW = w.xyz;
+          gl_Position = uProj * uView * w;
         }`, `
         precision highp float;
-        in vec3 vN; in vec3 vC; in float vH; out vec4 fragColor;
-        uniform vec3 uSunDir, uSunColor, uHaze, uAmbLo, uAmbHi; uniform float uHazeAmt;
+        in vec3 vN; in vec3 vP; in vec3 vW; out vec4 fragColor;
+        uniform vec3 uSunDir, uSunColor, uHaze, uAmbLo, uAmbHi; uniform float uHazeAmt, uHills;
+        float h13(vec3 p){ p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
+        float n3(vec3 p){ vec3 i = floor(p), f = fract(p); vec3 u = f*f*(3.0-2.0*f);
+          float a = mix(mix(h13(i), h13(i+vec3(1,0,0)), u.x), mix(h13(i+vec3(0,1,0)), h13(i+vec3(1,1,0)), u.x), u.y);
+          float b = mix(mix(h13(i+vec3(0,0,1)), h13(i+vec3(1,0,1)), u.x), mix(h13(i+vec3(0,1,1)), h13(i+vec3(1,1,1)), u.x), u.y);
+          return mix(a, b, u.z); }
+        float f3(vec3 p){ return (n3(p)*0.5 + n3(p*2.1+5.3)*0.25 + n3(p*4.3+1.7)*0.125) / 0.875; }
+        float f2(vec3 p){ return (n3(p)*0.66 + n3(p*2.1+5.3)*0.34); }
         void main(){
           vec3 n = normalize(vN);
+          float h = vP.y;
+          float big = f2(vP * 0.004), det = f3(vP * 0.03);
+          // bump the shading normal with rock detail so faces don't read as smooth plastic
+          vec3 bump = vec3(n3(vP * 0.06 + 1.0) - 0.5, 0.0, n3(vP * 0.06 + 7.0) - 0.5);
+          n = normalize(n + bump * 0.55);
+          // snow holds on gentle faces and higher up; steep faces stay bare rock
+          float snowLine = -10.0 + (big - 0.5) * 90.0;
+          float snow = smoothstep(snowLine - 25.0, snowLine + 25.0, h + (n.y - 0.6) * 160.0 + (det - 0.5) * 60.0);
+          snow *= smoothstep(0.42, 0.62, n.y + (det - 0.5) * 0.35);
+          // rock: banded strata
+          float strata = f2(vec3(vP.x * 0.006, vP.y * 0.05, vP.z * 0.006));
+          vec3 rock = mix(vec3(0.17, 0.17, 0.19), vec3(0.36, 0.35, 0.36), strata);
+          // forest on the lower, gentler slopes
+          float tree = max(smoothstep(-35.0, -75.0, h + (big - 0.5) * 60.0), uHills * smoothstep(40.0, 0.0, h + (big - 0.5) * 50.0)) * smoothstep(0.55, 0.75, n.y);
+          if(tree > 0.0) tree *= smoothstep(mix(0.30, 0.18, uHills), mix(0.50, 0.40, uHills), f2(vP * mix(0.06, 0.16, uHills)));
+          vec3 alb = mix(rock, vec3(0.92, 0.95, 1.0), snow);
+          alb = mix(alb, vec3(0.04, 0.065, 0.05) * (0.8 + 0.5 * n3(vP * 0.9)), tree * 0.9);
           float ndl = max(dot(n, uSunDir), 0.0);
           vec3 amb = mix(uAmbLo, uAmbHi, n.y * 0.5 + 0.5);
-          vec3 col = vC * (uSunColor * ndl * 0.85 + amb * 0.75);
+          vec3 col = alb * (uSunColor * ndl * 0.95 + amb * 0.7);
           // aerial perspective: the base sinks into the haze, peaks stay crisp
-          float haze = uHazeAmt * (1.0 - smoothstep(-80.0, 200.0, vH) * 0.5);
+          float haze = uHazeAmt * (1.0 - smoothstep(-80.0, 200.0, h) * 0.45);
           fragColor = vec4(mix(col, uHaze, clamp(haze, 0.0, 1.0)), 1.0);
         }`, 'mtn')
     };
@@ -2966,8 +3494,10 @@ const Scenery = {
 
     // ---- distant peaks: two rings, built once, follow the camera ----
     this.ranges = [
-      { mesh: GL.upload('_mtnFar', this.buildRange(1050, 1360, 300, 120, 11)), haze: 0.55 },
-      { mesh: GL.upload('_mtnNear', this.buildRange(760, 1010, 190, 96, 29)), haze: 0.40 }
+      { mesh: GL.upload('_mtnFar', this.buildRange(1050, 1360, 300, lowSpec ? 160 : 260, 11, lowSpec ? 12 : 18)), haze: 0.55 },
+      { mesh: GL.upload('_mtnNear', this.buildRange(760, 1010, 190, lowSpec ? 140 : 220, 29, lowSpec ? 12 : 18)), haze: 0.40 },
+      // low forested foothills filling the gap between the streamed terrain and the ranges
+      { mesh: GL.upload('_mtnHills', this.buildRange(300, 820, 45, lowSpec ? 120 : 200, 47, lowSpec ? 10 : 16, -125)), haze: 0.32, hills: 1 }
     ];
 
     // ---- snowfall ----
@@ -2986,36 +3516,40 @@ const Scenery = {
   /* A ring-shaped heightfield of ridged peaks around the origin (y relative to the
      camera). Grid in (angle, radius); heights from ridged noise under an envelope
      that is low at the inner/outer edges, so it reads as a mountain range rather
-     than a wall. Flat-shaded: snow on high, gentle faces; rock on steep ones. */
-  buildRange(R0, R1, hMax, A, seed) {
-    const g = Geo(), RAD = 9;
+     than a wall. Smooth normals; snow, rock bands and the forested lower slopes
+     are painted per-pixel by the shader. */
+  buildRange(R0, R1, hMax, A, seed, RAD = 18, base = -120) {
+    const g = Geo();
     const H = (i, j) => {
       const a = (i % A) / A * TAU, r = lerp(R0, R1, j / (RAD - 1));
       const u = Math.cos(a) * r * 0.004, v = Math.sin(a) * r * 0.004;   // periodic around the ring
-      let n = 1 - Math.abs(2 * fbm(u + seed, v - seed, 4, seed) - 1); // ridged
-      n = Math.pow(n, 2.2);
-      const env = Math.sin(Math.PI * j / (RAD - 1));                   // 0 at both edges
-      return -120 + (40 + n * hMax) * env;
+      let n = 1 - Math.abs(2 * fbm(u + seed, v - seed, 5, seed) - 1);  // ridged
+      n = Math.pow(n, 2.0);
+      const detail = (fbm(u * 4 + seed, v * 4, 3, seed + 5) - 0.5) * 0.22;
+      const env = Math.pow(Math.sin(Math.PI * j / (RAD - 1)), 0.8);    // 0 at both edges
+      return base + (40 + (n + detail) * hMax) * env;
     };
-    const P = (i, j) => {
-      const a = (i % A) / A * TAU, r = lerp(R0, R1, j / (RAD - 1));
-      return [Math.cos(a) * r, H(i, j), Math.sin(a) * r];
-    };
-    const SNOW = [0.94, 0.96, 1.0], ROCK = [0.42, 0.47, 0.58], DARK = [0.32, 0.37, 0.48];
-    const tri = (A_, B_, C_) => {
-      let ux = B_[0] - A_[0], uy = B_[1] - A_[1], uz = B_[2] - A_[2], wx = C_[0] - A_[0], wy = C_[1] - A_[1], wz = C_[2] - A_[2];
-      let nx = uy * wz - uz * wy, ny = uz * wx - ux * wz, nz = ux * wy - uy * wx;
-      if (ny < 0) { [B_, C_] = [C_, B_]; nx = -nx; ny = -ny; nz = -nz; }   // heightfield: face up
-      const l = Math.hypot(nx, ny, nz) || 1; nx /= l; ny /= l; nz /= l;
-      const yMid = (A_[1] + B_[1] + C_[1]) / 3;
-      const col = (yMid > 20 + (1 - ny) * 140 && ny > 0.45) ? SNOW : (ny > 0.7 ? ROCK : DARK);
-      geoTri(g, geoVert(g, A_[0], A_[1], A_[2], nx, ny, nz, ...col),
-                geoVert(g, B_[0], B_[1], B_[2], nx, ny, nz, ...col),
-                geoVert(g, C_[0], C_[1], C_[2], nx, ny, nz, ...col));
-    };
-    for (let i = 0; i < A; i++) for (let j = 0; j < RAD - 1; j++) {
-      const p00 = P(i, j), p10 = P(i + 1, j), p01 = P(i, j + 1), p11 = P(i + 1, j + 1);
-      tri(p00, p10, p11); tri(p00, p11, p01);
+    const pos = [];
+    for (let j = 0; j < RAD; j++) for (let i = 0; i < A; i++) {
+      const a = i / A * TAU, r = lerp(R0, R1, j / (RAD - 1));
+      pos.push([Math.cos(a) * r, H(i, j), Math.sin(a) * r]);
+    }
+    const P = (i, j) => pos[clamp(j, 0, RAD - 1) * A + ((i % A) + A) % A];
+    for (let j = 0; j < RAD; j++) for (let i = 0; i < A; i++) {
+      // smooth normal from neighbouring grid points (central differences)
+      const pL = P(i - 1, j), pR = P(i + 1, j), pD = P(i, j - 1), pU = P(i, j + 1);
+      const ux = pR[0] - pL[0], uy = pR[1] - pL[1], uz = pR[2] - pL[2];
+      const vx = pU[0] - pD[0], vy = pU[1] - pD[1], vz = pU[2] - pD[2];
+      let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      if (ny < 0) { nx = -nx; ny = -ny; nz = -nz; }
+      const l = Math.hypot(nx, ny, nz) || 1;
+      const p = P(i, j);
+      geoVert(g, p[0], p[1], p[2], nx / l, ny / l, nz / l, 1, 1, 1);
+    }
+    for (let j = 0; j < RAD - 1; j++) for (let i = 0; i < A; i++) {
+      const i1 = (i + 1) % A;
+      const a = j * A + i, b = j * A + i1, c = (j + 1) * A + i, d = (j + 1) * A + i1;
+      g.i.push(a, c, b, b, c, d);
     }
     return g;
   },
@@ -3062,8 +3596,10 @@ const Scenery = {
     M[12] = Cam.pos.x; M[13] = Cam.pos.y - 40; M[14] = Cam.pos.z;
     gl.uniformMatrix4fv(p.uModel, false, M);
     gl.disable(gl.CULL_FACE);
-    for (const r of this.ranges) {
+    for (let k = this.ranges.length - 1; k >= 0; k--) {     // nearest first: cheaper overdraw
+      const r = this.ranges[k];
       gl.uniform1f(p.uHazeAmt, r.haze);
+      gl.uniform1f(p.uHills, r.hills || 0);
       gl.bindVertexArray(r.mesh.vao);
       gl.drawElements(gl.TRIANGLES, r.mesh.count, gl.UNSIGNED_INT, 0);
     }
@@ -3100,7 +3636,10 @@ const Scenery = {
     gl.bindBuffer(gl.ARRAY_BUFFER, this.trailBuf);
     gl.bufferSubData(gl.ARRAY_BUFFER, 0, d, 0, k);
     gl.disable(gl.CULL_FACE);
-    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, Atmos.p.trailAdd ? gl.ONE : gl.ONE_MINUS_SRC_ALPHA);
+    gl.uniform1f(p.uMul, Atmos.p.trailAdd ? 0 : 1);
+    gl.enable(gl.BLEND);
+    if (Atmos.p.trailAdd) gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+    else gl.blendFunc(gl.DST_COLOR, gl.ZERO);
     gl.depthMask(false);
     gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(-2, -8);
     gl.drawArrays(gl.TRIANGLES, 0, verts);
@@ -3156,13 +3695,14 @@ const Scenery = {
 
 const ATMOS_PRESETS = {
   day: {
-    sunDir: [-0.42, 0.62, -0.55], sunColor: [1.30, 1.16, 0.94],
-    skyTint: [0.42, 0.55, 0.78], groundTint: [0.30, 0.35, 0.44],
-    fogColor: [0.72, 0.81, 0.93], fogDensity: 0.0026,
-    zenith: [0.13, 0.32, 0.68], horizon: [0.78, 0.86, 0.96], clear: [0.62, 0.74, 0.90],
-    haze: [0.76, 0.84, 0.95], mtnAmbLo: [0.34, 0.42, 0.58], mtnAmbHi: [0.62, 0.72, 0.90],
-    exposure: 1.02, bloomThresh: 1.05, stars: 0, cloudLum: 1, neon: 0,
-    trail: [0.42, 0.53, 0.74], trailAdd: false, flake: [1, 1, 1, 0.85], lamps: null, riderLight: null
+    // low, warm winter sun: long tree shadows and raking light that shows the snow relief
+    sunDir: [-0.55, 0.42, -0.62], sunColor: [1.75, 1.52, 1.18],
+    skyTint: [0.30, 0.40, 0.60], groundTint: [0.24, 0.28, 0.36],
+    fogColor: [0.66, 0.76, 0.90], fogDensity: 0.0022,
+    zenith: [0.10, 0.27, 0.62], horizon: [0.74, 0.83, 0.95], clear: [0.60, 0.72, 0.90],
+    haze: [0.70, 0.79, 0.92], mtnAmbLo: [0.26, 0.33, 0.48], mtnAmbHi: [0.52, 0.62, 0.82],
+    exposure: 0.92, bloomThresh: 1.05, stars: 0, cloudLum: 1, neon: 0,
+    trail: [0.58, 0.66, 0.84], trailAdd: false, flake: [1, 1, 1, 0.85], lamps: null, riderLight: null
   },
   night: {
     sunDir: [0.30, 0.55, -0.62], sunColor: [0.30, 0.38, 0.62],        // the moon
@@ -3171,7 +3711,7 @@ const ATMOS_PRESETS = {
     zenith: [0.008, 0.016, 0.05], horizon: [0.07, 0.10, 0.19], clear: [0.065, 0.09, 0.175],
     haze: [0.065, 0.09, 0.17], mtnAmbLo: [0.05, 0.06, 0.10], mtnAmbHi: [0.13, 0.16, 0.27],
     exposure: 1.3, bloomThresh: 0.7, stars: 1, cloudLum: 0.10, neon: 0,
-    trail: [0.10, 0.14, 0.30], trailAdd: false, flake: [0.80, 0.86, 1.0, 0.55],
+    trail: [0.45, 0.52, 0.72], trailAdd: false, flake: [0.80, 0.86, 1.0, 0.55],
     lamps: 'warm', riderLight: [0.30, 0.40, 0.65, 11], spray: [0.42, 0.48, 0.66]
   },
   neon: {
@@ -3205,8 +3745,10 @@ const Atmos = {
     this.mode = Level.cur.zen ? this.zenMode : 'day';
     this.p = ATMOS_PRESETS[this.mode];
     const p = this.p;
-    V3.norm(Sun.dir, V3(p.sunDir[0], p.sunDir[1], p.sunDir[2]));
-    Sun.color = p.sunColor.slice(); Sun.skyTint = p.skyTint.slice(); Sun.groundTint = p.groundTint.slice();
+    const sd = (this.mode === 'day' && Level.cur.sunDir) || p.sunDir;   // built courses want a high sun
+    V3.norm(Sun.dir, V3(sd[0], sd[1], sd[2]));
+    const ss = (this.mode === 'day' && Level.cur.sunScale) || 1;
+    Sun.color = p.sunColor.map(c => c * ss); Sun.skyTint = p.skyTint.slice(); Sun.groundTint = p.groundTint.slice();
     Sun.fogColor = p.fogColor.slice(); Sun.fogDensity = p.fogDensity;
     document.body.classList.toggle('night', this.mode !== 'day');
     const b = document.getElementById('atmosBtn');
@@ -4708,6 +5250,7 @@ const Game = {
   air: { t: 0, spin: 0, flip: 0, grab: null, grabT: 0 },
   lastZ: 0, startY: 0, t: 0, frames: 0, fps: 60, _fpsT: 0, _mt: 0,
   menuAt: -1e9,                  // when the menu last opened (swallows that tap's trailing click)
+  perf: { t: 0, n: 0, warm: 0, level: 0 },   // adaptive-quality frame-rate monitor
   frameNo: 0,                    // monotonic; never reset (chunk cache ages on it)
 
   boot() {
@@ -4790,6 +5333,7 @@ const Game = {
 
   start() {
     Audio.init(); Audio.resume();
+    this.perf.t = 0; this.perf.n = 0; this.perf.warm = 0;     // first window is shader warm-up
     $('menu').classList.add('hide');
     this.restart(true);
     Input.jumpHeld = false; Input.jumpRelease = false;   // the key that dropped us in is not an ollie
@@ -5111,6 +5655,16 @@ const Game = {
     requestAnimationFrame(frame);
     let dt = (now - last) / 1000; last = now;
     if (!(dt > 0)) return;
+    // adaptive quality: a run that holds under ~45 fps sheds the costliest effects
+    // (step 1: MSAA; step 2: render scale, surface detail, nearer tree LOD)
+    if (Game.state === 'play' && !document.hidden && dt < 0.5) {
+      const pf = Game.perf;
+      pf.t += dt; pf.n++;
+      if (pf.t > 3) {
+        const fps = pf.n / pf.t; pf.t = 0; pf.n = 0;
+        if (pf.warm++ >= 1 && fps < 45 && pf.level < 2) GL.degrade(++pf.level);
+      }
+    }
     dt = Math.min(dt, 1 / 30);
     GL.time += dt; Game.t += dt;
     Game.frames++; Game._fpsT += dt; Game.frameNo++;

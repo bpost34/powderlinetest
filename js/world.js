@@ -166,21 +166,25 @@ class Chunk {
   /* trees + boulders, deterministic per chunk */
   scatter() {
     const t = [], b = [];
-    const n = 46;
+    const n = Level.cur.height === mtnHeightAt ? 78 : 46;
     for (let i = 0; i < n; i++) {
       const rx = hash2(this.ix * 31 + i, this.iz * 17 + 3, 101);
       const rz = hash2(this.ix * 13 + i, this.iz * 29 + 7, 202);
       const x = this.x0 + rx * CHUNK, z = this.z0 + rz * CHUNK;
       const cx = centerX(z), d = Math.abs(x - cx);
       const clear = Level.cur.clearHalf;
-      if (d < clear || d > WALL_START + 46) continue;
+      // the forest climbs the valley walls (thinning out toward the ridgeline)
+      if (d < clear || d > WALL_START + 125) continue;
       const y = heightAt(x, z);
       const nz = normalAt(x, z, { x: 0, y: 0, z: 0 });
-      if (nz.y < 0.78) continue;
-      const dense = sstep(clear, clear + 12, d);
+      if (nz.y < 0.5) continue;
+      const wall = sstep(WALL_START, WALL_START + 125, d);
+      const dense = sstep(clear, clear + 12, d) * (1 - wall * 0.55) * sstep(0.5, 0.62, nz.y)
+        * (0.55 + 0.45 * fbm(x * 0.012, z * 0.012, 2, 31) * 2 - 0.45);     // glades and stands
       if (hash2(i, this.ix + this.iz * 7, 303) > dense * 0.92) continue;
       const sc = 0.75 + hash2(i, 9, 404) * 0.85;
-      t.push({ x, y, z, sc, rot: hash2(i, 5, 505) * TAU, sway: hash2(i, 7, 606) * TAU });
+      t.push({ x, y, z, sc, rot: hash2(i, 5, 505) * TAU, sway: hash2(i, 7, 606) * TAU,
+               shape: hash2(i, this.ix * 3 + this.iz, 707) < 0.55 ? 0 : 1, tall: 0.9 + hash2(i, 11, 808) * 0.25 });
     }
     // occasional boulders on the rideable slope beside the run — never up on the
     // valley walls (where they read as floating snowballs) or on steep ground.
@@ -222,9 +226,11 @@ class Chunk {
     // per vertex that normalAt() would have made (~5x fewer evals, and this
     // loop is what made prewarm cost seconds).
     const skirt = cell * 1.2 + 0.25;
+    const mtn = Level.cur.height === mtnHeightAt, clear = Level.cur.clearHalf || 0;
     let p = 0;
     for (let j = 0; j < n; j++) {
       const gz = j - 1;
+      const zRow = this.z0 + gz * cell, cxRow = centerX(zRow);
       for (let i = 0; i < n; i++) {
         const gx = i - 1;
         const idx = j * n + i;
@@ -239,7 +245,19 @@ class Chunk {
         if (gx < 0 || gz < 0 || gx > res || gz > res) y -= skirt;   // drop the skirt ring
         v[p++] = this.x0 + gx * cell; v[p++] = y; v[p++] = this.z0 + gz * cell;
         v[p++] = nx / l; v[p++] = ny / l; v[p++] = nz / l;
-        v[p++] = 1; v[p++] = 1; v[p++] = 1;   // albedo comes from the shader
+        // colour carries terrain hints for the shader (albedo itself is procedural):
+        //  r = forest cover (matches the tree scatter; painted as distant canopy)
+        //  g = cavity: 0.5 flat, < 0.5 hollow, > 0.5 crest (from the height Laplacian)
+        //  b = valley-wall factor (exposed rock bands)
+        const xv = this.x0 + gx * cell, d = Math.abs(xv - cxRow);
+        let forest = 0, wall = 0;
+        if (mtn) {
+          wall = sstep(WALL_START, WALL_START + 70, d);
+          forest = sstep(clear + 4, clear + 20, d) * (1 - sstep(WALL_START + 70, WALL_START + 150, d))
+            * sstep(0.48, 0.62, ny / l) * clamp(0.35 + fbm(xv * 0.012, zRow * 0.012, 2, 31) * 1.1, 0, 1);
+        }
+        const lap = (h[iL] + h[iR] + h[jD] + h[jU] - 4 * h[idx]) / (cell * cell);
+        v[p++] = forest; v[p++] = clamp(0.5 - lap * 1.6, 0, 1); v[p++] = wall;
       }
     }
     // n×n vertices (including the skirt ring) → (n-1)² quads
