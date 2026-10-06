@@ -1,0 +1,14 @@
+const fs=require('fs');
+(async()=>{const list=await (await fetch('http://localhost:9333/json/list')).json();const pg=list.find(t=>t.type==='page');
+const ws=new WebSocket(pg.webSocketDebuggerUrl);await new Promise(r=>ws.onopen=r);let id=0;const pend={};ws.onmessage=e=>{const m=JSON.parse(e.data);if(m.id&&pend[m.id]){pend[m.id](m);delete pend[m.id];}};
+const send=(method,params={})=>new Promise(r=>{const i=++id;pend[i]=r;ws.send(JSON.stringify({id:i,method,params}));});
+const ev=async x=>{const r=await send('Runtime.evaluate',{expression:x,returnByValue:true});return r.result.result?.value;};
+const wait=ms=>new Promise(r=>setTimeout(r,ms));
+await send('Page.enable');await send('Network.setCacheDisabled',{cacheDisabled:true});
+await send('Page.navigate',{url:'http://127.0.0.1:8765/?'+Date.now()});await wait(3000);
+await ev("localStorage.setItem('powderline.flick','off');Flick.load();Game.selectLevel('mountain');Game.start();Game.lives=99;Game.P.invuln=1e9");
+await wait(2500);
+let s=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync('sw_reg.png',Buffer.from(s.result.data,'base64'));
+await ev("Game.P.stance=Math.PI");await wait(1500);
+s=await send('Page.captureScreenshot',{format:'png'});fs.writeFileSync('sw_switch.png',Buffer.from(s.result.data,'base64'));
+console.log(await ev("[Game.P.stance,Game.P.stanceVis.toFixed(2),document.querySelector('script[src*=player]').src]"));process.exit(0);})();
