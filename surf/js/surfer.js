@@ -30,7 +30,7 @@ const set3 = (o, x, y, z) => { o[0] = x; o[1] = y; o[2] = z; };
 const Surfer = {
   mode: 'prone',
   pos: V3(), vx: 0, vz: 0, vy: 0, yaw: Math.PI,
-  stamina: 1, duckT: 0, duckCool: 0, popT: 0, wipeT: 0, tumbleT: 0, pumpT: 0, pumpCool: 0,
+  stamina: 1, popArm: 0, sitMode: true, duckT: 0, duckCool: 0, popT: 0, wipeT: 0, tumbleT: 0, pumpT: 0, pumpCool: 0,
   phase: 0, crouch: 0.3, lean: 0, stall: 0, paddling: 0,
   lastHit: 0, rideWave: null, offWave: 0, bogT: 0, yPrev: 0, ydot: 0,
   tubeT: 0, tubeGap: 0, covered: false, inTube: false, tubeDepth: 0,
@@ -102,6 +102,15 @@ const Surfer = {
       this.phase += dt * 7.5 * want;
     } else this.stamina = Math.min(1, this.stamina + 0.08 * dt);
     this.stamina = Math.min(1, this.stamina + 0.012 * dt);
+    // the wave picks up a committed paddler: on a clean face, nose to the beach, stroking
+    const zTr = q.wave ? q.zT - q.zw : 0;
+    if (!ducking && want > 0.05 && hz > 0.3 && q.wave && zr > 0 && zr < zTr + 0.5 && q.foamAmt < 0.3 && q.H > 1) {
+      az += 2.4 * hz * smoothstep(zTr + 0.5, zTr * 0.6, zr);
+    }
+    // drawback: in front of a steep face the water runs back out to sea and pulls you onto it
+    if (!ducking && q.wave && zr > zTr * 0.7 && zr < zTr + 7 && q.foamAmt < 0.3 && q.H > 1) {
+      wz -= SEA.C * 0.35 * smoothstep(zTr + 7, zTr + 1, zr) * smoothstep(0.3, 0.8, q.s);
+    }
     // drag relative to the water: a prone board slides along itself more easily
     const rx = this.vx, rz = this.vz - wz;
     const rl = rx * hx + rz * hz, rn = rx * hz - rz * hx;
@@ -124,14 +133,16 @@ const Surfer = {
     this.ydot = (P.y - this.yPrev) / dt; this.yPrev = P.y;
     this.surfNormal(q, dt, 10);
 
-    // the action button: pop up if the wave has you, else duck dive
-    if (In.actionPressed && !ducking && this.tumbleT <= 0) {
-      const onFace = q.wave && zr > -0.8 && zr < q.zT - q.zw + 1.5 && q.gz < -0.12;
-      if (this.canPop()) this.popUp(q);
-      else if (onFace && this.vz > 1.2 && hz > 0) Game.onTooEarly();
-      else if (this.duckCool <= 0 && this.stamina > 0.05) {
-        this.mode = 'duck'; this.duckT = 1.15; this.stamina -= 0.04; Game.onDuck();
-      }
+    // the action button: pop up if the wave has you, else duck dive. Facing the beach with
+    // a clean wave coming it never ducks: pressing early arms the pop-up, which fires the
+    // moment the wave takes you (holding the button keeps it armed)
+    const catching = hz > 0.2 && this.cleanWaveBehind(q);
+    if (In.actionPressed && catching) this.popArm = 1.2;
+    if (In.action && catching) this.popArm = Math.max(this.popArm, 0.1);
+    this.popArm -= dt;
+    if (!ducking && this.tumbleT <= 0 && (this.popArm > 0 || In.actionPressed) && this.canPop()) { this.popArm = 0; this.popUp(q); }
+    else if (In.actionPressed && !this.sitMode && !ducking && !catching && this.tumbleT <= 0 && this.duckCool <= 0 && this.stamina > 0.05) {
+      this.mode = 'duck'; this.duckT = 1.15; this.stamina -= 0.04; Game.onDuck();
     }
     // missed: the wave went under you
     this.q = q;
@@ -142,7 +153,18 @@ const Surfer = {
     const q = this.q;
     if (this.mode !== 'prone' || this.tumbleT > 0 || !q || !q.wave) return false;
     const zr = this.pos.z - q.zw;
-    return zr > 0.3 && zr < q.zT - q.zw + 1.5 && this.pos.y < 0.85 * q.H && q.gz < -0.12 && this.vz > 0.8 * SEA.C && this.hz() > 0.25 && q.foam < 0.5 && q.foamAmt < 0.3 && q.lam < 0.4 && q.zw < SEA.Z_END - 8;
+    return zr > 0 && zr < q.zT - q.zw + 2 && this.pos.y < 0.95 * q.H && q.gz < -0.08 && this.vz > 0.62 * SEA.C && this.hz() > 0.1 && q.foam < 0.55 && q.foamAmt < 0.3 && q.lam < 0.6 && q.zw < SEA.Z_END - 8;
+  },
+  /* an unbroken wave close behind you (or already under you) */
+  cleanWaveBehind(q) {
+    const P = this.pos;
+    for (const w of Ocean.waves) {
+      const d = P.z - w.zw;
+      if (d < -1 || d > (this.sitMode ? 45 : 22)) continue;
+      Ocean.stage(w, P.x, this._st || (this._st = {}));
+      if (this._st.foamAmt < 0.3 && this._st.H > 1) return w;
+    }
+    return null;
   },
 
   popUp(q) {
@@ -389,7 +411,8 @@ const Surfer = {
         poseLerp(this.pose, B, A, smoothstep(0.38, 0.0, this.popT));
       } else poseLerp(this.pose, this.pose, A, 1 - Math.exp(-14 * dt));
     } else {
-      this.prone(A, this.paddling > 0.1, this.mode === 'duck');
+      if (this.sitMode && this.paddling < 0.1 && this.mode === 'prone') this.sit(A);
+      else this.prone(A, this.paddling > 0.1, this.mode === 'duck');
       poseLerp(this.pose, this.pose, A, 1 - Math.exp(-16 * dt));
     }
   },
@@ -412,6 +435,21 @@ const Surfer = {
       set3(J.ha[1], lerp(0.12, 0.45, stall), lerp(hy + 0.34, 0.1, stall), lerp(-0.62, -0.3, stall));
     }
     for (const s of [0, 1]) set3(J.el[s], (J.sh[s][0] + J.ha[s][0]) / 2 + 0.1, (J.sh[s][1] + J.ha[s][1]) / 2 - 0.04, (J.sh[s][2] + J.ha[s][2]) / 2);
+  },
+  /* waiting in the lineup: sat up on the board, legs in the water */
+  sit(J) {
+    const bob = Math.sin(Ocean.t * 1.7) * 0.02;
+    set3(J.hip, 0, 0.14, -0.2); set3(J.chest, 0, 0.62 + bob, -0.14); set3(J.neck, 0, 0.8 + bob, -0.12); set3(J.head, 0, 0.93 + bob, -0.1);
+    set3(J.hairOff, 0, 0.04, -0.04);
+    for (const s of [0, 1]) {
+      const sd = s ? 1 : -1;
+      set3(J.hp[s], sd * 0.12, 0.13, -0.18);
+      set3(J.kn[s], sd * 0.3, 0.02, 0.1);
+      set3(J.ft[s], sd * 0.33, -0.42, 0.02 + 0.06 * Math.sin(Ocean.t * 1.3 + s * 2));
+      set3(J.sh[s], sd * 0.2, 0.7 + bob, -0.14);
+      set3(J.ha[s], sd * 0.24, 0.18, 0.12);
+      set3(J.el[s], sd * 0.3, 0.42, -0.04);
+    }
   },
   prone(J, paddling, duck) {
     set3(J.hip, 0, 0.19, -0.22); set3(J.chest, 0, 0.24, 0.3); set3(J.neck, 0, 0.32, 0.48); set3(J.head, 0, 0.42, 0.6);

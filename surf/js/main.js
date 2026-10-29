@@ -1,7 +1,8 @@
 /* =====================================================================
    main.js — session flow, sets, camera, input, HUD.
-   A session: paddle out → sit in the lineup → a set wave comes → turn,
-   paddle, pop up → ride → paddle back out. Three waves.
+   A session: sit in the lineup facing the beach → a set wave comes, you
+   stroke into it (automatically) → Space to pop up → ride → back to the
+   lineup. Three waves.
    ===================================================================== */
 'use strict';
 
@@ -15,7 +16,7 @@ const Game = {
   waveIdx: 0, rideScore: 0, total: 0, scores: [], riding: false,
   best: 0, bestTube: 0, topSpeed: 0, bestMove: null, wipes: 0,
   flash: '', flashT: 0, flashCls: '', missedT: 0, endT: 0, bannerT: 0,
-  camDir: V3(1, 0, 0), tubeCam: 0, camMode: '', sideSign: 1,
+  camDir: V3(1, 0, 0), tubeCam: 0, rideDir: 0, flipT: 0, camMode: '', sideSign: 1,
   roar: 0,
 
   init() {
@@ -28,12 +29,10 @@ const Game = {
   start() {
     Sfx.start();
     Ocean.reset();
-    Surfer.reset(0, SEA.START_Z);
-    this.main = null; this.boreT = 0.5; this.setT = 3; this.waveIdx = 0; this.total = 0; this.scores = [];
+    this.toLineup(0);
+    this.main = null; this.boreT = 0; this.setT = 2; this.waveIdx = 0; this.total = 0; this.scores = [];
     this.rideScore = 0; this.riding = false; this.bestTube = 0; this.topSpeed = 0; this.bestMove = null; this.wipes = 0;
     this.endT = 0; this.missedT = 0; this.respawnT = 0; $('fade').classList.remove('on');
-    // the first whitewater is already on its way in
-    Ocean.spawn({ zw: SEA.ZB + 6, H0: 2.1, xPeak: 0, vp: 60, sec: 0 });
     this.state = 'play';
     $('menu').classList.add('hide'); $('over').classList.add('hide'); $('pause').classList.add('hide');
     $('hud').classList.add('on'); $('under').classList.remove('on'); document.body.classList.add('playing');
@@ -42,32 +41,26 @@ const Game = {
 
   /* ---------------- the sea's schedule ---------------- */
   outermost() { let z = Infinity; for (const w of Ocean.waves) z = Math.min(z, w.zw); return z; },
+  /* back to the lineup: sat on the board, facing the beach */
+  toLineup(x) {
+    Surfer.reset(x, SEA.START_Z); Surfer.yaw = 0; Surfer.sitMode = true;
+  },
   updateSea(dt) {
     const P = Surfer.pos;
     if (this.main && !Ocean.waves.includes(this.main)) this.main = null;
     // a set wave that rolled through without you
-    if (this.main && !this.riding && Surfer.rideWave !== this.main && this.main.zw > P.z + 12) {
-      this.main = null; this.missedT = 2.2; this.setT = 4;
+    if (this.main && !this.riding && Surfer.rideWave !== this.main && this.main.zw > P.z + 8) {
+      this.main = null; this.missedT = 2.2; this.setT = 2.5;
+      if (Math.abs(P.z - SEA.START_Z) > 4) this.respawnT = 1.6;
     }
-    if (this.main) return;
-    const inside = P.z > SEA.LINEUP[1];
-    const spawnZ = Math.min(SEA.ZB - 60, this.outermost() - 64);
-    if (inside && Surfer.mode !== 'wipe') {
-      this.boreT -= dt;
-      if (this.boreT <= 0 && spawnZ > SEA.ZB - 110) {
-        Ocean.spawn({ zw: spawnZ, H0: rnd(1.7, 2.4), xPeak: P.x, vp: 60, sec: 0 });
-        this.boreT = rnd(9.5, 12.5);
-      }
-    }
-    const inLineup = P.z >= SEA.LINEUP[0] - 8 && P.z <= SEA.LINEUP[1];
-    if (inLineup && Surfer.mode === 'prone' && !this.riding && this.endT <= 0) {
-      this.setT -= dt;
-      if (this.setT <= 0 && spawnZ > SEA.ZB - 110) {
-        const side = Math.random() < 0.5 ? -1 : 1;
-        this.main = Ocean.spawn({ zw: Math.min(SEA.ZB - 52, spawnZ), H0: rnd(2.8, 3.4), xPeak: P.x + side * rnd(3, 7), vp: 6.5, main: true });
-        this.sideSign = -side;
-        this.setT = 5;
-      }
+    if (this.main || this.riding || Surfer.mode !== 'prone' || this.respawnT > 0 || this.endT > 0) return;
+    if (Math.abs(P.z - SEA.START_Z) > 4) { this.respawnT = 1.4; return; }   // drifted off: back to the spot
+    this.setT -= dt;
+    if (this.setT <= 0) {
+      const side = Math.random() < 0.5 ? -1 : 1;
+      this.main = Ocean.spawn({ zw: Math.min(P.z - 34, this.outermost() - 64), H0: rnd(2.8, 3.4), xPeak: P.x + side * rnd(3, 7), vp: 6.5, main: true });
+      this.sideSign = -side;
+      this.setT = 3;
     }
   },
 
@@ -92,6 +85,10 @@ const Game = {
     if (this.state !== 'play') return;
     Ocean.update(dt);
     this.updateSea(dt);
+    if (Surfer.mode === 'prone') {       // in the lineup you only choose when to pop up: the rider strokes in by itself
+      const m = this.main, d = m ? Surfer.pos.z - m.zw : 99;
+      In = { steer: clamp(-Surfer.yaw * 2, -1, 1), up: d > -1 && d < 15 ? 1 : 0, down: 0, actionPressed: In.actionPressed, action: In.action };
+    }
     Surfer.step(dt, In);
     Fx.update(dt);
     this.waveFx(dt, Surfer.pos);
@@ -100,13 +97,9 @@ const Game = {
     if (this.respawnT > 0) {
       this.respawnT -= dt;
       $('fade').classList.toggle('on', this.respawnT < 1.4 && this.respawnT > 0.2);
-      if (this.respawnT <= 0.8 && Surfer.pos.z > SEA.START_Z) { Surfer.reset(Surfer.pos.x, SEA.START_Z); this.snapCam(); }
-    }
-    if (Surfer.mode === 'wipe' && Surfer.wipeT < 0.1 && Surfer.pos.z > SEA.START_Z && this.waveIdx < WAVES) this.respawnT = 1.6;
-    // washed all the way in on your belly: walk back up and paddle out from the usual spot
-    if (Surfer.mode === 'prone' && Surfer.pos.z > SEA.START_Z + 14 && !(this.respawnT > 0)) {
-      this.respawnT = 1.6; this.say('Washed in <small>back out you go</small>', 'warn', 1.6);
-    }
+      if (this.respawnT <= 0.8 && !this.respawned) { this.respawned = true; this.toLineup(Surfer.pos.x); this.snapCam(); }
+    } else this.respawned = false;
+
     if (this.endT > 0) { this.endT -= dt; if (this.endT <= 0 && this.waveIdx >= WAVES) this.over(); }
     if (this.riding || Surfer.mode === 'air') this.topSpeed = Math.max(this.topSpeed, Surfer.speed());
     // sound
@@ -153,53 +146,56 @@ const Game = {
   camera(dt, snap) {
     const S = Surfer, P = S.pos, q = S.q || {};
     const eye = V3(), tgt = V3();
-    let k = 3.5, kt = 6;
     const ride = S.mode === 'ride' || S.mode === 'popup' || S.mode === 'air';
-    const zr = q.wave ? P.z - q.zw : 99;
-    const catching = S.mode === 'prone' && q.wave && zr > -1 && zr < 7 && S.vz > 2.6 && S.hz() > 0.3;
-    const setNear = this.main && S.mode === 'prone' && this.main.zw < P.z && P.z - this.main.zw < 45 && S.hz() > 0.2;
     this.tubeCam = damp(this.tubeCam, S.covered ? 1 : 0, 2.5, dt);
+    // which way along the wave you're going: only flips after a sustained reversal (cutbacks don't swing the camera)
     if (ride) {
-      let dx = S.vx, dz = S.vz - SEA.C;
-      const l = Math.hypot(dx, dz);
-      if (l > 1) { dx /= l; dz /= l; damp3(this.camDir, dx, 0, dz * 0.6, 2.2, dt); }
-      // in front of the wave, a little behind the rider: the face, the rider and the
-      // curl chasing them are all in shot. In the tube it tucks in behind, under the lip.
-      const c = this.camDir, tc = this.tubeCam, wz = q.wave ? q.zw : P.z - 1.5;
-      const back = lerp(4.6, 2.6, tc);
-      // under the lip: keep the camera below the ceiling over the rider
-      // inside: sit near the middle of the barrel, wherever the rider is on the wall
-      const mid = q.covered && isFinite(q.ceil) ? (q.ceil + q.yT) * 0.5 : P.y + 0.95;
-      const h = lerp(1.7, clamp(mid - P.y, -0.6, 0.95), tc);
-      // tube: hug the wall (the column behind is further into its collapse, so stay deep)
-      const sx = Math.sign(c.x) || 1, ax = lerp(c.x, sx, tc), az = lerp(c.z, 0, tc);
-      const ex = P.x - ax * back, ey = P.y + h;
-      const tz = tc > 0.01 && q.wave ? this.tubeEyeZ(q.wave, ex, ey, P.z) : P.z;
-      const ez = lerp(Math.max(P.z + 4.2, wz + 6.5), tz, tc);
-      V3.set(eye, ex, ey, ez);
-      V3.set(tgt, P.x + ax * 6, P.y + lerp(0.5, 0.8, tc), lerp(P.z + az * 6 - 0.6, P.z + 0.4, tc));
-      k = 5; this.camMode = 'ride';
+      const vxw = S.vx;
+      if (!this.rideDir) this.rideDir = Math.sign(vxw) || Math.sign(P.x - (S.rideWave ? S.rideWave.xPeak : 0)) || 1;
+      if (Math.sign(vxw) === -this.rideDir && Math.abs(vxw) > 2) { this.flipT += dt; if (this.flipT > 1.2) { this.rideDir = -this.rideDir; this.flipT = 0; } }
+      else this.flipT = 0;
+    } else { this.rideDir = 0; this.flipT = 0; }
+    // an orbit around the rider: (yaw, pitch, distance), damped as angles so a change of
+    // view swings around the rider instead of cutting through the wave
+    const hx = S.hx(), hz = S.hz(), heading = Math.atan2(hx, hz);
+    let yaw, pitch, dist, look = 0, ldx = hx, ldz = hz, k = 2.6;
+    if (ride) {
+      const d = this.rideDir;
+      yaw = Math.atan2(-d * 4.6, 4.2); pitch = 0.3; dist = 6.6; look = 3; ldx = d; ldz = 0; k = 3;
+      this.camMode = 'ride';
     } else if (S.mode === 'wipe') {
-      const a = Ocean.t * 0.4;
-      V3.set(eye, P.x + Math.cos(a) * 6, Math.max(P.y, 0) + 3.5, P.z + Math.sin(a) * 6 - 2);
-      V3.set(tgt, P.x, P.y + 0.5, P.z); k = 2; this.camMode = 'wipe';
-    } else if (catching) {
-      V3.set(eye, P.x - S.hx() * 4.5, P.y + 3.4, P.z - S.hz() * 4.5);
-      V3.set(tgt, P.x + S.hx() * 6, P.y - 0.6, P.z + S.hz() * 6); k = 3; this.camMode = 'catch';
-    } else if (setNear) {
-      // side-on: watch the set stand up behind you
-      const s = this.sideSign;
-      V3.set(eye, P.x + s * 9, P.y + 3.6, P.z - 5.5);
-      V3.set(tgt, P.x - s * 1.5, P.y + 0.8, P.z + 1.5); k = 2.2; this.camMode = 'side';
+      yaw = (this.camYaw || 0) + dt * 0.5; pitch = 0.5; dist = 7; k = 6; this.camMode = 'wipe';
     } else {
-      const hx = S.hx(), hz = S.hz();
-      V3.set(eye, P.x - hx * 6.2, P.y + 2.7, P.z - hz * 6.2);
-      V3.set(tgt, P.x + hx * 14, P.y + 0.6, P.z + hz * 14); k = 3; this.camMode = 'paddle';
+      // sat in the lineup: from in front, so you watch the set stand up behind you
+      yaw = heading + 0.35 * (this.sideSign || 1); pitch = 0.22; dist = 7.5; look = -6;
+      this.camMode = 'lineup';
+    }
+    if (snap || this.camYaw === undefined) { this.camYaw = yaw; this.camPitch = pitch; this.camDist = dist; }
+    else {
+      this.camYaw += angDelta(this.camYaw, yaw) * (1 - Math.exp(-k * dt));
+      this.camPitch = damp(this.camPitch, pitch, 2.5, dt); this.camDist = damp(this.camDist, dist, 2.5, dt);
+    }
+    this.lookAhead = damp(this.lookAhead || 0, look, 2, dt);
+    this.ldx = damp(this.ldx || 0, ldx, 3, dt); this.ldz = damp(this.ldz || 0, ldz, 3, dt);
+    const cp = Math.cos(this.camPitch), r = this.camDist;
+    const ox = Math.sin(this.camYaw) * cp * r, oy = Math.sin(this.camPitch) * r, oz = Math.cos(this.camYaw) * cp * r;
+    const ty = Math.max(P.y, -0.3) + 0.6;
+    V3.set(eye, P.x + ox, ty + oy, P.z + oz);
+    V3.set(tgt, P.x + this.ldx * this.lookAhead, ty, P.z + this.ldz * this.lookAhead);
+    // the barrel: tuck in behind the rider under the lip (blended in by tubeCam)
+    const tc = this.tubeCam;
+    if (tc > 0.01 && q.wave) {
+      const d = this.rideDir || 1;
+      const mid = q.covered && isFinite(q.ceil) ? (q.ceil + q.yT) * 0.5 : P.y + 0.95;
+      const ex = P.x - d * 2.6, ey = P.y + clamp(mid - P.y, -0.6, 0.95);
+      const ez = this.tubeEyeZ(q.wave, ex, ey, P.z);
+      V3.lerp(eye, eye, V3(ex, ey, ez), tc);
+      V3.lerp(tgt, tgt, V3(P.x + d * 6, P.y + 0.8, P.z + 0.4), tc);
     }
     if (snap) { V3.set(Cam.pos, eye.x, eye.y, eye.z); V3.set(Cam.tgt, tgt.x, tgt.y, tgt.z); }
-    else {
-      Cam.pos.x = damp(Cam.pos.x, eye.x, k, dt); Cam.pos.y = damp(Cam.pos.y, eye.y, k, dt); Cam.pos.z = damp(Cam.pos.z, eye.z, k, dt);
-      Cam.tgt.x = damp(Cam.tgt.x, tgt.x, kt, dt); Cam.tgt.y = damp(Cam.tgt.y, tgt.y, kt, dt); Cam.tgt.z = damp(Cam.tgt.z, tgt.z, kt, dt);
+    else {    // the orbit is already smooth: follow it tightly so the rider stays framed
+      Cam.pos.x = damp(Cam.pos.x, eye.x, 12, dt); Cam.pos.y = damp(Cam.pos.y, eye.y, 8, dt); Cam.pos.z = damp(Cam.pos.z, eye.z, 12, dt);
+      Cam.tgt.x = damp(Cam.tgt.x, tgt.x, 14, dt); Cam.tgt.y = damp(Cam.tgt.y, tgt.y, 8, dt); Cam.tgt.z = damp(Cam.tgt.z, tgt.z, 14, dt);
     }
     // stay out of the water (but the tube cam may sit under the lip)
     // (inside the tube the lip is overhead: trust the framing instead)
@@ -261,7 +257,7 @@ const Game = {
     $('under').classList.add('on');
     if (wasRiding) this.endWave(reason, true);
   },
-  onSurface() { $('under').classList.remove('on'); },
+  onSurface() { $('under').classList.remove('on'); if (this.waveIdx < WAVES || this.riding) this.respawnT = 1.4; },
   onRideEnd(reason) { this.endWave(reason, false); },
   endWave(reason, wiped) {
     if (!this.riding) return;
@@ -270,7 +266,7 @@ const Game = {
     this.scores.push(s); this.total += s; this.waveIdx++;
     this.main = null; this.setT = 6; this.boreT = 3;
     this.banner = (wiped ? reason + ' — half points' : reason) + ': ' + s.toLocaleString();
-    if (!wiped && Surfer.pos.z > SEA.START_Z) this.respawnT = 2.2;   // walk up the beach, back out through the channel
+    if (!wiped && this.waveIdx < WAVES) this.respawnT = 2.6;   // fade back to the lineup for the next one
     this.bannerT = 3.2;
     if (this.waveIdx >= WAVES) this.endT = 3.2;
   },
@@ -296,34 +292,26 @@ const Game = {
     if (this.flashT > 0) return [this.flash, this.flashCls];
     if (S.mode === 'wipe' || S.mode === 'duck' || S.mode === 'air') return ['', ''];
     if (S.mode === 'ride' || S.mode === 'popup') return S.covered ? ['', ''] : ['', ''];
-    if (this.missedT > 0) return ['Missed it <small>it rolled under you — wait for the next one</small>', 'warn'];
-    if (this.waveIdx >= WAVES) return ['', ''];
+    if (this.missedT > 0) return ['Missed it <small>press Space as the wave lifts you · next one coming</small>', 'warn'];
+    if (this.waveIdx >= WAVES || this.respawnT > 0) return ['', ''];
     if (S.canPop()) return ['POP UP! <small>Space</small>', 'go'];
     const m = this.main;
     if (m && m.zw < P.z + 2) {
       const d = P.z - m.zw;
-      if (S.hz() < 0.3) return ['Set wave! Turn around <small>A / D to face the beach · ' + Math.round(d) + ' m</small>', 'warn'];
-      if (d < 11) return ['Paddle! <small>hold W — pop up when it takes you</small>', 'go'];
-      if (d < 17) return ['Get ready… <small>not yet — paddle too soon and you\'ll be under the lip</small>', ''];
-      return ['Set wave coming… <small>face the beach and wait · ' + Math.round(d) + ' m</small>', ''];
+      if (S.popArm > 0) return ['Ready… <small>you\'ll pop up as it takes you</small>', 'go'];
+      if (d < 15) return ['Here it comes — Space! <small>press now: you pop up as it lifts you</small>', 'go'];
+      return ['Set wave coming… <small>' + Math.round(d) + ' m · get ready to press Space</small>', ''];
     }
-    for (const w of Ocean.waves) {
-      const d = P.z - w.zw;
-      if (d > 0 && d < 20) { Ocean.stage(w, P.x, Ocean._P); if (Ocean._P.foamAmt > 0.4 || Ocean._P.lam > 0.1) return ['Whitewater! <small>duck dive — Space, just before it hits</small>', 'warn']; }
-    }
-    if (P.z > SEA.LINEUP[1]) return ['Paddle out to the lineup <small>hold W · ' + Math.round(P.z - SEA.LINEUP[1]) + ' m to go</small>', ''];
-    if (P.z < SEA.LINEUP[0] - 8) return ['Too far out <small>paddle back toward the beach a little</small>', ''];
-    return ['In the lineup <small>sit tight — a set is on its way</small>', ''];
+    return ['In the lineup <small>a set is on its way</small>', ''];
   },
   hud() {
     const S = Surfer;
     const ride = this.riding || S.mode === 'air';
     $('waveNo').textContent = Math.min(this.waveIdx + 1, WAVES) + ' / ' + WAVES;
-    $('waveSub').textContent = ride ? 'riding' : S.mode === 'wipe' ? 'held down' : S.pos.z > SEA.LINEUP[1] ? 'paddle out' : 'in the lineup';
+    $('waveSub').textContent = ride ? 'riding' : S.mode === 'wipe' ? 'held down' : 'in the lineup';
     $('total').textContent = this.total.toLocaleString();
     $('best').textContent = 'BEST ' + this.best.toLocaleString();
     $('speed').firstChild.textContent = Math.round(S.speed() * 3.6);
-    $('stamFill').style.width = Math.round(S.stamina * 100) + '%';
     $('waveScore').classList.toggle('on', ride);
     $('wsVal').textContent = Math.round(this.rideScore).toLocaleString();
     $('tube').classList.toggle('on', S.inTube && S.tubeT > 0.2);
@@ -336,7 +324,7 @@ const Game = {
   },
   map() {
     const c = $('map'), g = c.getContext('2d'), W = c.width, H = c.height, P = Surfer.pos;
-    const z0 = -160, z1 = 16, X = 70;
+    const z0 = -150, z1 = SEA.SHORE + 12, X = 90;
     const sy = (z) => (z - z0) / (z1 - z0) * H, sx = (x) => W / 2 + (x - P.x) / X * (W / 2);
     g.clearRect(0, 0, W, H);
     g.fillStyle = 'rgba(222,196,150,.75)'; g.fillRect(0, sy(SEA.SHORE), W, H);
@@ -370,7 +358,7 @@ const Input = {
       const dx = clamp(t.x / 52, -1, 1), dy = clamp(t.y / 52, -1, 1);
       steer = Math.abs(dx) > 0.15 ? dx : 0; up = Math.max(0, -dy) > 0.25 ? Math.min(1, -dy * 1.3) : 0; down = dy > 0.3 ? dy : 0;
     }
-    const In = { steer, up, down, actionPressed: this.act };
+    const In = { steer, up, down, actionPressed: this.act, action: k.has('Space') || this.btn };
     this.act = false;
     return In;
   }
@@ -414,9 +402,9 @@ function togglePause() {
   const end = (e) => { if (e.pointerId !== t.id) return; t.on = false; stick.style.display = 'none'; };
   zone.addEventListener('pointerup', end); zone.addEventListener('pointercancel', end);
   const b = $('actBtn');
-  b.addEventListener('pointerdown', (e) => { e.preventDefault(); Input.act = true; b.classList.add('down'); });
-  b.addEventListener('pointerup', () => b.classList.remove('down'));
-  b.addEventListener('pointercancel', () => b.classList.remove('down'));
+  b.addEventListener('pointerdown', (e) => { e.preventDefault(); Input.act = true; Input.btn = true; b.classList.add('down'); });
+  const up = () => { Input.btn = false; b.classList.remove('down'); };
+  b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
   $('pauseBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); togglePause(); });
   for (const id of ['menu', 'over', 'pause']) $(id).addEventListener('pointerdown', () => {
     Sfx.start();

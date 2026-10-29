@@ -55,21 +55,66 @@ void main(){
   o = vec4(tone(c), 1.0);
 }`;
 
+// FFT chop (fft.js): sampled per cascade from texture arrays. Displacement is faded out
+// under the rider (physics rides the analytic surface), on the thin lip and in foam.
+const FFT_GLSL = `
+uniform float uFFT; uniform vec4 uInvL, uTexel;
+uniform highp sampler2DArray uDisp, uDeriv;
+float cascade(vec4 v, int c){ return c == 0 ? v.x : c == 1 ? v.y : c == 2 ? v.z : v.w; }
+`;
 const VS_WATER = `
+precision highp float;
 layout(location=0) in vec3 aPos; layout(location=1) in vec3 aNrm; layout(location=2) in vec2 aAux;
-uniform mat4 uVP; out vec3 vP; out vec3 vN; out vec2 vA;
-void main(){ vP = aPos; vN = aNrm; vA = aAux; gl_Position = uVP * vec4(aPos, 1.0); }`;
-const FS_WATER = GLSL_COMMON + `
-in vec3 vP; in vec3 vN; in vec2 vA; out vec4 o;
+uniform mat4 uVP; uniform vec3 uCam; uniform vec3 uRider; uniform float uShore;
+out vec3 vP; out vec3 vN; out vec2 vA; out vec2 vXZ; out float vM;
+` + FFT_GLSL + `
+void main(){
+  vec3 p = aPos;
+  vXZ = aPos.xz;
+  float m = 0.0;
+  if (uFFT > 0.5) {
+    float d = length(uCam - p);
+    m = smoothstep(2.5, 9.0, length(p.xz - uRider.xz)) * (1.0 - 0.85 * aAux.y) * (1.0 - smoothstep(0.3, 0.9, aAux.x))
+      * (1.0 - smoothstep(uShore - 45.0, uShore - 8.0, p.z)) * (1.0 - smoothstep(600.0, 1500.0, d));
+    float spacing = 0.6 + 0.024 * d;
+    vec3 disp = vec3(0.0);
+    for (int c = 0; c < 4; c++) {
+      float lod = log2(max(spacing / cascade(uTexel, c), 1.0));
+      if (lod < 7.0) disp += textureLod(uDisp, vec3(p.xz * cascade(uInvL, c), float(c)), lod).xyz;
+    }
+    p += disp * m;
+  }
+  vM = m; vP = p; vN = aNrm; vA = aAux;
+  gl_Position = uVP * vec4(p, 1.0);
+}`;
+const FS_WATER = GLSL_COMMON + FFT_GLSL + `
+in vec3 vP; in vec3 vN; in vec2 vA; in vec2 vXZ; in float vM; out vec4 o;
+uniform float uShore;
 float rip(vec2 q){ return vnoise(q * 1.3 + vec2(uTime * 0.5, uTime * 0.3)) + 0.5 * vnoise(q * 3.7 - vec2(uTime * 0.8, -uTime * 0.2)); }
 void main(){
   vec3 V = normalize(uCam - vP);
   vec3 N = normalize(vN);
   if (dot(N, V) < 0.0) N = -N;
   float dist = length(uCam - vP);
-  float e = 0.12, r0 = rip(vP.xz);
-  vec2 g = vec2(rip(vP.xz + vec2(e, 0)) - r0, rip(vP.xz + vec2(0, e)) - r0) / e;
-  N = normalize(N - vec3(g.x, 0.0, g.y) * 0.05 / (1.0 + dist * 0.02));
+  float whitecap = 0.0;
+  if (uFFT > 0.5) {
+    // summed cascade slopes, corrected for the horizontal squash (Jacobian)
+    vec2 s = vec2(0.0); float jxx = 0.0, jzz = 0.0, jxz = 0.0;
+    for (int c = 0; c < 4; c++) {
+      vec3 uv = vec3(vXZ * cascade(uInvL, c), float(c));
+      vec4 dv = texture(uDeriv, uv), av = texture(uDisp, uv);
+      s += dv.xy; jxx += dv.z; jzz += dv.w; jxz += av.w;
+    }
+    vec2 sl = s / vec2(max(1.0 + jxx, 0.15), max(1.0 + jzz, 0.15));
+    float calm = 1.0 - smoothstep(uShore - 40.0, uShore - 8.0, vP.z);
+    N = normalize(N - vec3(sl.x, 0.0, sl.y) * (1.0 - 0.6 * vA.y) * calm);
+    float J = (1.0 + jxx) * (1.0 + jzz) - jxz * jxz;
+    whitecap = clamp((0.62 - J) * 2.2, 0.0, 1.0) * calm;
+  } else {
+    float e = 0.12, r0 = rip(vP.xz);
+    vec2 g = vec2(rip(vP.xz + vec2(e, 0)) - r0, rip(vP.xz + vec2(0, e)) - r0) / e;
+    N = normalize(N - vec3(g.x, 0.0, g.y) * 0.05 / (1.0 + dist * 0.02));
+  }
   float ndv = max(dot(N, V), 0.0);
   float fres = 0.02 + 0.98 * pow(1.0 - ndv, 5.0);
   vec3 R = reflect(-V, N);
@@ -88,7 +133,7 @@ void main(){
   // foam: noisy, stretched along the wave, crawling with the water
   float fn = vnoise(vec2(vP.x * 0.55, vP.z * 0.9 + vP.y * 0.7) + vec2(0.0, -uTime * 0.8)) * 0.6
            + vnoise(vP.xz * 2.7 + vec2(vP.y * 2.0, uTime * 0.4)) * 0.4;
-  float f = vA.x;
+  float f = max(vA.x, whitecap * (0.45 + 0.55 * fn));
   float fm = smoothstep(0.42, 0.62, f + (fn - 0.5) * 0.75) * smoothstep(0.02, 0.15, f);
   vec3 foamC = vec3(0.94, 0.96, 0.95) * (0.6 + 0.4 * lit) + vec3(0.15, 0.08, 0.02) * back;
   col = mix(col, foamC, fm);
@@ -214,31 +259,32 @@ function gBoard(deck, rail) {
 }
 
 /* ---------------- land ---------------- */
+/* The coast is straight and repeats every LAND_P metres along x; the land mesh is
+   re-centred under the camera by whole periods, so the shoreline never ends. */
+const LAND_P = 480, LK = TAU / LAND_P;
 function landH(x, z) {
+  z -= SEA.SHORE - 9;                         // shape authored with the waterline near z = 9
   let y = -3;
   if (z > -16) y = Math.max(y, -1.7 + (z + 16) * 0.075);
-  y += smoothstep(34, 70, z) * 2.4 * (1 + 0.4 * Math.sin(x * 0.05));
-  y += smoothstep(120, 280, z) * (34 + 24 * Math.sin(x * 0.006 + 1) + 12 * Math.sin(x * 0.019 + 0.4));
-  // a headland off to the left: why this is a right-hand point break
-  const hx = (x + 360) / 110;
-  y = Math.max(y, (26 + 6 * Math.sin(z * 0.03)) * Math.exp(-hx * hx) * smoothstep(-330, -40, z) - 4);
+  y += smoothstep(34, 70, z) * 2.4 * (1 + 0.4 * Math.sin(x * LK * 4));
+  y += smoothstep(120, 280, z) * (34 + 24 * Math.sin(x * LK + 1) + 12 * Math.sin(x * LK * 2 + 0.4));
   return y;
 }
 function landCol(x, y, z, slope) {
+  z -= SEA.SHORE - 9;
   const wet = [0.5, 0.42, 0.32], dry = [0.88, 0.77, 0.58], grass = [0.38, 0.47, 0.25], hill = [0.25, 0.37, 0.24], rock = [0.42, 0.36, 0.31];
   let c = y < 0.45 ? wet : dry;
   if (y > 2.2 && z > 45) c = grass;
   if (z > 110) c = hill;
   if (slope > 0.75) c = rock;
-  const n = 0.92 + 0.08 * Math.sin(x * 1.3 + z * 0.7) * Math.sin(x * 0.31 - z * 0.9);
+  const n = 0.92 + 0.08 * Math.sin(x * LK * 99 + z * 0.7) * Math.sin(x * LK * 24 - z * 0.9);
   return c.map(v => v * n);
 }
 function buildLand() {
   const g = G();
-  const xs = [], zs = [];
+  const xs = [], zs = [], z0 = SEA.SHORE - 30;
   for (let u = -1; u <= 1.0001; u += 1 / 90) xs.push(Math.sign(u) * (Math.abs(u) * 260 + Math.pow(Math.abs(u), 3) * 640));
-  for (let u = 0; u <= 1.0001; u += 1 / 110) zs.push(-340 + u * 340 + 0) ;
-  for (let u = 1 / 80; u <= 1.0001; u += 1 / 80) zs.push(Math.pow(u, 1.6) * 520);
+  for (let u = 0; u <= 1.0001; u += 1 / 90) zs.push(z0 + Math.pow(u, 1.6) * 560);
   const W = xs.length;
   for (const z of zs) for (const x of xs) {
     const y = landH(x, z), e = 1;
@@ -249,18 +295,20 @@ function buildLand() {
   for (let j = 0; j < zs.length - 1; j++) for (let i = 0; i < W - 1; i++) {
     const a = j * W + i; g.i.push(a, a + W, a + 1, a + 1, a + W, a + W + 1);
   }
-  // palms along the back of the beach
+  // palms along the back of the beach: one period's worth, repeated
   let seed = 7; const r = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  for (let k = 0; k < 46; k++) {
-    const x = -230 + r() * 520, z = 38 + r() * 34, y0 = landH(x, z), hgt = 7 + r() * 6;
-    const lean = (r() - 0.5) * 0.5, lz = -0.3 * r(), trunk = [0.36, 0.28, 0.2], leaf = [0.17, 0.3, 0.13];
+  const palms = [];
+  for (let k = 0; k < 44; k++) palms.push([r() * LAND_P, SEA.SHORE + 29 + r() * 34, 7 + r() * 6, (r() - 0.5) * 0.5, -0.3 * r(), r]);
+  const fr = palms.map(() => Array.from({ length: 16 }, r));
+  for (let rep = -2; rep <= 1; rep++) palms.forEach(([px, z, hgt, lean, lz], pi) => {
+    const x = px + rep * LAND_P, y0 = landH(x, z), trunk = [0.36, 0.28, 0.2], leaf = [0.17, 0.3, 0.13], f16 = fr[pi];
     let prev = V3(x, y0 - 0.3, z);
     for (let s = 1; s <= 6; s++) {
       const t = s / 6, p = V3(x + lean * hgt * t * t, y0 + hgt * t, z + lz * hgt * t * t);
       gTube(g, prev, p, 0.24 - 0.1 * t + 0.05, 0.24 - 0.1 * t, 6, trunk); prev = p;
     }
     for (let f = 0; f < 8; f++) {                      // fronds: drooping strips
-      const a = f / 8 * TAU + r(), L = 3.2 + r() * 1.4, dx = Math.cos(a), dz = Math.sin(a);
+      const a = f / 8 * TAU + f16[f * 2], L = 3.2 + f16[f * 2 + 1] * 1.4, dx = Math.cos(a), dz = Math.sin(a);
       const b = g.v.length / 9, segs = 5;
       for (let s = 0; s <= segs; s++) {
         const t = s / segs, w = 0.5 * Math.sin(Math.PI * Math.min(1, t * 1.15 + 0.05)) + 0.05;
@@ -270,10 +318,10 @@ function buildLand() {
       }
       for (let s = 0; s < segs; s++) { const q = b + s * 2; g.i.push(q, q + 2, q + 1, q + 1, q + 2, q + 3); }
     }
-  }
-  // a lifeguard tower for scale
-  {
-    const x = 40, z = 32, y = landH(x, z), c = [0.95, 0.9, 0.82], red = [0.85, 0.25, 0.2];
+  });
+  // a lifeguard tower every period, for scale
+  for (let rep = -2; rep <= 1; rep++) {
+    const x = 40 + rep * LAND_P, z = SEA.SHORE + 23, y = landH(x, z), c = [0.95, 0.9, 0.82], red = [0.85, 0.25, 0.2];
     for (const [ox, oz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) gTube(g, V3(x + ox, y, z + oz), V3(x + ox * 0.8, y + 2.6, z + oz * 0.8), 0.08, 0.08, 5, c);
     const b = G(); gBox(b, red);
     for (let q = 0; q < b.v.length; q += 9) { b.v[q] = b.v[q] * 2.4 + x; b.v[q + 1] = b.v[q + 1] * 1.6 + y + 3.4; b.v[q + 2] = b.v[q + 2] * 2.2 + z; }
@@ -333,7 +381,7 @@ const Gfx = {
   gl: null, canvas: null, w: 1, h: 1, dpr: 1,
   prog: {}, mesh: {},
   sun: V3.norm(V3(), V3(0.38, 0.2, -1)),
-  oc: null,
+  oc: null, rider: V3(1e5, 0, 1e5),
 
   init(canvas) {
     this.canvas = canvas;
@@ -344,6 +392,7 @@ const Gfx = {
     this.prog.water = this.link(VS_WATER, FS_WATER, 'water');
     this.prog.lit = this.link(VS_LIT, FS_LIT, 'lit');
     this.prog.part = this.link(VS_PART, FS_PART, 'part');
+    FFTOcean.init(gl, this.link.bind(this));
     this.mesh.land = this.upload(buildLand());
     this.mesh.box = this.upload(gBox(G(), [1, 1, 1]));
     this.mesh.cyl = this.upload(gCyl(G(), 10, [1, 1, 1]));
@@ -432,7 +481,7 @@ const Gfx = {
       o.xs[i] = cx + Math.sign(u) * (a * 52 + a * a * a * 520);
     }
     // rows: a grid in z, with each wave's profile spliced in
-    const zFar = cz - 520, zNear = Math.min(cz + 170, 42);
+    const zFar = cz - 520, zNear = Math.min(cz + 170, SEA.SHORE + 33);
     const waves = Ocean.waves.filter(w => w.zw + SEA.LF > zFar && w.zw - SEA.LB < zNear).sort((a, b) => a.zw - b.zw).slice(0, o.profs.length);
     let r = 0, z = zFar, wi = 0;
     const dz = (z) => clamp(0.6 + 0.024 * Math.abs(z - cz), 0.6, 16);
@@ -518,7 +567,7 @@ const Gfx = {
     if (p.uTime) gl.uniform1f(p.uTime, Ocean.t);
   },
 
-  _m: M4(), _m2: M4(), _id: M4(),
+  _m: M4(), _m2: M4(), _id: M4(), _landM: M4(),
   part(mesh, local, base, col) {
     const gl = this.gl, p = this.prog.lit;
     m4mul(this._m2, base, local);
@@ -530,6 +579,8 @@ const Gfx = {
   frame(S) {
     const gl = this.gl;
     this.resize();
+    FFTOcean.update(Ocean.t);
+    if (S) V3.set(this.rider, S.pos.x, S.pos.y, S.pos.z); else V3.set(this.rider, 1e5, 0, 1e5);
     gl.viewport(0, 0, this.w, this.h);
     Cam.set(this.w / this.h);
     this.buildOcean(Cam.pos.x, Cam.pos.z);
@@ -548,9 +599,13 @@ const Gfx = {
     // land
     p = this.prog.lit; this.common(p);
     gl.uniform1f(p.uWet, 0);
-    this.part(this.mesh.land, this._id, this._id, [1, 1, 1]);
+    m4ident(this._landM); this._landM[12] = Math.round(Cam.pos.x / LAND_P) * LAND_P;   // follow by whole periods
+    this.part(this.mesh.land, this._landM, this._id, [1, 1, 1]);
     // ocean
     p = this.prog.water; this.common(p);
+    FFTOcean.bind(p);
+    gl.uniform3f(p.uRider, this.rider.x, this.rider.y, this.rider.z);
+    gl.uniform1f(p.uShore, SEA.SHORE);
     gl.bindVertexArray(this.mesh.far.vao); gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_INT, 0);
     gl.bindVertexArray(this.oc.mesh.vao); gl.drawElements(gl.TRIANGLES, this.oc.mesh.count, gl.UNSIGNED_INT, 0);
     // rider
