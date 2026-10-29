@@ -214,31 +214,32 @@ function gBoard(deck, rail) {
 }
 
 /* ---------------- land ---------------- */
+/* The coast is straight and repeats every LAND_P metres along x; the land mesh is
+   re-centred under the camera by whole periods, so the shoreline never ends. */
+const LAND_P = 480, LK = TAU / LAND_P;
 function landH(x, z) {
+  z -= SEA.SHORE - 9;                         // shape authored with the waterline near z = 9
   let y = -3;
   if (z > -16) y = Math.max(y, -1.7 + (z + 16) * 0.075);
-  y += smoothstep(34, 70, z) * 2.4 * (1 + 0.4 * Math.sin(x * 0.05));
-  y += smoothstep(120, 280, z) * (34 + 24 * Math.sin(x * 0.006 + 1) + 12 * Math.sin(x * 0.019 + 0.4));
-  // a headland off to the left: why this is a right-hand point break
-  const hx = (x + 360) / 110;
-  y = Math.max(y, (26 + 6 * Math.sin(z * 0.03)) * Math.exp(-hx * hx) * smoothstep(-330, -40, z) - 4);
+  y += smoothstep(34, 70, z) * 2.4 * (1 + 0.4 * Math.sin(x * LK * 4));
+  y += smoothstep(120, 280, z) * (34 + 24 * Math.sin(x * LK + 1) + 12 * Math.sin(x * LK * 2 + 0.4));
   return y;
 }
 function landCol(x, y, z, slope) {
+  z -= SEA.SHORE - 9;
   const wet = [0.5, 0.42, 0.32], dry = [0.88, 0.77, 0.58], grass = [0.38, 0.47, 0.25], hill = [0.25, 0.37, 0.24], rock = [0.42, 0.36, 0.31];
   let c = y < 0.45 ? wet : dry;
   if (y > 2.2 && z > 45) c = grass;
   if (z > 110) c = hill;
   if (slope > 0.75) c = rock;
-  const n = 0.92 + 0.08 * Math.sin(x * 1.3 + z * 0.7) * Math.sin(x * 0.31 - z * 0.9);
+  const n = 0.92 + 0.08 * Math.sin(x * LK * 99 + z * 0.7) * Math.sin(x * LK * 24 - z * 0.9);
   return c.map(v => v * n);
 }
 function buildLand() {
   const g = G();
-  const xs = [], zs = [];
+  const xs = [], zs = [], z0 = SEA.SHORE - 30;
   for (let u = -1; u <= 1.0001; u += 1 / 90) xs.push(Math.sign(u) * (Math.abs(u) * 260 + Math.pow(Math.abs(u), 3) * 640));
-  for (let u = 0; u <= 1.0001; u += 1 / 110) zs.push(-340 + u * 340 + 0) ;
-  for (let u = 1 / 80; u <= 1.0001; u += 1 / 80) zs.push(Math.pow(u, 1.6) * 520);
+  for (let u = 0; u <= 1.0001; u += 1 / 90) zs.push(z0 + Math.pow(u, 1.6) * 560);
   const W = xs.length;
   for (const z of zs) for (const x of xs) {
     const y = landH(x, z), e = 1;
@@ -249,18 +250,20 @@ function buildLand() {
   for (let j = 0; j < zs.length - 1; j++) for (let i = 0; i < W - 1; i++) {
     const a = j * W + i; g.i.push(a, a + W, a + 1, a + 1, a + W, a + W + 1);
   }
-  // palms along the back of the beach
+  // palms along the back of the beach: one period's worth, repeated
   let seed = 7; const r = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  for (let k = 0; k < 46; k++) {
-    const x = -230 + r() * 520, z = 38 + r() * 34, y0 = landH(x, z), hgt = 7 + r() * 6;
-    const lean = (r() - 0.5) * 0.5, lz = -0.3 * r(), trunk = [0.36, 0.28, 0.2], leaf = [0.17, 0.3, 0.13];
+  const palms = [];
+  for (let k = 0; k < 44; k++) palms.push([r() * LAND_P, SEA.SHORE + 29 + r() * 34, 7 + r() * 6, (r() - 0.5) * 0.5, -0.3 * r(), r]);
+  const fr = palms.map(() => Array.from({ length: 16 }, r));
+  for (let rep = -2; rep <= 1; rep++) palms.forEach(([px, z, hgt, lean, lz], pi) => {
+    const x = px + rep * LAND_P, y0 = landH(x, z), trunk = [0.36, 0.28, 0.2], leaf = [0.17, 0.3, 0.13], f16 = fr[pi];
     let prev = V3(x, y0 - 0.3, z);
     for (let s = 1; s <= 6; s++) {
       const t = s / 6, p = V3(x + lean * hgt * t * t, y0 + hgt * t, z + lz * hgt * t * t);
       gTube(g, prev, p, 0.24 - 0.1 * t + 0.05, 0.24 - 0.1 * t, 6, trunk); prev = p;
     }
     for (let f = 0; f < 8; f++) {                      // fronds: drooping strips
-      const a = f / 8 * TAU + r(), L = 3.2 + r() * 1.4, dx = Math.cos(a), dz = Math.sin(a);
+      const a = f / 8 * TAU + f16[f * 2], L = 3.2 + f16[f * 2 + 1] * 1.4, dx = Math.cos(a), dz = Math.sin(a);
       const b = g.v.length / 9, segs = 5;
       for (let s = 0; s <= segs; s++) {
         const t = s / segs, w = 0.5 * Math.sin(Math.PI * Math.min(1, t * 1.15 + 0.05)) + 0.05;
@@ -270,10 +273,10 @@ function buildLand() {
       }
       for (let s = 0; s < segs; s++) { const q = b + s * 2; g.i.push(q, q + 2, q + 1, q + 1, q + 2, q + 3); }
     }
-  }
-  // a lifeguard tower for scale
-  {
-    const x = 40, z = 32, y = landH(x, z), c = [0.95, 0.9, 0.82], red = [0.85, 0.25, 0.2];
+  });
+  // a lifeguard tower every period, for scale
+  for (let rep = -2; rep <= 1; rep++) {
+    const x = 40 + rep * LAND_P, z = SEA.SHORE + 23, y = landH(x, z), c = [0.95, 0.9, 0.82], red = [0.85, 0.25, 0.2];
     for (const [ox, oz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) gTube(g, V3(x + ox, y, z + oz), V3(x + ox * 0.8, y + 2.6, z + oz * 0.8), 0.08, 0.08, 5, c);
     const b = G(); gBox(b, red);
     for (let q = 0; q < b.v.length; q += 9) { b.v[q] = b.v[q] * 2.4 + x; b.v[q + 1] = b.v[q + 1] * 1.6 + y + 3.4; b.v[q + 2] = b.v[q + 2] * 2.2 + z; }
@@ -432,7 +435,7 @@ const Gfx = {
       o.xs[i] = cx + Math.sign(u) * (a * 52 + a * a * a * 520);
     }
     // rows: a grid in z, with each wave's profile spliced in
-    const zFar = cz - 520, zNear = Math.min(cz + 170, 42);
+    const zFar = cz - 520, zNear = Math.min(cz + 170, SEA.SHORE + 33);
     const waves = Ocean.waves.filter(w => w.zw + SEA.LF > zFar && w.zw - SEA.LB < zNear).sort((a, b) => a.zw - b.zw).slice(0, o.profs.length);
     let r = 0, z = zFar, wi = 0;
     const dz = (z) => clamp(0.6 + 0.024 * Math.abs(z - cz), 0.6, 16);
@@ -518,7 +521,7 @@ const Gfx = {
     if (p.uTime) gl.uniform1f(p.uTime, Ocean.t);
   },
 
-  _m: M4(), _m2: M4(), _id: M4(),
+  _m: M4(), _m2: M4(), _id: M4(), _landM: M4(),
   part(mesh, local, base, col) {
     const gl = this.gl, p = this.prog.lit;
     m4mul(this._m2, base, local);
@@ -548,7 +551,8 @@ const Gfx = {
     // land
     p = this.prog.lit; this.common(p);
     gl.uniform1f(p.uWet, 0);
-    this.part(this.mesh.land, this._id, this._id, [1, 1, 1]);
+    m4ident(this._landM); this._landM[12] = Math.round(Cam.pos.x / LAND_P) * LAND_P;   // follow by whole periods
+    this.part(this.mesh.land, this._landM, this._id, [1, 1, 1]);
     // ocean
     p = this.prog.water; this.common(p);
     gl.bindVertexArray(this.mesh.far.vao); gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_INT, 0);

@@ -23,6 +23,7 @@ const srv = http.createServer((q, r) => {
     for (let i = 0; i < 60 * 420 && Game.state === 'play'; i++, t += dt) {
       const P = S.pos, q = S.q || {}, In = botInput(t, bst);
       Game.update(dt, In);
+      if (i % 300 === 0 && t > 20 && t < 80) log.push(t.toFixed(0) + ' DBG mode ' + S.mode + ' z ' + P.z.toFixed(0) + ' main ' + !!Game.main + ' riding ' + Game.riding + ' setT ' + Game.setT.toFixed(1) + ' resp ' + Game.respawnT + ' endT ' + Game.endT + ' waves ' + Ocean.waves.length);
       if (i % 10 === 0) {       // is the rider on screen? (project through the camera)
         Cam.set(16 / 9); const v = Cam.vp, x = P.x, y = P.y + 0.6, z = P.z;
         const cw = v[3] * x + v[7] * y + v[11] * z + v[15], nx = (v[0] * x + v[4] * y + v[8] * z + v[12]) / cw, ny = (v[1] * x + v[5] * y + v[9] * z + v[13]) / cw;

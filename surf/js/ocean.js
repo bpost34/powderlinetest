@@ -18,13 +18,13 @@ const SEA = {
   C: 5.2,          // wave speed, m/s shoreward
   G: 9.81,
   ZB: -112,        // break line (where a set wave's peak pitches)
-  Z_END: -18,      // ride over: the wave has run out of reef
+  Z_END: 70,       // ride over: the wave has run out of reef
   LINEUP: [-130, -116],
-  START_Z: -62,
+  START_Z: -119,   // you start (and restart) sitting here
   LB: 34,          // profile span behind the crest
   LF: 20,          // …and ahead of it
   T_THROW: 1.0,    // s from first pitch to the lip landing in the trough
-  SHORE: 9         // water meets sand around here
+  SHORE: 129       // water meets sand around here (a long reef: rides of half a minute)
 };
 
 // samples per section of the profile
@@ -53,7 +53,7 @@ function ambientRaw(x, z, t) {
   return s;
 }
 function ambientK(z) {               // shore fade × "not under a surf wave"
-  let k = 1 - smoothstep(-22, 4, z);
+  let k = 1 - smoothstep(SEA.SHORE - 31, SEA.SHORE - 5, z);
   for (const w of Ocean.waves) {
     const d = Math.max(w.zw - SEA.LB - z, z - w.zw - SEA.LF);
     if (d < 8) k *= smoothstep(0, 8, d);
@@ -94,7 +94,7 @@ const Ocean = {
   /* height envelope: shoaling on the way in, dying in the shallows */
   waveH(w) {
     return w.H0 * (0.28 + 0.72 * smoothstep(SEA.ZB - 100, SEA.ZB, w.zw))
-                * (1 - 0.82 * smoothstep(-70, 2, w.zw));
+                * (1 - 0.82 * smoothstep(SEA.SHORE - 79, SEA.SHORE - 7, w.zw));
   },
   age(w, x) {
     const d = Math.abs(x - w.xPeak);
@@ -116,7 +116,7 @@ const Ocean = {
       lam = Math.exp(-k * 1.2);
       s = 0.5 + 0.5 * Math.exp(-k * 1.5);
       H *= 0.42 + 0.58 * Math.exp(-k / 1.2);
-      foam = smoothstep(-0.05, 0.2, k) * (1 - 0.45 * smoothstep(-40, 4, w.zw));
+      foam = smoothstep(-0.05, 0.2, k) * (1 - 0.45 * smoothstep(SEA.SHORE - 49, SEA.SHORE - 5, w.zw));
     }
     P.a = a; P.H = H; P.s = s; P.lam = lam; P.foamAmt = foam;
   },

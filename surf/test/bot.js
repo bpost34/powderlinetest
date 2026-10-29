@@ -6,20 +6,9 @@ function botInput(t, st) {
   const face = (yaw) => clamp(angDelta(S.yaw, yaw) * 2, -1, 1);
   if (S.mode === 'wipe') { if (st.cool <= 0) { In.actionPressed = true; st.cool = 0.25; } }
   else if (S.mode === 'prone') {
+    // the game paddles for you in the lineup: just press Space once the set is close
     const m = Game.main;
-    if (m && m.zw < P.z + 1) {
-      In.steer = face(0);
-      if (P.z - m.zw < 10.5) In.up = 1;
-      if (S.canPop()) In.actionPressed = true;
-    } else {
-      In.steer = face(Math.PI); In.up = P.z > SEA.LINEUP[1] - 3 ? 1 : 0;
-      for (const w of Ocean.waves) {
-        if (w.zw > P.z) continue;
-        Ocean.profile(w, P.x, Ocean._P);
-        const front = Ocean._P.zT;
-        if ((Ocean._P.foamAmt > 0.3 || Ocean._P.lam > 0.1) && P.z - front < 3.0 && P.z - front > 0 && S.duckCool <= 0) In.actionPressed = true;
-      }
-    }
+    if (m && S.pos.z - m.zw < 12 && st.cool <= 0) { In.actionPressed = true; st.cool = 1.5; }
   } else if (S.mode === 'ride' || S.mode === 'popup') {
     const w = S.rideWave, dir = Math.sign(P.x - w.xPeak) || 1;
     const frac = q.wave ? (P.y - q.yT) / q.H : 0.5;

@@ -126,7 +126,6 @@
   <div class="corner bl">
     <div class="label">Speed</div>
     <div class="val num" id="speed">0<span class="unit">km/h</span></div>
-    <div id="stam"><div id="stamFill"></div></div>
   </div>
   <canvas id="map" width="236" height="356"></canvas>
   <div id="waveScore"><div class="label">This wave</div><div class="num" id="wsVal">0</div></div>
@@ -146,21 +145,21 @@
 <div class="screen" id="menu">
   <div class="eyebrow">WebGL2 · no engine · no assets</div>
   <h1>SWELL<br>LINE</h1>
-  <p class="sub">Paddle out through the whitewater, sit in the lineup, then turn and stroke into a set wave
-    as it jacks up on the reef. Pop up, trim the face, stall for the barrel — and get out before it shuts.
+  <p class="sub">You're sat in the lineup on an endless point break. When a set wave stands up behind you,
+    press Space to pop up as it lifts you — then trim the face, stall for the barrel and get out before it shuts.
     Three waves a session.</p>
   <div class="keys kb-only">
-    <div><i class="key">W</i> / <i class="key">↑</i></div><div>Paddle · pump when riding</div>
-    <div><i class="key">A</i> <i class="key">D</i> / <i class="key">←</i> <i class="key">→</i></div><div>Turn the board · carve · spin in the air</div>
-    <div><i class="key">Space</i></div><div>Duck dive under whitewater · pop up when the wave has you · launch off the lip</div>
+    <div><i class="key">Space</i></div><div>Pop up as the wave lifts you (press early: it waits) · launch off the lip</div>
+    <div><i class="key">A</i> <i class="key">D</i> / <i class="key">←</i> <i class="key">→</i></div><div>Carve · spin in the air</div>
+    <div><i class="key">W</i> / <i class="key">↑</i></div><div>Pump for speed</div>
     <div><i class="key">S</i> / <i class="key">↓</i></div><div>Stall (drag a hand) — let the curl catch you for the tube</div>
     <div><i class="key">P</i> <i class="key">R</i> <i class="key">M</i></div><div>Pause · restart · mute</div>
   </div>
   <div class="keys touch-only">
-    <div><i class="key">L thumb</i></div><div>Drag: ◀ ▶ turn · ▲ paddle / pump · ▼ stall</div>
-    <div><i class="key">ACTION</i></div><div>Duck dive · pop up · launch</div>
+    <div><i class="key">ACTION</i></div><div>Pop up as the wave lifts you · launch off the lip</div>
+    <div><i class="key">L thumb</i></div><div>Drag: ◀ ▶ carve · ▲ pump · ▼ stall</div>
   </div>
-  <div class="go"><span class="kb-only">press any key to paddle out</span><span class="touch-only">tap to paddle out</span></div>
+  <div class="go"><span class="kb-only">press any key to paddle in</span><span class="touch-only">tap to start</span></div>
   <a id="back" href="../">← back to Powder Line (snowboarding)</a>
 </div>
 
@@ -176,7 +175,7 @@
     <div><div class="label">Wipeouts</div><b class="num" id="sWipes">0</b></div>
   </div>
   <div id="newbest" style="display:none">★ new personal best</div>
-  <div class="go"><span class="kb-only">press R to paddle out again</span><span class="touch-only">tap to go again</span></div>
+  <div class="go"><span class="kb-only">press R to go again</span><span class="touch-only">tap to go again</span></div>
 </div>
 
 <div class="screen hide" id="pause">
@@ -393,13 +392,13 @@ const SEA = {
   C: 5.2,          // wave speed, m/s shoreward
   G: 9.81,
   ZB: -112,        // break line (where a set wave's peak pitches)
-  Z_END: -18,      // ride over: the wave has run out of reef
+  Z_END: 70,       // ride over: the wave has run out of reef
   LINEUP: [-130, -116],
-  START_Z: -62,
+  START_Z: -119,   // you start (and restart) sitting here
   LB: 34,          // profile span behind the crest
   LF: 20,          // …and ahead of it
   T_THROW: 1.0,    // s from first pitch to the lip landing in the trough
-  SHORE: 9         // water meets sand around here
+  SHORE: 129       // water meets sand around here (a long reef: rides of half a minute)
 };
 
 // samples per section of the profile
@@ -428,7 +427,7 @@ function ambientRaw(x, z, t) {
   return s;
 }
 function ambientK(z) {               // shore fade × "not under a surf wave"
-  let k = 1 - smoothstep(-22, 4, z);
+  let k = 1 - smoothstep(SEA.SHORE - 31, SEA.SHORE - 5, z);
   for (const w of Ocean.waves) {
     const d = Math.max(w.zw - SEA.LB - z, z - w.zw - SEA.LF);
     if (d < 8) k *= smoothstep(0, 8, d);
@@ -469,7 +468,7 @@ const Ocean = {
   /* height envelope: shoaling on the way in, dying in the shallows */
   waveH(w) {
     return w.H0 * (0.28 + 0.72 * smoothstep(SEA.ZB - 100, SEA.ZB, w.zw))
-                * (1 - 0.82 * smoothstep(-70, 2, w.zw));
+                * (1 - 0.82 * smoothstep(SEA.SHORE - 79, SEA.SHORE - 7, w.zw));
   },
   age(w, x) {
     const d = Math.abs(x - w.xPeak);
@@ -491,7 +490,7 @@ const Ocean = {
       lam = Math.exp(-k * 1.2);
       s = 0.5 + 0.5 * Math.exp(-k * 1.5);
       H *= 0.42 + 0.58 * Math.exp(-k / 1.2);
-      foam = smoothstep(-0.05, 0.2, k) * (1 - 0.45 * smoothstep(-40, 4, w.zw));
+      foam = smoothstep(-0.05, 0.2, k) * (1 - 0.45 * smoothstep(SEA.SHORE - 49, SEA.SHORE - 5, w.zw));
     }
     P.a = a; P.H = H; P.s = s; P.lam = lam; P.foamAmt = foam;
   },
@@ -865,31 +864,32 @@ function gBoard(deck, rail) {
 }
 
 /* ---------------- land ---------------- */
+/* The coast is straight and repeats every LAND_P metres along x; the land mesh is
+   re-centred under the camera by whole periods, so the shoreline never ends. */
+const LAND_P = 480, LK = TAU / LAND_P;
 function landH(x, z) {
+  z -= SEA.SHORE - 9;                         // shape authored with the waterline near z = 9
   let y = -3;
   if (z > -16) y = Math.max(y, -1.7 + (z + 16) * 0.075);
-  y += smoothstep(34, 70, z) * 2.4 * (1 + 0.4 * Math.sin(x * 0.05));
-  y += smoothstep(120, 280, z) * (34 + 24 * Math.sin(x * 0.006 + 1) + 12 * Math.sin(x * 0.019 + 0.4));
-  // a headland off to the left: why this is a right-hand point break
-  const hx = (x + 360) / 110;
-  y = Math.max(y, (26 + 6 * Math.sin(z * 0.03)) * Math.exp(-hx * hx) * smoothstep(-330, -40, z) - 4);
+  y += smoothstep(34, 70, z) * 2.4 * (1 + 0.4 * Math.sin(x * LK * 4));
+  y += smoothstep(120, 280, z) * (34 + 24 * Math.sin(x * LK + 1) + 12 * Math.sin(x * LK * 2 + 0.4));
   return y;
 }
 function landCol(x, y, z, slope) {
+  z -= SEA.SHORE - 9;
   const wet = [0.5, 0.42, 0.32], dry = [0.88, 0.77, 0.58], grass = [0.38, 0.47, 0.25], hill = [0.25, 0.37, 0.24], rock = [0.42, 0.36, 0.31];
   let c = y < 0.45 ? wet : dry;
   if (y > 2.2 && z > 45) c = grass;
   if (z > 110) c = hill;
   if (slope > 0.75) c = rock;
-  const n = 0.92 + 0.08 * Math.sin(x * 1.3 + z * 0.7) * Math.sin(x * 0.31 - z * 0.9);
+  const n = 0.92 + 0.08 * Math.sin(x * LK * 99 + z * 0.7) * Math.sin(x * LK * 24 - z * 0.9);
   return c.map(v => v * n);
 }
 function buildLand() {
   const g = G();
-  const xs = [], zs = [];
+  const xs = [], zs = [], z0 = SEA.SHORE - 30;
   for (let u = -1; u <= 1.0001; u += 1 / 90) xs.push(Math.sign(u) * (Math.abs(u) * 260 + Math.pow(Math.abs(u), 3) * 640));
-  for (let u = 0; u <= 1.0001; u += 1 / 110) zs.push(-340 + u * 340 + 0) ;
-  for (let u = 1 / 80; u <= 1.0001; u += 1 / 80) zs.push(Math.pow(u, 1.6) * 520);
+  for (let u = 0; u <= 1.0001; u += 1 / 90) zs.push(z0 + Math.pow(u, 1.6) * 560);
   const W = xs.length;
   for (const z of zs) for (const x of xs) {
     const y = landH(x, z), e = 1;
@@ -900,18 +900,20 @@ function buildLand() {
   for (let j = 0; j < zs.length - 1; j++) for (let i = 0; i < W - 1; i++) {
     const a = j * W + i; g.i.push(a, a + W, a + 1, a + 1, a + W, a + W + 1);
   }
-  // palms along the back of the beach
+  // palms along the back of the beach: one period's worth, repeated
   let seed = 7; const r = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  for (let k = 0; k < 46; k++) {
-    const x = -230 + r() * 520, z = 38 + r() * 34, y0 = landH(x, z), hgt = 7 + r() * 6;
-    const lean = (r() - 0.5) * 0.5, lz = -0.3 * r(), trunk = [0.36, 0.28, 0.2], leaf = [0.17, 0.3, 0.13];
+  const palms = [];
+  for (let k = 0; k < 44; k++) palms.push([r() * LAND_P, SEA.SHORE + 29 + r() * 34, 7 + r() * 6, (r() - 0.5) * 0.5, -0.3 * r(), r]);
+  const fr = palms.map(() => Array.from({ length: 16 }, r));
+  for (let rep = -2; rep <= 1; rep++) palms.forEach(([px, z, hgt, lean, lz], pi) => {
+    const x = px + rep * LAND_P, y0 = landH(x, z), trunk = [0.36, 0.28, 0.2], leaf = [0.17, 0.3, 0.13], f16 = fr[pi];
     let prev = V3(x, y0 - 0.3, z);
     for (let s = 1; s <= 6; s++) {
       const t = s / 6, p = V3(x + lean * hgt * t * t, y0 + hgt * t, z + lz * hgt * t * t);
       gTube(g, prev, p, 0.24 - 0.1 * t + 0.05, 0.24 - 0.1 * t, 6, trunk); prev = p;
     }
     for (let f = 0; f < 8; f++) {                      // fronds: drooping strips
-      const a = f / 8 * TAU + r(), L = 3.2 + r() * 1.4, dx = Math.cos(a), dz = Math.sin(a);
+      const a = f / 8 * TAU + f16[f * 2], L = 3.2 + f16[f * 2 + 1] * 1.4, dx = Math.cos(a), dz = Math.sin(a);
       const b = g.v.length / 9, segs = 5;
       for (let s = 0; s <= segs; s++) {
         const t = s / segs, w = 0.5 * Math.sin(Math.PI * Math.min(1, t * 1.15 + 0.05)) + 0.05;
@@ -921,10 +923,10 @@ function buildLand() {
       }
       for (let s = 0; s < segs; s++) { const q = b + s * 2; g.i.push(q, q + 2, q + 1, q + 1, q + 2, q + 3); }
     }
-  }
-  // a lifeguard tower for scale
-  {
-    const x = 40, z = 32, y = landH(x, z), c = [0.95, 0.9, 0.82], red = [0.85, 0.25, 0.2];
+  });
+  // a lifeguard tower every period, for scale
+  for (let rep = -2; rep <= 1; rep++) {
+    const x = 40 + rep * LAND_P, z = SEA.SHORE + 23, y = landH(x, z), c = [0.95, 0.9, 0.82], red = [0.85, 0.25, 0.2];
     for (const [ox, oz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) gTube(g, V3(x + ox, y, z + oz), V3(x + ox * 0.8, y + 2.6, z + oz * 0.8), 0.08, 0.08, 5, c);
     const b = G(); gBox(b, red);
     for (let q = 0; q < b.v.length; q += 9) { b.v[q] = b.v[q] * 2.4 + x; b.v[q + 1] = b.v[q + 1] * 1.6 + y + 3.4; b.v[q + 2] = b.v[q + 2] * 2.2 + z; }
@@ -1083,7 +1085,7 @@ const Gfx = {
       o.xs[i] = cx + Math.sign(u) * (a * 52 + a * a * a * 520);
     }
     // rows: a grid in z, with each wave's profile spliced in
-    const zFar = cz - 520, zNear = Math.min(cz + 170, 42);
+    const zFar = cz - 520, zNear = Math.min(cz + 170, SEA.SHORE + 33);
     const waves = Ocean.waves.filter(w => w.zw + SEA.LF > zFar && w.zw - SEA.LB < zNear).sort((a, b) => a.zw - b.zw).slice(0, o.profs.length);
     let r = 0, z = zFar, wi = 0;
     const dz = (z) => clamp(0.6 + 0.024 * Math.abs(z - cz), 0.6, 16);
@@ -1169,7 +1171,7 @@ const Gfx = {
     if (p.uTime) gl.uniform1f(p.uTime, Ocean.t);
   },
 
-  _m: M4(), _m2: M4(), _id: M4(),
+  _m: M4(), _m2: M4(), _id: M4(), _landM: M4(),
   part(mesh, local, base, col) {
     const gl = this.gl, p = this.prog.lit;
     m4mul(this._m2, base, local);
@@ -1199,7 +1201,8 @@ const Gfx = {
     // land
     p = this.prog.lit; this.common(p);
     gl.uniform1f(p.uWet, 0);
-    this.part(this.mesh.land, this._id, this._id, [1, 1, 1]);
+    m4ident(this._landM); this._landM[12] = Math.round(Cam.pos.x / LAND_P) * LAND_P;   // follow by whole periods
+    this.part(this.mesh.land, this._landM, this._id, [1, 1, 1]);
     // ocean
     p = this.prog.water; this.common(p);
     gl.bindVertexArray(this.mesh.far.vao); gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_INT, 0);
@@ -1291,7 +1294,7 @@ const set3 = (o, x, y, z) => { o[0] = x; o[1] = y; o[2] = z; };
 const Surfer = {
   mode: 'prone',
   pos: V3(), vx: 0, vz: 0, vy: 0, yaw: Math.PI,
-  stamina: 1, popArm: 0, duckT: 0, duckCool: 0, popT: 0, wipeT: 0, tumbleT: 0, pumpT: 0, pumpCool: 0,
+  stamina: 1, popArm: 0, sitMode: true, duckT: 0, duckCool: 0, popT: 0, wipeT: 0, tumbleT: 0, pumpT: 0, pumpCool: 0,
   phase: 0, crouch: 0.3, lean: 0, stall: 0, paddling: 0,
   lastHit: 0, rideWave: null, offWave: 0, bogT: 0, yPrev: 0, ydot: 0,
   tubeT: 0, tubeGap: 0, covered: false, inTube: false, tubeDepth: 0,
@@ -1402,7 +1405,7 @@ const Surfer = {
     if (In.action && catching) this.popArm = Math.max(this.popArm, 0.1);
     this.popArm -= dt;
     if (!ducking && this.tumbleT <= 0 && (this.popArm > 0 || In.actionPressed) && this.canPop()) { this.popArm = 0; this.popUp(q); }
-    else if (In.actionPressed && !ducking && !catching && this.tumbleT <= 0 && this.duckCool <= 0 && this.stamina > 0.05) {
+    else if (In.actionPressed && !this.sitMode && !ducking && !catching && this.tumbleT <= 0 && this.duckCool <= 0 && this.stamina > 0.05) {
       this.mode = 'duck'; this.duckT = 1.15; this.stamina -= 0.04; Game.onDuck();
     }
     // missed: the wave went under you
@@ -1421,7 +1424,7 @@ const Surfer = {
     const P = this.pos;
     for (const w of Ocean.waves) {
       const d = P.z - w.zw;
-      if (d < -1 || d > 22) continue;
+      if (d < -1 || d > (this.sitMode ? 45 : 22)) continue;
       Ocean.stage(w, P.x, this._st || (this._st = {}));
       if (this._st.foamAmt < 0.3 && this._st.H > 1) return w;
     }
@@ -1672,7 +1675,8 @@ const Surfer = {
         poseLerp(this.pose, B, A, smoothstep(0.38, 0.0, this.popT));
       } else poseLerp(this.pose, this.pose, A, 1 - Math.exp(-14 * dt));
     } else {
-      this.prone(A, this.paddling > 0.1, this.mode === 'duck');
+      if (this.sitMode && this.paddling < 0.1 && this.mode === 'prone') this.sit(A);
+      else this.prone(A, this.paddling > 0.1, this.mode === 'duck');
       poseLerp(this.pose, this.pose, A, 1 - Math.exp(-16 * dt));
     }
   },
@@ -1695,6 +1699,21 @@ const Surfer = {
       set3(J.ha[1], lerp(0.12, 0.45, stall), lerp(hy + 0.34, 0.1, stall), lerp(-0.62, -0.3, stall));
     }
     for (const s of [0, 1]) set3(J.el[s], (J.sh[s][0] + J.ha[s][0]) / 2 + 0.1, (J.sh[s][1] + J.ha[s][1]) / 2 - 0.04, (J.sh[s][2] + J.ha[s][2]) / 2);
+  },
+  /* waiting in the lineup: sat up on the board, legs in the water */
+  sit(J) {
+    const bob = Math.sin(Ocean.t * 1.7) * 0.02;
+    set3(J.hip, 0, 0.14, -0.2); set3(J.chest, 0, 0.62 + bob, -0.14); set3(J.neck, 0, 0.8 + bob, -0.12); set3(J.head, 0, 0.93 + bob, -0.1);
+    set3(J.hairOff, 0, 0.04, -0.04);
+    for (const s of [0, 1]) {
+      const sd = s ? 1 : -1;
+      set3(J.hp[s], sd * 0.12, 0.13, -0.18);
+      set3(J.kn[s], sd * 0.3, 0.02, 0.1);
+      set3(J.ft[s], sd * 0.33, -0.42, 0.02 + 0.06 * Math.sin(Ocean.t * 1.3 + s * 2));
+      set3(J.sh[s], sd * 0.2, 0.7 + bob, -0.14);
+      set3(J.ha[s], sd * 0.24, 0.18, 0.12);
+      set3(J.el[s], sd * 0.3, 0.42, -0.04);
+    }
   },
   prone(J, paddling, duck) {
     set3(J.hip, 0, 0.19, -0.22); set3(J.chest, 0, 0.24, 0.3); set3(J.neck, 0, 0.32, 0.48); set3(J.head, 0, 0.42, 0.6);
@@ -1803,8 +1822,9 @@ const Sfx = {
 <script>/* js/main.js */
 /* =====================================================================
    main.js — session flow, sets, camera, input, HUD.
-   A session: paddle out → sit in the lineup → a set wave comes → turn,
-   paddle, pop up → ride → paddle back out. Three waves.
+   A session: sit in the lineup facing the beach → a set wave comes, you
+   stroke into it (automatically) → Space to pop up → ride → back to the
+   lineup. Three waves.
    ===================================================================== */
 'use strict';
 
@@ -1831,12 +1851,10 @@ const Game = {
   start() {
     Sfx.start();
     Ocean.reset();
-    Surfer.reset(0, SEA.START_Z);
-    this.main = null; this.boreT = 0.5; this.setT = 3; this.waveIdx = 0; this.total = 0; this.scores = [];
+    this.toLineup(0);
+    this.main = null; this.boreT = 0; this.setT = 2; this.waveIdx = 0; this.total = 0; this.scores = [];
     this.rideScore = 0; this.riding = false; this.bestTube = 0; this.topSpeed = 0; this.bestMove = null; this.wipes = 0;
     this.endT = 0; this.missedT = 0; this.respawnT = 0; $('fade').classList.remove('on');
-    // the first whitewater is already on its way in
-    Ocean.spawn({ zw: SEA.ZB + 6, H0: 2.1, xPeak: 0, vp: 60, sec: 0 });
     this.state = 'play';
     $('menu').classList.add('hide'); $('over').classList.add('hide'); $('pause').classList.add('hide');
     $('hud').classList.add('on'); $('under').classList.remove('on'); document.body.classList.add('playing');
@@ -1845,32 +1863,26 @@ const Game = {
 
   /* ---------------- the sea's schedule ---------------- */
   outermost() { let z = Infinity; for (const w of Ocean.waves) z = Math.min(z, w.zw); return z; },
+  /* back to the lineup: sat on the board, facing the beach */
+  toLineup(x) {
+    Surfer.reset(x, SEA.START_Z); Surfer.yaw = 0; Surfer.sitMode = true;
+  },
   updateSea(dt) {
     const P = Surfer.pos;
     if (this.main && !Ocean.waves.includes(this.main)) this.main = null;
     // a set wave that rolled through without you
-    if (this.main && !this.riding && Surfer.rideWave !== this.main && this.main.zw > P.z + 12) {
-      this.main = null; this.missedT = 2.2; this.setT = 4;
+    if (this.main && !this.riding && Surfer.rideWave !== this.main && this.main.zw > P.z + 8) {
+      this.main = null; this.missedT = 2.2; this.setT = 2.5;
+      if (Math.abs(P.z - SEA.START_Z) > 4) this.respawnT = 1.6;
     }
-    if (this.main) return;
-    const inside = P.z > SEA.LINEUP[1];
-    const spawnZ = Math.min(SEA.ZB - 60, this.outermost() - 64);
-    if (inside && Surfer.mode !== 'wipe') {
-      this.boreT -= dt;
-      if (this.boreT <= 0 && spawnZ > SEA.ZB - 110) {
-        Ocean.spawn({ zw: spawnZ, H0: rnd(1.7, 2.4), xPeak: P.x, vp: 60, sec: 0 });
-        this.boreT = rnd(9.5, 12.5);
-      }
-    }
-    const inLineup = P.z >= SEA.LINEUP[0] - 8 && P.z <= SEA.LINEUP[1];
-    if (inLineup && Surfer.mode === 'prone' && !this.riding && this.endT <= 0) {
-      this.setT -= dt;
-      if (this.setT <= 0 && spawnZ > SEA.ZB - 110) {
-        const side = Math.random() < 0.5 ? -1 : 1;
-        this.main = Ocean.spawn({ zw: Math.min(SEA.ZB - 52, spawnZ), H0: rnd(2.8, 3.4), xPeak: P.x + side * rnd(3, 7), vp: 6.5, main: true });
-        this.sideSign = -side;
-        this.setT = 5;
-      }
+    if (this.main || this.riding || Surfer.mode !== 'prone' || this.respawnT > 0 || this.endT > 0) return;
+    if (Math.abs(P.z - SEA.START_Z) > 4) { this.respawnT = 1.4; return; }   // drifted off: back to the spot
+    this.setT -= dt;
+    if (this.setT <= 0) {
+      const side = Math.random() < 0.5 ? -1 : 1;
+      this.main = Ocean.spawn({ zw: Math.min(P.z - 34, this.outermost() - 64), H0: rnd(2.8, 3.4), xPeak: P.x + side * rnd(3, 7), vp: 6.5, main: true });
+      this.sideSign = -side;
+      this.setT = 3;
     }
   },
 
@@ -1895,6 +1907,10 @@ const Game = {
     if (this.state !== 'play') return;
     Ocean.update(dt);
     this.updateSea(dt);
+    if (Surfer.mode === 'prone') {       // in the lineup you only choose when to pop up: the rider strokes in by itself
+      const m = this.main, d = m ? Surfer.pos.z - m.zw : 99;
+      In = { steer: clamp(-Surfer.yaw * 2, -1, 1), up: d > -1 && d < 15 ? 1 : 0, down: 0, actionPressed: In.actionPressed, action: In.action };
+    }
     Surfer.step(dt, In);
     Fx.update(dt);
     this.waveFx(dt, Surfer.pos);
@@ -1903,13 +1919,9 @@ const Game = {
     if (this.respawnT > 0) {
       this.respawnT -= dt;
       $('fade').classList.toggle('on', this.respawnT < 1.4 && this.respawnT > 0.2);
-      if (this.respawnT <= 0.8 && Surfer.pos.z > SEA.START_Z) { Surfer.reset(Surfer.pos.x, SEA.START_Z); this.snapCam(); }
-    }
-    if (Surfer.mode === 'wipe' && Surfer.wipeT < 0.1 && Surfer.pos.z > SEA.START_Z && this.waveIdx < WAVES) this.respawnT = 1.6;
-    // washed all the way in on your belly: walk back up and paddle out from the usual spot
-    if (Surfer.mode === 'prone' && Surfer.pos.z > SEA.START_Z + 14 && !(this.respawnT > 0)) {
-      this.respawnT = 1.6; this.say('Washed in <small>back out you go</small>', 'warn', 1.6);
-    }
+      if (this.respawnT <= 0.8 && !this.respawned) { this.respawned = true; this.toLineup(Surfer.pos.x); this.snapCam(); }
+    } else this.respawned = false;
+
     if (this.endT > 0) { this.endT -= dt; if (this.endT <= 0 && this.waveIdx >= WAVES) this.over(); }
     if (this.riding || Surfer.mode === 'air') this.topSpeed = Math.max(this.topSpeed, Surfer.speed());
     // sound
@@ -1976,9 +1988,9 @@ const Game = {
     } else if (S.mode === 'wipe') {
       yaw = (this.camYaw || 0) + dt * 0.5; pitch = 0.5; dist = 7; k = 6; this.camMode = 'wipe';
     } else {
-      const setNear = this.main && this.main.zw < P.z + 2 && P.z - this.main.zw < 40 && hz > 0.2;
-      yaw = heading + Math.PI; pitch = setNear ? 0.5 : 0.36; dist = setNear ? 7.5 : 6.4; look = 4;
-      this.camMode = setNear ? 'set' : 'paddle';
+      // sat in the lineup: from in front, so you watch the set stand up behind you
+      yaw = heading + 0.35 * (this.sideSign || 1); pitch = 0.22; dist = 7.5; look = -6;
+      this.camMode = 'lineup';
     }
     if (snap || this.camYaw === undefined) { this.camYaw = yaw; this.camPitch = pitch; this.camDist = dist; }
     else {
@@ -2067,7 +2079,7 @@ const Game = {
     $('under').classList.add('on');
     if (wasRiding) this.endWave(reason, true);
   },
-  onSurface() { $('under').classList.remove('on'); },
+  onSurface() { $('under').classList.remove('on'); if (this.waveIdx < WAVES || this.riding) this.respawnT = 1.4; },
   onRideEnd(reason) { this.endWave(reason, false); },
   endWave(reason, wiped) {
     if (!this.riding) return;
@@ -2076,7 +2088,7 @@ const Game = {
     this.scores.push(s); this.total += s; this.waveIdx++;
     this.main = null; this.setT = 6; this.boreT = 3;
     this.banner = (wiped ? reason + ' — half points' : reason) + ': ' + s.toLocaleString();
-    if (!wiped && Surfer.pos.z > SEA.START_Z) this.respawnT = 2.2;   // walk up the beach, back out through the channel
+    if (!wiped && this.waveIdx < WAVES) this.respawnT = 2.6;   // fade back to the lineup for the next one
     this.bannerT = 3.2;
     if (this.waveIdx >= WAVES) this.endT = 3.2;
   },
@@ -2102,34 +2114,26 @@ const Game = {
     if (this.flashT > 0) return [this.flash, this.flashCls];
     if (S.mode === 'wipe' || S.mode === 'duck' || S.mode === 'air') return ['', ''];
     if (S.mode === 'ride' || S.mode === 'popup') return S.covered ? ['', ''] : ['', ''];
-    if (this.missedT > 0) return ['Missed it <small>it rolled under you — wait for the next one</small>', 'warn'];
-    if (this.waveIdx >= WAVES) return ['', ''];
+    if (this.missedT > 0) return ['Missed it <small>press Space as the wave lifts you · next one coming</small>', 'warn'];
+    if (this.waveIdx >= WAVES || this.respawnT > 0) return ['', ''];
     if (S.canPop()) return ['POP UP! <small>Space</small>', 'go'];
     const m = this.main;
     if (m && m.zw < P.z + 2) {
       const d = P.z - m.zw;
-      if (S.hz() < 0.3) return ['Set wave! Turn around <small>A / D to face the beach · ' + Math.round(d) + ' m</small>', 'warn'];
-      if (d < 15) return ['Paddle! <small>hold W · tap Space to pop up as it takes you</small>', 'go'];
-      if (d < 21) return ['Get ready… <small>start paddling when it\'s ~15 m away</small>', ''];
-      return ['Set wave coming… <small>face the beach and wait · ' + Math.round(d) + ' m</small>', ''];
+      if (S.popArm > 0) return ['Ready… <small>you\'ll pop up as it takes you</small>', 'go'];
+      if (d < 15) return ['Here it comes — Space! <small>press now: you pop up as it lifts you</small>', 'go'];
+      return ['Set wave coming… <small>' + Math.round(d) + ' m · get ready to press Space</small>', ''];
     }
-    for (const w of Ocean.waves) {
-      const d = P.z - w.zw;
-      if (d > 0 && d < 20) { Ocean.stage(w, P.x, Ocean._P); if (Ocean._P.foamAmt > 0.4 || Ocean._P.lam > 0.1) return ['Whitewater! <small>duck dive — Space, just before it hits</small>', 'warn']; }
-    }
-    if (P.z > SEA.LINEUP[1]) return ['Paddle out to the lineup <small>hold W · ' + Math.round(P.z - SEA.LINEUP[1]) + ' m to go</small>', ''];
-    if (P.z < SEA.LINEUP[0] - 8) return ['Too far out <small>paddle back toward the beach a little</small>', ''];
-    return ['In the lineup <small>sit tight — a set is on its way</small>', ''];
+    return ['In the lineup <small>a set is on its way</small>', ''];
   },
   hud() {
     const S = Surfer;
     const ride = this.riding || S.mode === 'air';
     $('waveNo').textContent = Math.min(this.waveIdx + 1, WAVES) + ' / ' + WAVES;
-    $('waveSub').textContent = ride ? 'riding' : S.mode === 'wipe' ? 'held down' : S.pos.z > SEA.LINEUP[1] ? 'paddle out' : 'in the lineup';
+    $('waveSub').textContent = ride ? 'riding' : S.mode === 'wipe' ? 'held down' : 'in the lineup';
     $('total').textContent = this.total.toLocaleString();
     $('best').textContent = 'BEST ' + this.best.toLocaleString();
     $('speed').firstChild.textContent = Math.round(S.speed() * 3.6);
-    $('stamFill').style.width = Math.round(S.stamina * 100) + '%';
     $('waveScore').classList.toggle('on', ride);
     $('wsVal').textContent = Math.round(this.rideScore).toLocaleString();
     $('tube').classList.toggle('on', S.inTube && S.tubeT > 0.2);
@@ -2142,7 +2146,7 @@ const Game = {
   },
   map() {
     const c = $('map'), g = c.getContext('2d'), W = c.width, H = c.height, P = Surfer.pos;
-    const z0 = -160, z1 = 16, X = 70;
+    const z0 = -150, z1 = SEA.SHORE + 12, X = 90;
     const sy = (z) => (z - z0) / (z1 - z0) * H, sx = (x) => W / 2 + (x - P.x) / X * (W / 2);
     g.clearRect(0, 0, W, H);
     g.fillStyle = 'rgba(222,196,150,.75)'; g.fillRect(0, sy(SEA.SHORE), W, H);

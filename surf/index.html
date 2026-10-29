@@ -126,7 +126,6 @@
   <div class="corner bl">
     <div class="label">Speed</div>
     <div class="val num" id="speed">0<span class="unit">km/h</span></div>
-    <div id="stam"><div id="stamFill"></div></div>
   </div>
   <canvas id="map" width="236" height="356"></canvas>
   <div id="waveScore"><div class="label">This wave</div><div class="num" id="wsVal">0</div></div>
@@ -146,21 +145,21 @@
 <div class="screen" id="menu">
   <div class="eyebrow">WebGL2 · no engine · no assets</div>
   <h1>SWELL<br>LINE</h1>
-  <p class="sub">Paddle out through the whitewater, sit in the lineup, then turn and stroke into a set wave
-    as it jacks up on the reef. Pop up, trim the face, stall for the barrel — and get out before it shuts.
+  <p class="sub">You're sat in the lineup on an endless point break. When a set wave stands up behind you,
+    press Space to pop up as it lifts you — then trim the face, stall for the barrel and get out before it shuts.
     Three waves a session.</p>
   <div class="keys kb-only">
-    <div><i class="key">W</i> / <i class="key">↑</i></div><div>Paddle · pump when riding</div>
-    <div><i class="key">A</i> <i class="key">D</i> / <i class="key">←</i> <i class="key">→</i></div><div>Turn the board · carve · spin in the air</div>
-    <div><i class="key">Space</i></div><div>Duck dive under whitewater · pop up when the wave has you · launch off the lip</div>
+    <div><i class="key">Space</i></div><div>Pop up as the wave lifts you (press early: it waits) · launch off the lip</div>
+    <div><i class="key">A</i> <i class="key">D</i> / <i class="key">←</i> <i class="key">→</i></div><div>Carve · spin in the air</div>
+    <div><i class="key">W</i> / <i class="key">↑</i></div><div>Pump for speed</div>
     <div><i class="key">S</i> / <i class="key">↓</i></div><div>Stall (drag a hand) — let the curl catch you for the tube</div>
     <div><i class="key">P</i> <i class="key">R</i> <i class="key">M</i></div><div>Pause · restart · mute</div>
   </div>
   <div class="keys touch-only">
-    <div><i class="key">L thumb</i></div><div>Drag: ◀ ▶ turn · ▲ paddle / pump · ▼ stall</div>
-    <div><i class="key">ACTION</i></div><div>Duck dive · pop up · launch</div>
+    <div><i class="key">ACTION</i></div><div>Pop up as the wave lifts you · launch off the lip</div>
+    <div><i class="key">L thumb</i></div><div>Drag: ◀ ▶ carve · ▲ pump · ▼ stall</div>
   </div>
-  <div class="go"><span class="kb-only">press any key to paddle out</span><span class="touch-only">tap to paddle out</span></div>
+  <div class="go"><span class="kb-only">press any key to paddle in</span><span class="touch-only">tap to start</span></div>
   <a id="back" href="../">← back to Powder Line (snowboarding)</a>
 </div>
 
@@ -176,7 +175,7 @@
     <div><div class="label">Wipeouts</div><b class="num" id="sWipes">0</b></div>
   </div>
   <div id="newbest" style="display:none">★ new personal best</div>
-  <div class="go"><span class="kb-only">press R to paddle out again</span><span class="touch-only">tap to go again</span></div>
+  <div class="go"><span class="kb-only">press R to go again</span><span class="touch-only">tap to go again</span></div>
 </div>
 
 <div class="screen hide" id="pause">
