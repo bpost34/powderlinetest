@@ -15,7 +15,7 @@ const Game = {
   waveIdx: 0, rideScore: 0, total: 0, scores: [], riding: false,
   best: 0, bestTube: 0, topSpeed: 0, bestMove: null, wipes: 0,
   flash: '', flashT: 0, flashCls: '', missedT: 0, endT: 0, bannerT: 0,
-  camDir: V3(1, 0, 0), tubeCam: 0, camMode: '', sideSign: 1,
+  camDir: V3(1, 0, 0), tubeCam: 0, rideDir: 0, flipT: 0, camMode: '', sideSign: 1,
   roar: 0,
 
   init() {
@@ -153,53 +153,56 @@ const Game = {
   camera(dt, snap) {
     const S = Surfer, P = S.pos, q = S.q || {};
     const eye = V3(), tgt = V3();
-    let k = 3.5, kt = 6;
     const ride = S.mode === 'ride' || S.mode === 'popup' || S.mode === 'air';
-    const zr = q.wave ? P.z - q.zw : 99;
-    const catching = S.mode === 'prone' && q.wave && zr > -1 && zr < 7 && S.vz > 2.6 && S.hz() > 0.3;
-    const setNear = this.main && S.mode === 'prone' && this.main.zw < P.z && P.z - this.main.zw < 45 && S.hz() > 0.2;
     this.tubeCam = damp(this.tubeCam, S.covered ? 1 : 0, 2.5, dt);
+    // which way along the wave you're going: only flips after a sustained reversal (cutbacks don't swing the camera)
     if (ride) {
-      let dx = S.vx, dz = S.vz - SEA.C;
-      const l = Math.hypot(dx, dz);
-      if (l > 1) { dx /= l; dz /= l; damp3(this.camDir, dx, 0, dz * 0.6, 2.2, dt); }
-      // in front of the wave, a little behind the rider: the face, the rider and the
-      // curl chasing them are all in shot. In the tube it tucks in behind, under the lip.
-      const c = this.camDir, tc = this.tubeCam, wz = q.wave ? q.zw : P.z - 1.5;
-      const back = lerp(4.6, 2.6, tc);
-      // under the lip: keep the camera below the ceiling over the rider
-      // inside: sit near the middle of the barrel, wherever the rider is on the wall
-      const mid = q.covered && isFinite(q.ceil) ? (q.ceil + q.yT) * 0.5 : P.y + 0.95;
-      const h = lerp(1.7, clamp(mid - P.y, -0.6, 0.95), tc);
-      // tube: hug the wall (the column behind is further into its collapse, so stay deep)
-      const sx = Math.sign(c.x) || 1, ax = lerp(c.x, sx, tc), az = lerp(c.z, 0, tc);
-      const ex = P.x - ax * back, ey = P.y + h;
-      const tz = tc > 0.01 && q.wave ? this.tubeEyeZ(q.wave, ex, ey, P.z) : P.z;
-      const ez = lerp(Math.max(P.z + 4.2, wz + 6.5), tz, tc);
-      V3.set(eye, ex, ey, ez);
-      V3.set(tgt, P.x + ax * 6, P.y + lerp(0.5, 0.8, tc), lerp(P.z + az * 6 - 0.6, P.z + 0.4, tc));
-      k = 5; this.camMode = 'ride';
+      const vxw = S.vx;
+      if (!this.rideDir) this.rideDir = Math.sign(vxw) || Math.sign(P.x - (S.rideWave ? S.rideWave.xPeak : 0)) || 1;
+      if (Math.sign(vxw) === -this.rideDir && Math.abs(vxw) > 2) { this.flipT += dt; if (this.flipT > 1.2) { this.rideDir = -this.rideDir; this.flipT = 0; } }
+      else this.flipT = 0;
+    } else { this.rideDir = 0; this.flipT = 0; }
+    // an orbit around the rider: (yaw, pitch, distance), damped as angles so a change of
+    // view swings around the rider instead of cutting through the wave
+    const hx = S.hx(), hz = S.hz(), heading = Math.atan2(hx, hz);
+    let yaw, pitch, dist, look = 0, ldx = hx, ldz = hz, k = 2.6;
+    if (ride) {
+      const d = this.rideDir;
+      yaw = Math.atan2(-d * 4.6, 4.2); pitch = 0.3; dist = 6.6; look = 3; ldx = d; ldz = 0; k = 3;
+      this.camMode = 'ride';
     } else if (S.mode === 'wipe') {
-      const a = Ocean.t * 0.4;
-      V3.set(eye, P.x + Math.cos(a) * 6, Math.max(P.y, 0) + 3.5, P.z + Math.sin(a) * 6 - 2);
-      V3.set(tgt, P.x, P.y + 0.5, P.z); k = 2; this.camMode = 'wipe';
-    } else if (catching) {
-      V3.set(eye, P.x - S.hx() * 4.5, P.y + 3.4, P.z - S.hz() * 4.5);
-      V3.set(tgt, P.x + S.hx() * 6, P.y - 0.6, P.z + S.hz() * 6); k = 3; this.camMode = 'catch';
-    } else if (setNear) {
-      // side-on: watch the set stand up behind you
-      const s = this.sideSign;
-      V3.set(eye, P.x + s * 9, P.y + 3.6, P.z - 5.5);
-      V3.set(tgt, P.x - s * 1.5, P.y + 0.8, P.z + 1.5); k = 2.2; this.camMode = 'side';
+      yaw = (this.camYaw || 0) + dt * 0.5; pitch = 0.5; dist = 7; k = 6; this.camMode = 'wipe';
     } else {
-      const hx = S.hx(), hz = S.hz();
-      V3.set(eye, P.x - hx * 6.2, P.y + 2.7, P.z - hz * 6.2);
-      V3.set(tgt, P.x + hx * 14, P.y + 0.6, P.z + hz * 14); k = 3; this.camMode = 'paddle';
+      const setNear = this.main && this.main.zw < P.z + 2 && P.z - this.main.zw < 40 && hz > 0.2;
+      yaw = heading + Math.PI; pitch = setNear ? 0.5 : 0.36; dist = setNear ? 7.5 : 6.4; look = 4;
+      this.camMode = setNear ? 'set' : 'paddle';
+    }
+    if (snap || this.camYaw === undefined) { this.camYaw = yaw; this.camPitch = pitch; this.camDist = dist; }
+    else {
+      this.camYaw += angDelta(this.camYaw, yaw) * (1 - Math.exp(-k * dt));
+      this.camPitch = damp(this.camPitch, pitch, 2.5, dt); this.camDist = damp(this.camDist, dist, 2.5, dt);
+    }
+    this.lookAhead = damp(this.lookAhead || 0, look, 2, dt);
+    this.ldx = damp(this.ldx || 0, ldx, 3, dt); this.ldz = damp(this.ldz || 0, ldz, 3, dt);
+    const cp = Math.cos(this.camPitch), r = this.camDist;
+    const ox = Math.sin(this.camYaw) * cp * r, oy = Math.sin(this.camPitch) * r, oz = Math.cos(this.camYaw) * cp * r;
+    const ty = Math.max(P.y, -0.3) + 0.6;
+    V3.set(eye, P.x + ox, ty + oy, P.z + oz);
+    V3.set(tgt, P.x + this.ldx * this.lookAhead, ty, P.z + this.ldz * this.lookAhead);
+    // the barrel: tuck in behind the rider under the lip (blended in by tubeCam)
+    const tc = this.tubeCam;
+    if (tc > 0.01 && q.wave) {
+      const d = this.rideDir || 1;
+      const mid = q.covered && isFinite(q.ceil) ? (q.ceil + q.yT) * 0.5 : P.y + 0.95;
+      const ex = P.x - d * 2.6, ey = P.y + clamp(mid - P.y, -0.6, 0.95);
+      const ez = this.tubeEyeZ(q.wave, ex, ey, P.z);
+      V3.lerp(eye, eye, V3(ex, ey, ez), tc);
+      V3.lerp(tgt, tgt, V3(P.x + d * 6, P.y + 0.8, P.z + 0.4), tc);
     }
     if (snap) { V3.set(Cam.pos, eye.x, eye.y, eye.z); V3.set(Cam.tgt, tgt.x, tgt.y, tgt.z); }
-    else {
-      Cam.pos.x = damp(Cam.pos.x, eye.x, k, dt); Cam.pos.y = damp(Cam.pos.y, eye.y, k, dt); Cam.pos.z = damp(Cam.pos.z, eye.z, k, dt);
-      Cam.tgt.x = damp(Cam.tgt.x, tgt.x, kt, dt); Cam.tgt.y = damp(Cam.tgt.y, tgt.y, kt, dt); Cam.tgt.z = damp(Cam.tgt.z, tgt.z, kt, dt);
+    else {    // the orbit is already smooth: follow it tightly so the rider stays framed
+      Cam.pos.x = damp(Cam.pos.x, eye.x, 12, dt); Cam.pos.y = damp(Cam.pos.y, eye.y, 8, dt); Cam.pos.z = damp(Cam.pos.z, eye.z, 12, dt);
+      Cam.tgt.x = damp(Cam.tgt.x, tgt.x, 14, dt); Cam.tgt.y = damp(Cam.tgt.y, tgt.y, 8, dt); Cam.tgt.z = damp(Cam.tgt.z, tgt.z, 14, dt);
     }
     // stay out of the water (but the tube cam may sit under the lip)
     // (inside the tube the lip is overhead: trust the framing instead)
@@ -303,8 +306,8 @@ const Game = {
     if (m && m.zw < P.z + 2) {
       const d = P.z - m.zw;
       if (S.hz() < 0.3) return ['Set wave! Turn around <small>A / D to face the beach · ' + Math.round(d) + ' m</small>', 'warn'];
-      if (d < 11) return ['Paddle! <small>hold W — pop up when it takes you</small>', 'go'];
-      if (d < 17) return ['Get ready… <small>not yet — paddle too soon and you\'ll be under the lip</small>', ''];
+      if (d < 15) return ['Paddle! <small>hold W · tap Space to pop up as it takes you</small>', 'go'];
+      if (d < 21) return ['Get ready… <small>start paddling when it\'s ~15 m away</small>', ''];
       return ['Set wave coming… <small>face the beach and wait · ' + Math.round(d) + ' m</small>', ''];
     }
     for (const w of Ocean.waves) {
@@ -370,7 +373,7 @@ const Input = {
       const dx = clamp(t.x / 52, -1, 1), dy = clamp(t.y / 52, -1, 1);
       steer = Math.abs(dx) > 0.15 ? dx : 0; up = Math.max(0, -dy) > 0.25 ? Math.min(1, -dy * 1.3) : 0; down = dy > 0.3 ? dy : 0;
     }
-    const In = { steer, up, down, actionPressed: this.act };
+    const In = { steer, up, down, actionPressed: this.act, action: k.has('Space') || this.btn };
     this.act = false;
     return In;
   }
@@ -414,9 +417,9 @@ function togglePause() {
   const end = (e) => { if (e.pointerId !== t.id) return; t.on = false; stick.style.display = 'none'; };
   zone.addEventListener('pointerup', end); zone.addEventListener('pointercancel', end);
   const b = $('actBtn');
-  b.addEventListener('pointerdown', (e) => { e.preventDefault(); Input.act = true; b.classList.add('down'); });
-  b.addEventListener('pointerup', () => b.classList.remove('down'));
-  b.addEventListener('pointercancel', () => b.classList.remove('down'));
+  b.addEventListener('pointerdown', (e) => { e.preventDefault(); Input.act = true; Input.btn = true; b.classList.add('down'); });
+  const up = () => { Input.btn = false; b.classList.remove('down'); };
+  b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
   $('pauseBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); togglePause(); });
   for (const id of ['menu', 'over', 'pause']) $(id).addEventListener('pointerdown', () => {
     Sfx.start();
