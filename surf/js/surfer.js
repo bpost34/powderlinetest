@@ -171,9 +171,16 @@ const Surfer = {
     this.mode = 'popup'; this.popT = 0.38; this.rideWave = q.wave; this.offWave = 0; this.bogT = 0;
     this.tubeT = 0; this.covered = false; this.turnAcc = 0; this.airT = 0; this.rideT = 0;
     this.lastMove = ''; this.streak = 0;
+    // stand up already angled for the open face (away from the peak, where it's breaking)
+    const dir = this.shoulderDir(q.wave);
+    this.vx = dir * Math.max(3.2, Math.abs(this.vx));
+    this.yaw = Math.atan2(this.vx, this.vz);
     const steep = -q.gz;
     Game.onPopUp(steep);
   },
+
+  /* which way along the wave is open: away from the peak */
+  shoulderDir(w) { return w ? (Math.sign(this.pos.x - w.xPeak) || 1) : 1; },
 
   /* ---------------- riding ---------------- */
   stepRide(dt, In) {

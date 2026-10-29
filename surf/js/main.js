@@ -179,10 +179,9 @@ const Game = {
     this.ldx = damp(this.ldx || 0, ldx, 3, dt); this.ldz = damp(this.ldz || 0, ldz, 3, dt);
     // the player's own orbit on top (drag / wheel); drifts back to the auto view when left alone
     const L = Look;
-    L.idle += dt;
-    if (L.idle > 2.5) { L.yaw = damp(L.yaw, 0, 1.5, dt); L.pitch = damp(L.pitch, 0, 1.5, dt); }
+    L.update(dt);
     const free = 1 - this.tubeCam;
-    const cyaw = this.camYaw + L.yaw * free, cpit = clamp(this.camPitch + L.pitch * free, 0.04, 1.35);
+    const cyaw = this.camYaw + L.yaw * free, cpit = clamp(this.camPitch + L.pitch * free, -0.12, 1.35);
     const cp = Math.cos(cpit), r = this.camDist * lerp(1, L.zoom, free);
     const ox = Math.sin(cyaw) * cp * r, oy = Math.sin(cpit) * r, oz = Math.cos(cyaw) * cp * r;
     const ty = Math.max(P.y, -0.3) + 0.6;
@@ -304,7 +303,7 @@ const Game = {
     const m = this.main;
     if (m && m.zw < P.z + 2) {
       const d = P.z - m.zw;
-      if (S.popArm > 0) return ['Ready… <small>you\'ll pop up as it takes you</small>', 'go'];
+      if (S.popArm > 0) return ['Ready… <small>you\'ll pop up as it takes you · then follow the arrow</small>', 'go'];
       if (d < 15) return ['Here it comes — Space! <small>press now: you pop up as it lifts you</small>', 'go'];
       return ['Set wave coming… <small>' + Math.round(d) + ' m · get ready to press Space</small>', ''];
     }
@@ -322,6 +321,16 @@ const Game = {
     $('wsVal').textContent = Math.round(this.rideScore).toLocaleString();
     $('tube').classList.toggle('on', S.inTube && S.tubeT > 0.2);
     $('tubeT').textContent = S.tubeT.toFixed(1) + ' s';
+    // direction cue: from when the set is close until you're settled on the wave
+    const m = this.main, P = S.pos;
+    const wv = S.rideWave && (S.mode === 'popup' || S.mode === 'ride') ? S.rideWave : m;
+    const showCue = wv && ((S.mode === 'prone' && m && m.zw < P.z + 2 && P.z - m.zw < 30) || ((S.mode === 'popup' || S.mode === 'ride') && S.rideT < 2.5));
+    const cue = $('dirCue');
+    cue.classList.toggle('on', !!showCue);
+    if (showCue) {
+      const d = S.shoulderDir(wv), sx = d * Cam.view[0];       // world ±x → screen left/right
+      cue.classList.toggle('l', sx < 0);
+    }
     const [txt, cls] = this.prompt();
     const el = $('prompt');
     if (el._t !== txt) { el.innerHTML = txt; el._t = txt; }
@@ -353,27 +362,54 @@ const Game = {
   }
 };
 
-/* ---------------- camera look (player-controlled orbit offset) ---------------- */
+/* ---------------- camera look: Powder Line's scheme ----------------
+   hold right or middle mouse button and drag to orbit, wheel zooms; on touch a
+   one-finger swipe on open screen orbits. Springs home ~1 s after release. */
 const Look = {
-  yaw: 0, pitch: 0, zoom: 1, idle: 99, id: null, x: 0, y: 0,
-  drag(dx, dy) { this.yaw -= dx * 0.008; this.pitch = clamp(this.pitch + dy * 0.006, -0.6, 1.1); this.idle = 0; },
-  wheel(d) { this.zoom = clamp(this.zoom * Math.exp(d * 0.0012), 0.45, 3); this.idle = 0; },
-  recenter() { this.yaw = 0; this.pitch = 0; this.zoom = 1; this.idle = 99; }
+  yaw: 0, pitch: 0, zoom: 1, dragging: false, releaseT: 0,
+  drag(dx, dy) { this.yaw -= dx * 0.0055; this.pitch = clamp(this.pitch + dy * 0.0045, -0.55, 0.95); },
+  update(dt) {
+    if (this.dragging) return;
+    this.releaseT -= dt;
+    if (this.releaseT <= 0) { this.yaw = damp(angDelta(0, this.yaw), 0, 2.4, dt); this.pitch = damp(this.pitch, 0, 2.4, dt); }
+  },
+  recenter() { this.yaw = 0; this.pitch = 0; this.zoom = 1; this.dragging = false; this.releaseT = 0; }
 };
 (function lookSetup() {
-  const c = $('gl');
-  c.addEventListener('pointerdown', (e) => {
-    if (Game.state !== 'play' || Look.id !== null) return;
-    Look.id = e.pointerId; Look.x = e.clientX; Look.y = e.clientY; c.setPointerCapture(e.pointerId);
+  addEventListener('mousedown', (e) => {
+    if (e.button !== 1 && e.button !== 2) return;
+    e.preventDefault();                       // no middle-click autoscroll
+    Look.dragging = true;
   });
-  c.addEventListener('pointermove', (e) => {
-    if (e.pointerId !== Look.id) return;
-    Look.drag(e.clientX - Look.x, e.clientY - Look.y); Look.x = e.clientX; Look.y = e.clientY;
+  addEventListener('mouseup', (e) => {
+    if (e.button !== 1 && e.button !== 2) return;
+    Look.dragging = false; Look.releaseT = 1.0;
   });
-  const end = (e) => { if (e.pointerId === Look.id) Look.id = null; };
-  c.addEventListener('pointerup', end); c.addEventListener('pointercancel', end);
-  c.addEventListener('contextmenu', (e) => e.preventDefault());
-  addEventListener('wheel', (e) => { if (Game.state === 'play') { e.preventDefault(); Look.wheel(e.deltaY); } }, { passive: false });
+  addEventListener('mousemove', (e) => {
+    if (!Look.dragging) return;
+    if (!(e.buttons & 6)) { Look.dragging = false; Look.releaseT = 1.0; return; }   // released off-window
+    Look.drag(e.movementX || 0, e.movementY || 0);
+  });
+  addEventListener('contextmenu', (e) => e.preventDefault());
+  addEventListener('wheel', (e) => {
+    e.preventDefault();
+    Look.zoom = clamp(Look.zoom * Math.exp(e.deltaY * 0.0012), 0.55, 2.2);
+  }, { passive: false });
+  // touch: one-finger swipe on open screen (the stick and buttons sit above the canvas)
+  const canvas = $('gl');
+  let camId = null, lx = 0, ly = 0;
+  canvas.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'touch' || camId !== null) return;
+    camId = e.pointerId; lx = e.clientX; ly = e.clientY; Look.dragging = true;
+  });
+  addEventListener('pointermove', (e) => {
+    if (e.pointerId !== camId) return;
+    Look.drag((e.clientX - lx) * 1.5, (e.clientY - ly) * 1.5);
+    lx = e.clientX; ly = e.clientY;
+  });
+  const camUp = (e) => { if (e.pointerId === camId) { camId = null; Look.dragging = false; Look.releaseT = 1.0; } };
+  addEventListener('pointerup', camUp); addEventListener('pointercancel', camUp);
+  addEventListener('blur', () => { Look.dragging = false; Look.releaseT = 1.0; });
 })();
 
 /* ---------------- input ---------------- */
