@@ -2312,8 +2312,10 @@ const Game = {
     } else if (S.mode === 'wipe') {
       yaw = (this.camYaw || 0) + dt * 0.5; pitch = 0.5; dist = 7; k = 6; this.camMode = 'wipe';
     } else {
-      // sat in the lineup: from in front, so you watch the set stand up behind you
-      yaw = heading + 0.35 * (this.sideSign || 1); pitch = 0.22; dist = 7.5; look = -6;
+      // sat in the lineup: from behind, facing the beach like the rider. Once a set is coming, swing
+      // out to the trailing side (opposite the peel), the same side the ride cam takes after the pop-up
+      const off = this.main ? 0.75 : 0.2;
+      yaw = heading + Math.PI + off * (this.sideSign || 1); pitch = 0.3; dist = 7.5; look = 2;
       this.camMode = 'lineup';
     }
     if (snap || this.camYaw === undefined) { this.camYaw = yaw; this.camPitch = pitch; this.camDist = dist; }
