@@ -26,5 +26,8 @@ A sister game in [`surf/`](surf/) — same no-engine WebGL2 approach, but on wat
 
 The breaking wave is a swept cross-section (`surf/js/ocean.js`): back → crest → lip → curtain → wall → trough,
 so the barrel genuinely overhangs and the rider physics uses the same surface you see.
+The open sea's wind chop, glitter and whitecaps are a Tessendorf FFT ocean (`surf/js/fft.js`) ported to WebGL2
+from [web-ocean](https://github.com/noniv/web-ocean) by Maksymilian Dendura (MIT; notice kept in the file);
+browsers without float render targets fall back to procedural ripples.
 `python3 tools/build_single.py surf` writes `dist/swell-line.html`. Headless checks:
 `node surf/test/ride.js` (physics), `node surf/test/session.js` (a bot plays a full session in Chromium).

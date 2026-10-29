@@ -55,21 +55,66 @@ void main(){
   o = vec4(tone(c), 1.0);
 }`;
 
+// FFT chop (fft.js): sampled per cascade from texture arrays. Displacement is faded out
+// under the rider (physics rides the analytic surface), on the thin lip and in foam.
+const FFT_GLSL = `
+uniform float uFFT; uniform vec4 uInvL, uTexel;
+uniform highp sampler2DArray uDisp, uDeriv;
+float cascade(vec4 v, int c){ return c == 0 ? v.x : c == 1 ? v.y : c == 2 ? v.z : v.w; }
+`;
 const VS_WATER = `
+precision highp float;
 layout(location=0) in vec3 aPos; layout(location=1) in vec3 aNrm; layout(location=2) in vec2 aAux;
-uniform mat4 uVP; out vec3 vP; out vec3 vN; out vec2 vA;
-void main(){ vP = aPos; vN = aNrm; vA = aAux; gl_Position = uVP * vec4(aPos, 1.0); }`;
-const FS_WATER = GLSL_COMMON + `
-in vec3 vP; in vec3 vN; in vec2 vA; out vec4 o;
+uniform mat4 uVP; uniform vec3 uCam; uniform vec3 uRider; uniform float uShore;
+out vec3 vP; out vec3 vN; out vec2 vA; out vec2 vXZ; out float vM;
+` + FFT_GLSL + `
+void main(){
+  vec3 p = aPos;
+  vXZ = aPos.xz;
+  float m = 0.0;
+  if (uFFT > 0.5) {
+    float d = length(uCam - p);
+    m = smoothstep(2.5, 9.0, length(p.xz - uRider.xz)) * (1.0 - 0.85 * aAux.y) * (1.0 - smoothstep(0.3, 0.9, aAux.x))
+      * (1.0 - smoothstep(uShore - 45.0, uShore - 8.0, p.z)) * (1.0 - smoothstep(600.0, 1500.0, d));
+    float spacing = 0.6 + 0.024 * d;
+    vec3 disp = vec3(0.0);
+    for (int c = 0; c < 4; c++) {
+      float lod = log2(max(spacing / cascade(uTexel, c), 1.0));
+      if (lod < 7.0) disp += textureLod(uDisp, vec3(p.xz * cascade(uInvL, c), float(c)), lod).xyz;
+    }
+    p += disp * m;
+  }
+  vM = m; vP = p; vN = aNrm; vA = aAux;
+  gl_Position = uVP * vec4(p, 1.0);
+}`;
+const FS_WATER = GLSL_COMMON + FFT_GLSL + `
+in vec3 vP; in vec3 vN; in vec2 vA; in vec2 vXZ; in float vM; out vec4 o;
+uniform float uShore;
 float rip(vec2 q){ return vnoise(q * 1.3 + vec2(uTime * 0.5, uTime * 0.3)) + 0.5 * vnoise(q * 3.7 - vec2(uTime * 0.8, -uTime * 0.2)); }
 void main(){
   vec3 V = normalize(uCam - vP);
   vec3 N = normalize(vN);
   if (dot(N, V) < 0.0) N = -N;
   float dist = length(uCam - vP);
-  float e = 0.12, r0 = rip(vP.xz);
-  vec2 g = vec2(rip(vP.xz + vec2(e, 0)) - r0, rip(vP.xz + vec2(0, e)) - r0) / e;
-  N = normalize(N - vec3(g.x, 0.0, g.y) * 0.05 / (1.0 + dist * 0.02));
+  float whitecap = 0.0;
+  if (uFFT > 0.5) {
+    // summed cascade slopes, corrected for the horizontal squash (Jacobian)
+    vec2 s = vec2(0.0); float jxx = 0.0, jzz = 0.0, jxz = 0.0;
+    for (int c = 0; c < 4; c++) {
+      vec3 uv = vec3(vXZ * cascade(uInvL, c), float(c));
+      vec4 dv = texture(uDeriv, uv), av = texture(uDisp, uv);
+      s += dv.xy; jxx += dv.z; jzz += dv.w; jxz += av.w;
+    }
+    vec2 sl = s / vec2(max(1.0 + jxx, 0.15), max(1.0 + jzz, 0.15));
+    float calm = 1.0 - smoothstep(uShore - 40.0, uShore - 8.0, vP.z);
+    N = normalize(N - vec3(sl.x, 0.0, sl.y) * (1.0 - 0.6 * vA.y) * calm);
+    float J = (1.0 + jxx) * (1.0 + jzz) - jxz * jxz;
+    whitecap = clamp((0.62 - J) * 2.2, 0.0, 1.0) * calm;
+  } else {
+    float e = 0.12, r0 = rip(vP.xz);
+    vec2 g = vec2(rip(vP.xz + vec2(e, 0)) - r0, rip(vP.xz + vec2(0, e)) - r0) / e;
+    N = normalize(N - vec3(g.x, 0.0, g.y) * 0.05 / (1.0 + dist * 0.02));
+  }
   float ndv = max(dot(N, V), 0.0);
   float fres = 0.02 + 0.98 * pow(1.0 - ndv, 5.0);
   vec3 R = reflect(-V, N);
@@ -88,7 +133,7 @@ void main(){
   // foam: noisy, stretched along the wave, crawling with the water
   float fn = vnoise(vec2(vP.x * 0.55, vP.z * 0.9 + vP.y * 0.7) + vec2(0.0, -uTime * 0.8)) * 0.6
            + vnoise(vP.xz * 2.7 + vec2(vP.y * 2.0, uTime * 0.4)) * 0.4;
-  float f = vA.x;
+  float f = max(vA.x, whitecap * (0.45 + 0.55 * fn));
   float fm = smoothstep(0.42, 0.62, f + (fn - 0.5) * 0.75) * smoothstep(0.02, 0.15, f);
   vec3 foamC = vec3(0.94, 0.96, 0.95) * (0.6 + 0.4 * lit) + vec3(0.15, 0.08, 0.02) * back;
   col = mix(col, foamC, fm);
@@ -336,7 +381,7 @@ const Gfx = {
   gl: null, canvas: null, w: 1, h: 1, dpr: 1,
   prog: {}, mesh: {},
   sun: V3.norm(V3(), V3(0.38, 0.2, -1)),
-  oc: null,
+  oc: null, rider: V3(1e5, 0, 1e5),
 
   init(canvas) {
     this.canvas = canvas;
@@ -347,6 +392,7 @@ const Gfx = {
     this.prog.water = this.link(VS_WATER, FS_WATER, 'water');
     this.prog.lit = this.link(VS_LIT, FS_LIT, 'lit');
     this.prog.part = this.link(VS_PART, FS_PART, 'part');
+    FFTOcean.init(gl, this.link.bind(this));
     this.mesh.land = this.upload(buildLand());
     this.mesh.box = this.upload(gBox(G(), [1, 1, 1]));
     this.mesh.cyl = this.upload(gCyl(G(), 10, [1, 1, 1]));
@@ -533,6 +579,8 @@ const Gfx = {
   frame(S) {
     const gl = this.gl;
     this.resize();
+    FFTOcean.update(Ocean.t);
+    if (S) V3.set(this.rider, S.pos.x, S.pos.y, S.pos.z); else V3.set(this.rider, 1e5, 0, 1e5);
     gl.viewport(0, 0, this.w, this.h);
     Cam.set(this.w / this.h);
     this.buildOcean(Cam.pos.x, Cam.pos.z);
@@ -555,6 +603,9 @@ const Gfx = {
     this.part(this.mesh.land, this._landM, this._id, [1, 1, 1]);
     // ocean
     p = this.prog.water; this.common(p);
+    FFTOcean.bind(p);
+    gl.uniform3f(p.uRider, this.rider.x, this.rider.y, this.rider.z);
+    gl.uniform1f(p.uShore, SEA.SHORE);
     gl.bindVertexArray(this.mesh.far.vao); gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_INT, 0);
     gl.bindVertexArray(this.oc.mesh.vao); gl.drawElements(gl.TRIANGLES, this.oc.mesh.count, gl.UNSIGNED_INT, 0);
     // rider
