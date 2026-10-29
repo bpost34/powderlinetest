@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+<meta name="color-scheme" content="dark"/>
+<title>SWELL LINE — a from-scratch WebGL surf game</title>
+<style>
+  :root{
+    --ink:#f4fbff;
+    --dim:rgba(220,240,250,.66);
+    --accent:#5ff0e0;
+    --gold:#ffd36a;
+    --bad:#ff7a5c;
+    --line:rgba(170,225,235,.22);
+    --panel:rgba(6,24,36,.5);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;overflow:hidden;background:#061018;color:var(--ink);
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;user-select:none;-webkit-user-select:none;touch-action:none}
+  canvas#gl{position:fixed;inset:0;display:block;width:100%;height:100%}
+  .num{font-variant-numeric:tabular-nums}
+  .label{font-size:9.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--dim);text-shadow:0 1px 4px rgba(0,10,18,.9)}
+  .val{text-shadow:0 2px 12px rgba(0,14,26,.85);line-height:.95;font-weight:750}
+  .key{display:inline-block;min-width:22px;padding:3px 6px;border:1px solid rgba(220,240,255,.4);border-radius:5px;
+    font:700 11px/1.1 inherit;font-style:normal;text-align:center;color:#eafaff;background:rgba(10,30,44,.5)}
+
+  #hud{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .5s}
+  #hud.on{opacity:1}
+  .corner{position:absolute;padding:20px 24px}
+  .tl{top:0;left:0}.tr{top:0;right:0;text-align:right}.bl{bottom:0;left:0}
+  #waveNo{font-size:30px}
+  #waveSub{font-size:13px;font-weight:650;color:var(--dim);margin-top:6px}
+  #total{font-size:34px}
+  #best{font-size:12px;font-weight:650;color:var(--dim);margin-top:6px;letter-spacing:.06em}
+  #speed{font-size:54px;letter-spacing:-.02em}
+  .unit{font-size:13px;font-weight:600;color:var(--dim);margin-left:4px}
+  #stam{width:170px;height:4px;background:rgba(180,230,255,.16);margin-top:10px;border-radius:2px;overflow:hidden}
+  #stamFill{height:100%;width:100%;background:linear-gradient(90deg,#ff8a5c,#ffd36a 35%,#5ff0e0 70%)}
+  #map{position:absolute;right:20px;top:118px;width:118px;height:178px;border-radius:10px;background:var(--panel);
+    border:1px solid var(--line)}
+  #prompt{position:absolute;left:50%;bottom:30px;transform:translateX(-50%);text-align:center;width:min(92vw,640px);
+    font-size:19px;font-weight:800;letter-spacing:.02em;text-shadow:0 2px 14px rgba(0,10,20,.95)}
+  #prompt small{display:block;font-size:12.5px;font-weight:650;color:var(--dim);margin-top:5px;letter-spacing:.04em}
+  #prompt.go{color:var(--gold);animation:pulse .5s ease-in-out infinite alternate}
+  #prompt.warn{color:var(--bad)}
+  @keyframes pulse{from{transform:translateX(-50%) scale(1)}to{transform:translateX(-50%) scale(1.08)}}
+  #waveScore{position:absolute;left:50%;top:24px;transform:translateX(-50%);text-align:center;opacity:0;transition:opacity .3s}
+  #waveScore.on{opacity:1}
+  #wsVal{font-size:30px;color:var(--gold);font-weight:800;text-shadow:0 0 22px rgba(255,200,90,.5)}
+  #tube{position:absolute;left:50%;top:13%;transform:translate(-50%,-50%);text-align:center;opacity:0;transition:opacity .2s}
+  #tube.on{opacity:1}
+  #tubeT{font-size:46px;font-weight:850;color:#bffcf4;text-shadow:0 0 30px rgba(80,255,230,.7),0 3px 14px rgba(0,10,20,.9)}
+  #trick{position:absolute;left:50%;top:24%;transform:translate(-50%,-50%);text-align:center;opacity:0;pointer-events:none}
+  #trickName{font-size:34px;font-weight:850;color:#fff;text-shadow:0 0 34px rgba(90,240,230,.7),0 4px 16px rgba(0,10,24,.9)}
+  #trickPts{font-size:18px;font-weight:750;color:var(--gold);margin-top:5px}
+  #trick.pop{animation:pop 1.3s cubic-bezier(.16,.9,.3,1) forwards}
+  @keyframes pop{0%{opacity:0;transform:translate(-50%,-40%) scale(.75)}14%{opacity:1;transform:translate(-50%,-50%) scale(1.06)}
+    26%{transform:translate(-50%,-50%) scale(1)}72%{opacity:1}100%{opacity:0;transform:translate(-50%,-62%) scale(1)}}
+  #under{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .35s;
+    background:radial-gradient(ellipse at 50% 30%,rgba(40,140,150,.35),rgba(4,30,44,.88));display:flex;align-items:center;justify-content:center}
+  #under.on{opacity:1}
+  #underTxt{text-align:center;font-size:30px;font-weight:850;letter-spacing:.04em;text-shadow:0 3px 16px rgba(0,0,0,.6)}
+  #underTxt small{display:block;font-size:14px;font-weight:650;color:var(--dim);margin-top:8px}
+
+  .screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+    padding:24px;background:linear-gradient(180deg,rgba(4,16,26,.25),rgba(4,16,26,.75));transition:opacity .4s;overflow:auto}
+  .screen.hide{opacity:0;pointer-events:none}
+  .eyebrow{font-size:11px;letter-spacing:.34em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  h1{font-size:clamp(46px,10vw,104px);line-height:.9;font-weight:900;letter-spacing:-.02em;margin:14px 0 16px;
+    text-shadow:0 6px 40px rgba(0,20,40,.6)}
+  .sub{max-width:560px;color:var(--dim);font-size:15px;line-height:1.55;margin-bottom:22px}
+  .keys{display:grid;grid-template-columns:auto auto;gap:9px 16px;align-items:center;text-align:left;font-size:13.5px;
+    color:rgba(234,248,255,.88);margin-bottom:24px}
+  .keys > div:nth-child(odd){text-align:right}
+  .go{font-size:13px;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);font-weight:800;animation:blink 1.4s infinite}
+  @keyframes blink{50%{opacity:.45}}
+  button.big{margin-top:18px;min-height:46px;padding:0 26px;border-radius:24px;border:1.5px solid var(--accent);background:rgba(10,40,52,.55);
+    color:var(--accent);font:800 12px/1 inherit;font-family:inherit;letter-spacing:.18em;text-transform:uppercase;cursor:pointer}
+  .stats{display:grid;grid-template-columns:repeat(3,minmax(90px,1fr));gap:16px 26px;margin:6px 0 18px}
+  .stats b{display:block;font-size:26px;margin-top:5px}
+  #newbest{color:var(--gold);font-weight:800;letter-spacing:.14em;margin-bottom:14px}
+  #back{margin-top:26px;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);text-decoration:none}
+
+  /* touch */
+  #touch{position:fixed;inset:0;pointer-events:none;display:none}
+  body.touch.playing #touch{display:block}
+  body.touch .kb-only{display:none}
+  body:not(.touch) .touch-only{display:none}
+  #stickZone{position:absolute;left:0;bottom:0;width:50%;height:62%;pointer-events:auto}
+  #stick{position:absolute;width:128px;height:128px;margin:-64px 0 0 -64px;border-radius:50%;border:2px solid rgba(200,240,255,.35);
+    background:rgba(10,30,44,.25);display:none}
+  #knob{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;background:rgba(220,250,255,.55)}
+  #actBtn{position:absolute;right:max(26px,env(safe-area-inset-right));bottom:max(34px,env(safe-area-inset-bottom));width:96px;height:96px;
+    border-radius:50%;border:2px solid var(--accent);background:rgba(10,40,52,.5);color:var(--accent);pointer-events:auto;
+    display:flex;align-items:center;justify-content:center;font:800 13px/1.1 inherit;letter-spacing:.1em;text-align:center}
+  #actBtn.down{background:rgba(95,240,224,.35)}
+  #pauseBtn{position:absolute;left:50%;margin-left:-21px;top:max(10px,env(safe-area-inset-top));width:42px;height:42px;border-radius:50%;border:1px solid var(--line);
+    background:var(--panel);color:#fff;pointer-events:auto;font-size:14px;display:flex;align-items:center;justify-content:center}
+  body.touch #map{top:auto;bottom:150px;right:16px;width:96px;height:140px}
+  @media (max-width:700px){ .corner{padding:14px 16px} #speed{font-size:40px} #total{font-size:26px} #waveNo{font-size:24px}
+    #prompt{bottom:140px;font-size:16px}
+    body.touch #waveScore{top:64px} #map{top:96px;width:92px;height:136px} .stats{grid-template-columns:repeat(2,1fr)} }
+  @media (orientation:portrait){ #prompt{bottom:auto;top:118px} #trick{top:30%} }
+  @media (orientation:landscape) and (max-height:500px){ #prompt{bottom:auto;top:64px} #tube{top:30%} }
+  #fade{position:fixed;inset:0;background:#06121a;opacity:0;pointer-events:none;transition:opacity .45s}
+  #fade.on{opacity:1}
+  #fatal{position:fixed;inset:0;display:none;padding:30px;background:#200;color:#fdd;font:13px/1.5 monospace;white-space:pre-wrap;overflow:auto}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div id="hud">
+  <div class="corner tl">
+    <div class="label">Wave</div>
+    <div class="val num" id="waveNo">1 / 3</div>
+    <div class="num" id="waveSub">paddle out</div>
+  </div>
+  <div class="corner tr">
+    <div class="label">Session</div>
+    <div class="val num" id="total">0</div>
+    <div class="num" id="best">BEST 0</div>
+  </div>
+  <div class="corner bl">
+    <div class="label">Speed</div>
+    <div class="val num" id="speed">0<span class="unit">km/h</span></div>
+    <div id="stam"><div id="stamFill"></div></div>
+  </div>
+  <canvas id="map" width="236" height="356"></canvas>
+  <div id="waveScore"><div class="label">This wave</div><div class="num" id="wsVal">0</div></div>
+  <div id="tube"><div class="label">Tube</div><div class="num" id="tubeT">0.0 s</div></div>
+  <div id="trick"><div id="trickName"></div><div id="trickPts"></div></div>
+  <div id="prompt"></div>
+</div>
+<div id="fade"></div>
+<div id="under"><div id="underTxt">HELD DOWN<small><span class="kb-only">mash SPACE</span><span class="touch-only">mash the button</span> to swim up</small></div></div>
+
+<div id="touch">
+  <div id="stickZone"><div id="stick"><div id="knob"></div></div></div>
+  <div id="actBtn">ACTION</div>
+  <div id="pauseBtn">❚❚</div>
+</div>
+
+<div class="screen" id="menu">
+  <div class="eyebrow">WebGL2 · no engine · no assets</div>
+  <h1>SWELL<br>LINE</h1>
+  <p class="sub">Paddle out through the whitewater, sit in the lineup, then turn and stroke into a set wave
+    as it jacks up on the reef. Pop up, trim the face, stall for the barrel — and get out before it shuts.
+    Three waves a session.</p>
+  <div class="keys kb-only">
+    <div><i class="key">W</i> / <i class="key">↑</i></div><div>Paddle · pump when riding</div>
+    <div><i class="key">A</i> <i class="key">D</i> / <i class="key">←</i> <i class="key">→</i></div><div>Turn the board · carve · spin in the air</div>
+    <div><i class="key">Space</i></div><div>Duck dive under whitewater · pop up when the wave has you · launch off the lip</div>
+    <div><i class="key">S</i> / <i class="key">↓</i></div><div>Stall (drag a hand) — let the curl catch you for the tube</div>
+    <div><i class="key">P</i> <i class="key">R</i> <i class="key">M</i></div><div>Pause · restart · mute</div>
+  </div>
+  <div class="keys touch-only">
+    <div><i class="key">L thumb</i></div><div>Drag: ◀ ▶ turn · ▲ paddle / pump · ▼ stall</div>
+    <div><i class="key">ACTION</i></div><div>Duck dive · pop up · launch</div>
+  </div>
+  <div class="go"><span class="kb-only">press any key to paddle out</span><span class="touch-only">tap to paddle out</span></div>
+  <a id="back" href="../">← back to Powder Line (snowboarding)</a>
+</div>
+
+<div class="screen hide" id="over">
+  <div class="eyebrow">session over</div>
+  <h1 style="font-size:clamp(40px,8vw,84px)" id="overHead">GOOD SESH</h1>
+  <div class="stats">
+    <div><div class="label">Total</div><b class="num" id="sTotal">0</b></div>
+    <div><div class="label">Best wave</div><b class="num" id="sBest">0</b></div>
+    <div><div class="label">Longest tube</div><b class="num" id="sTube">0.0 s</b></div>
+    <div><div class="label">Top speed</div><b class="num" id="sSpeed">0</b></div>
+    <div><div class="label">Best move</div><b class="num" id="sMove">—</b></div>
+    <div><div class="label">Wipeouts</div><b class="num" id="sWipes">0</b></div>
+  </div>
+  <div id="newbest" style="display:none">★ new personal best</div>
+  <div class="go"><span class="kb-only">press R to paddle out again</span><span class="touch-only">tap to go again</span></div>
+</div>
+
+<div class="screen hide" id="pause">
+  <div class="eyebrow">paused</div>
+  <h1 style="font-size:clamp(34px,7vw,70px)">FLAT<br>SPELL</h1>
+  <div class="go"><span class="kb-only">press P to resume · R to restart</span><span class="touch-only">tap to resume</span></div>
+</div>
+
+<div id="fatal"></div>
+
+<script src="../js/math.js?v=20261029a"></script>
+<script src="js/ocean.js?v=20261029a"></script>
+<script src="js/gfx.js?v=20261029a"></script>
+<script src="js/surfer.js?v=20261029a"></script>
+<script src="js/audio.js?v=20261029a"></script>
+<script src="js/main.js?v=20261029a"></script>
+</body>
+</html>

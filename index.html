@@ -226,7 +226,7 @@
   body.touch #speed{font-size:36px}
   body.touch #speedbar{width:120px}
   body.touch #center{bottom:140px}
-  #tiltBtn,#ctrlBtn,#styleBtn{padding:10px 18px;border-radius:22px;border:1.5px solid rgba(190,225,255,.4);
+  #tiltBtn,#ctrlBtn,#styleBtn,#surfBtn{padding:10px 18px;border-radius:22px;border:1.5px solid rgba(190,225,255,.4);
     background:rgba(10,22,38,.45);color:#eaf6ff;font:800 11px/1 inherit;font-family:inherit;letter-spacing:.16em;
     text-transform:uppercase;touch-action:manipulation}
   #tiltBtn.on{border-color:var(--accent);color:var(--accent)}
@@ -322,7 +322,8 @@
 
   /* ---------- rider customisation ---------- */
   #mbtns{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-items:center;margin-top:16px}
-  #mbtns #tiltBtn,#mbtns #ctrlBtn,#mbtns #styleBtn{margin:0;min-height:42px}
+  #mbtns #tiltBtn,#mbtns #ctrlBtn,#mbtns #styleBtn,#mbtns #surfBtn{margin:0;min-height:42px}
+  #surfBtn{display:inline-flex;align-items:center;text-decoration:none;border-color:rgba(95,240,224,.55);color:#9ff5ea}
   #styleBtn.on{border-color:var(--accent);color:var(--accent)}
   /* flick mode: no virtual pad (flick anywhere), a quiet reminder of the gestures */
   body.flick #gStick, body.flick #gAbxy, body.flick #hint{display:none!important}
@@ -532,6 +533,7 @@
     <button id="tiltBtn" class="touch-only" type="button">Tilt steering: OFF</button>
     <button id="ctrlBtn" class="touch-only" type="button">⠿ Controls</button>
     <button id="styleBtn" type="button">Controls style: Classic</button>
+    <a id="surfBtn" href="surf/">Go surfing →</a>
   </div>
 </div>
 

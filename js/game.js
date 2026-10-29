@@ -145,7 +145,7 @@ const Input = {
     const overTap = () => Game.state === 'over' && performance.now() - Game.overAt > 650;
     $('over').addEventListener('pointerdown', (e) => { if (e.button === 0 && overTap()) Game.restart(true); });
     // fallback: some touch stacks deliver only a synthesized click for a quick tap
-    $('menu').addEventListener('click', () => { if (Game.state === 'menu' && performance.now() - Game.menuAt >= 450) { Audio.init(); Audio.resume(); this.anyKey = true; } });
+    $('menu').addEventListener('click', (e) => { if (e.target && e.target.closest && e.target.closest('a')) return; if (Game.state === 'menu' && performance.now() - Game.menuAt >= 450) { Audio.init(); Audio.resume(); this.anyKey = true; } });
     $('over').addEventListener('click', () => { if (overTap()) Game.restart(true); });
     $('pause').addEventListener('pointerdown', (e) => { if (e.button === 0) Game.togglePause(); });
     // pause-screen buttons (stopPropagation so the screen's own tap-to-resume doesn't also fire)
