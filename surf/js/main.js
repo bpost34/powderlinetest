@@ -33,7 +33,7 @@ const Game = {
     this.main = null; this.boreT = 0; this.setT = 2; this.waveIdx = 0; this.total = 0; this.scores = [];
     this.rideScore = 0; this.riding = false; this.bestTube = 0; this.topSpeed = 0; this.bestMove = null; this.wipes = 0;
     this.endT = 0; this.missedT = 0; this.respawnT = 0; $('fade').classList.remove('on');
-    this.state = 'play';
+    this.state = 'play'; Look.recenter();
     $('menu').classList.add('hide'); $('over').classList.add('hide'); $('pause').classList.add('hide');
     $('hud').classList.add('on'); $('under').classList.remove('on'); document.body.classList.add('playing');
     this.snapCam();
@@ -177,8 +177,14 @@ const Game = {
     }
     this.lookAhead = damp(this.lookAhead || 0, look, 2, dt);
     this.ldx = damp(this.ldx || 0, ldx, 3, dt); this.ldz = damp(this.ldz || 0, ldz, 3, dt);
-    const cp = Math.cos(this.camPitch), r = this.camDist;
-    const ox = Math.sin(this.camYaw) * cp * r, oy = Math.sin(this.camPitch) * r, oz = Math.cos(this.camYaw) * cp * r;
+    // the player's own orbit on top (drag / wheel); drifts back to the auto view when left alone
+    const L = Look;
+    L.idle += dt;
+    if (L.idle > 2.5) { L.yaw = damp(L.yaw, 0, 1.5, dt); L.pitch = damp(L.pitch, 0, 1.5, dt); }
+    const free = 1 - this.tubeCam;
+    const cyaw = this.camYaw + L.yaw * free, cpit = clamp(this.camPitch + L.pitch * free, 0.04, 1.35);
+    const cp = Math.cos(cpit), r = this.camDist * lerp(1, L.zoom, free);
+    const ox = Math.sin(cyaw) * cp * r, oy = Math.sin(cpit) * r, oz = Math.cos(cyaw) * cp * r;
     const ty = Math.max(P.y, -0.3) + 0.6;
     V3.set(eye, P.x + ox, ty + oy, P.z + oz);
     V3.set(tgt, P.x + this.ldx * this.lookAhead, ty, P.z + this.ldz * this.lookAhead);
@@ -347,6 +353,29 @@ const Game = {
   }
 };
 
+/* ---------------- camera look (player-controlled orbit offset) ---------------- */
+const Look = {
+  yaw: 0, pitch: 0, zoom: 1, idle: 99, id: null, x: 0, y: 0,
+  drag(dx, dy) { this.yaw -= dx * 0.008; this.pitch = clamp(this.pitch + dy * 0.006, -0.6, 1.1); this.idle = 0; },
+  wheel(d) { this.zoom = clamp(this.zoom * Math.exp(d * 0.0012), 0.45, 3); this.idle = 0; },
+  recenter() { this.yaw = 0; this.pitch = 0; this.zoom = 1; this.idle = 99; }
+};
+(function lookSetup() {
+  const c = $('gl');
+  c.addEventListener('pointerdown', (e) => {
+    if (Game.state !== 'play' || Look.id !== null) return;
+    Look.id = e.pointerId; Look.x = e.clientX; Look.y = e.clientY; c.setPointerCapture(e.pointerId);
+  });
+  c.addEventListener('pointermove', (e) => {
+    if (e.pointerId !== Look.id) return;
+    Look.drag(e.clientX - Look.x, e.clientY - Look.y); Look.x = e.clientX; Look.y = e.clientY;
+  });
+  const end = (e) => { if (e.pointerId === Look.id) Look.id = null; };
+  c.addEventListener('pointerup', end); c.addEventListener('pointercancel', end);
+  c.addEventListener('contextmenu', (e) => e.preventDefault());
+  addEventListener('wheel', (e) => { if (Game.state === 'play') { e.preventDefault(); Look.wheel(e.deltaY); } }, { passive: false });
+})();
+
 /* ---------------- input ---------------- */
 const Input = {
   keys: new Set(), act: false, touch: { on: false, x: 0, y: 0, id: null, ox: 0, oy: 0 }, btn: false,
@@ -376,6 +405,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyP' || e.code === 'Escape') { togglePause(); return; }
   if (e.code === 'KeyR') { Game.start(); return; }
   if (e.code === 'KeyM') { Sfx.toggle(); return; }
+  if (e.code === 'KeyC') { Look.recenter(); return; }
   if (e.code === 'Space') Input.act = true;
 });
 addEventListener('keyup', (e) => Input.keys.delete(e.code));
