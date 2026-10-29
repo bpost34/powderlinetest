@@ -1,0 +1,2234 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"/>
+<meta name="color-scheme" content="dark"/>
+<title>SWELL LINE — a from-scratch WebGL surf game</title>
+<style>
+  :root{
+    --ink:#f4fbff;
+    --dim:rgba(220,240,250,.66);
+    --accent:#5ff0e0;
+    --gold:#ffd36a;
+    --bad:#ff7a5c;
+    --line:rgba(170,225,235,.22);
+    --panel:rgba(6,24,36,.5);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;overflow:hidden;background:#061018;color:var(--ink);
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;user-select:none;-webkit-user-select:none;touch-action:none}
+  canvas#gl{position:fixed;inset:0;display:block;width:100%;height:100%}
+  .num{font-variant-numeric:tabular-nums}
+  .label{font-size:9.5px;letter-spacing:.24em;text-transform:uppercase;color:var(--dim);text-shadow:0 1px 4px rgba(0,10,18,.9)}
+  .val{text-shadow:0 2px 12px rgba(0,14,26,.85);line-height:.95;font-weight:750}
+  .key{display:inline-block;min-width:22px;padding:3px 6px;border:1px solid rgba(220,240,255,.4);border-radius:5px;
+    font:700 11px/1.1 inherit;font-style:normal;text-align:center;color:#eafaff;background:rgba(10,30,44,.5)}
+
+  #hud{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .5s}
+  #hud.on{opacity:1}
+  .corner{position:absolute;padding:20px 24px}
+  .tl{top:0;left:0}.tr{top:0;right:0;text-align:right}.bl{bottom:0;left:0}
+  #waveNo{font-size:30px}
+  #waveSub{font-size:13px;font-weight:650;color:var(--dim);margin-top:6px}
+  #total{font-size:34px}
+  #best{font-size:12px;font-weight:650;color:var(--dim);margin-top:6px;letter-spacing:.06em}
+  #speed{font-size:54px;letter-spacing:-.02em}
+  .unit{font-size:13px;font-weight:600;color:var(--dim);margin-left:4px}
+  #stam{width:170px;height:4px;background:rgba(180,230,255,.16);margin-top:10px;border-radius:2px;overflow:hidden}
+  #stamFill{height:100%;width:100%;background:linear-gradient(90deg,#ff8a5c,#ffd36a 35%,#5ff0e0 70%)}
+  #map{position:absolute;right:20px;top:118px;width:118px;height:178px;border-radius:10px;background:var(--panel);
+    border:1px solid var(--line)}
+  #prompt{position:absolute;left:50%;bottom:30px;transform:translateX(-50%);text-align:center;width:min(92vw,640px);
+    font-size:19px;font-weight:800;letter-spacing:.02em;text-shadow:0 2px 14px rgba(0,10,20,.95)}
+  #prompt small{display:block;font-size:12.5px;font-weight:650;color:var(--dim);margin-top:5px;letter-spacing:.04em}
+  #prompt.go{color:var(--gold);animation:pulse .5s ease-in-out infinite alternate}
+  #prompt.warn{color:var(--bad)}
+  @keyframes pulse{from{transform:translateX(-50%) scale(1)}to{transform:translateX(-50%) scale(1.08)}}
+  #waveScore{position:absolute;left:50%;top:24px;transform:translateX(-50%);text-align:center;opacity:0;transition:opacity .3s}
+  #waveScore.on{opacity:1}
+  #wsVal{font-size:30px;color:var(--gold);font-weight:800;text-shadow:0 0 22px rgba(255,200,90,.5)}
+  #tube{position:absolute;left:50%;top:13%;transform:translate(-50%,-50%);text-align:center;opacity:0;transition:opacity .2s}
+  #tube.on{opacity:1}
+  #tubeT{font-size:46px;font-weight:850;color:#bffcf4;text-shadow:0 0 30px rgba(80,255,230,.7),0 3px 14px rgba(0,10,20,.9)}
+  #trick{position:absolute;left:50%;top:24%;transform:translate(-50%,-50%);text-align:center;opacity:0;pointer-events:none}
+  #trickName{font-size:34px;font-weight:850;color:#fff;text-shadow:0 0 34px rgba(90,240,230,.7),0 4px 16px rgba(0,10,24,.9)}
+  #trickPts{font-size:18px;font-weight:750;color:var(--gold);margin-top:5px}
+  #trick.pop{animation:pop 1.3s cubic-bezier(.16,.9,.3,1) forwards}
+  @keyframes pop{0%{opacity:0;transform:translate(-50%,-40%) scale(.75)}14%{opacity:1;transform:translate(-50%,-50%) scale(1.06)}
+    26%{transform:translate(-50%,-50%) scale(1)}72%{opacity:1}100%{opacity:0;transform:translate(-50%,-62%) scale(1)}}
+  #under{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .35s;
+    background:radial-gradient(ellipse at 50% 30%,rgba(40,140,150,.35),rgba(4,30,44,.88));display:flex;align-items:center;justify-content:center}
+  #under.on{opacity:1}
+  #underTxt{text-align:center;font-size:30px;font-weight:850;letter-spacing:.04em;text-shadow:0 3px 16px rgba(0,0,0,.6)}
+  #underTxt small{display:block;font-size:14px;font-weight:650;color:var(--dim);margin-top:8px}
+
+  .screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+    padding:24px;background:linear-gradient(180deg,rgba(4,16,26,.25),rgba(4,16,26,.75));transition:opacity .4s;overflow:auto}
+  .screen.hide{opacity:0;pointer-events:none}
+  .eyebrow{font-size:11px;letter-spacing:.34em;text-transform:uppercase;color:var(--accent);font-weight:700}
+  h1{font-size:clamp(46px,10vw,104px);line-height:.9;font-weight:900;letter-spacing:-.02em;margin:14px 0 16px;
+    text-shadow:0 6px 40px rgba(0,20,40,.6)}
+  .sub{max-width:560px;color:var(--dim);font-size:15px;line-height:1.55;margin-bottom:22px}
+  .keys{display:grid;grid-template-columns:auto auto;gap:9px 16px;align-items:center;text-align:left;font-size:13.5px;
+    color:rgba(234,248,255,.88);margin-bottom:24px}
+  .keys > div:nth-child(odd){text-align:right}
+  .go{font-size:13px;letter-spacing:.2em;text-transform:uppercase;color:var(--gold);font-weight:800;animation:blink 1.4s infinite}
+  @keyframes blink{50%{opacity:.45}}
+  button.big{margin-top:18px;min-height:46px;padding:0 26px;border-radius:24px;border:1.5px solid var(--accent);background:rgba(10,40,52,.55);
+    color:var(--accent);font:800 12px/1 inherit;font-family:inherit;letter-spacing:.18em;text-transform:uppercase;cursor:pointer}
+  .stats{display:grid;grid-template-columns:repeat(3,minmax(90px,1fr));gap:16px 26px;margin:6px 0 18px}
+  .stats b{display:block;font-size:26px;margin-top:5px}
+  #newbest{color:var(--gold);font-weight:800;letter-spacing:.14em;margin-bottom:14px}
+  #back{margin-top:26px;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);text-decoration:none}
+
+  /* touch */
+  #touch{position:fixed;inset:0;pointer-events:none;display:none}
+  body.touch.playing #touch{display:block}
+  body.touch .kb-only{display:none}
+  body:not(.touch) .touch-only{display:none}
+  #stickZone{position:absolute;left:0;bottom:0;width:50%;height:62%;pointer-events:auto}
+  #stick{position:absolute;width:128px;height:128px;margin:-64px 0 0 -64px;border-radius:50%;border:2px solid rgba(200,240,255,.35);
+    background:rgba(10,30,44,.25);display:none}
+  #knob{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;background:rgba(220,250,255,.55)}
+  #actBtn{position:absolute;right:max(26px,env(safe-area-inset-right));bottom:max(34px,env(safe-area-inset-bottom));width:96px;height:96px;
+    border-radius:50%;border:2px solid var(--accent);background:rgba(10,40,52,.5);color:var(--accent);pointer-events:auto;
+    display:flex;align-items:center;justify-content:center;font:800 13px/1.1 inherit;letter-spacing:.1em;text-align:center}
+  #actBtn.down{background:rgba(95,240,224,.35)}
+  #pauseBtn{position:absolute;left:50%;margin-left:-21px;top:max(10px,env(safe-area-inset-top));width:42px;height:42px;border-radius:50%;border:1px solid var(--line);
+    background:var(--panel);color:#fff;pointer-events:auto;font-size:14px;display:flex;align-items:center;justify-content:center}
+  body.touch #map{top:auto;bottom:150px;right:16px;width:96px;height:140px}
+  @media (max-width:700px){ .corner{padding:14px 16px} #speed{font-size:40px} #total{font-size:26px} #waveNo{font-size:24px}
+    #prompt{bottom:140px;font-size:16px}
+    body.touch #waveScore{top:64px} #map{top:96px;width:92px;height:136px} .stats{grid-template-columns:repeat(2,1fr)} }
+  @media (orientation:portrait){ #prompt{bottom:auto;top:118px} #trick{top:30%} }
+  @media (orientation:landscape) and (max-height:500px){ #prompt{bottom:auto;top:64px} #tube{top:30%} }
+  #fade{position:fixed;inset:0;background:#06121a;opacity:0;pointer-events:none;transition:opacity .45s}
+  #fade.on{opacity:1}
+  #fatal{position:fixed;inset:0;display:none;padding:30px;background:#200;color:#fdd;font:13px/1.5 monospace;white-space:pre-wrap;overflow:auto}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div id="hud">
+  <div class="corner tl">
+    <div class="label">Wave</div>
+    <div class="val num" id="waveNo">1 / 3</div>
+    <div class="num" id="waveSub">paddle out</div>
+  </div>
+  <div class="corner tr">
+    <div class="label">Session</div>
+    <div class="val num" id="total">0</div>
+    <div class="num" id="best">BEST 0</div>
+  </div>
+  <div class="corner bl">
+    <div class="label">Speed</div>
+    <div class="val num" id="speed">0<span class="unit">km/h</span></div>
+    <div id="stam"><div id="stamFill"></div></div>
+  </div>
+  <canvas id="map" width="236" height="356"></canvas>
+  <div id="waveScore"><div class="label">This wave</div><div class="num" id="wsVal">0</div></div>
+  <div id="tube"><div class="label">Tube</div><div class="num" id="tubeT">0.0 s</div></div>
+  <div id="trick"><div id="trickName"></div><div id="trickPts"></div></div>
+  <div id="prompt"></div>
+</div>
+<div id="fade"></div>
+<div id="under"><div id="underTxt">HELD DOWN<small><span class="kb-only">mash SPACE</span><span class="touch-only">mash the button</span> to swim up</small></div></div>
+
+<div id="touch">
+  <div id="stickZone"><div id="stick"><div id="knob"></div></div></div>
+  <div id="actBtn">ACTION</div>
+  <div id="pauseBtn">❚❚</div>
+</div>
+
+<div class="screen" id="menu">
+  <div class="eyebrow">WebGL2 · no engine · no assets</div>
+  <h1>SWELL<br>LINE</h1>
+  <p class="sub">Paddle out through the whitewater, sit in the lineup, then turn and stroke into a set wave
+    as it jacks up on the reef. Pop up, trim the face, stall for the barrel — and get out before it shuts.
+    Three waves a session.</p>
+  <div class="keys kb-only">
+    <div><i class="key">W</i> / <i class="key">↑</i></div><div>Paddle · pump when riding</div>
+    <div><i class="key">A</i> <i class="key">D</i> / <i class="key">←</i> <i class="key">→</i></div><div>Turn the board · carve · spin in the air</div>
+    <div><i class="key">Space</i></div><div>Duck dive under whitewater · pop up when the wave has you · launch off the lip</div>
+    <div><i class="key">S</i> / <i class="key">↓</i></div><div>Stall (drag a hand) — let the curl catch you for the tube</div>
+    <div><i class="key">P</i> <i class="key">R</i> <i class="key">M</i></div><div>Pause · restart · mute</div>
+  </div>
+  <div class="keys touch-only">
+    <div><i class="key">L thumb</i></div><div>Drag: ◀ ▶ turn · ▲ paddle / pump · ▼ stall</div>
+    <div><i class="key">ACTION</i></div><div>Duck dive · pop up · launch</div>
+  </div>
+  <div class="go"><span class="kb-only">press any key to paddle out</span><span class="touch-only">tap to paddle out</span></div>
+  <a id="back" href="../">← back to Powder Line (snowboarding)</a>
+</div>
+
+<div class="screen hide" id="over">
+  <div class="eyebrow">session over</div>
+  <h1 style="font-size:clamp(40px,8vw,84px)" id="overHead">GOOD SESH</h1>
+  <div class="stats">
+    <div><div class="label">Total</div><b class="num" id="sTotal">0</b></div>
+    <div><div class="label">Best wave</div><b class="num" id="sBest">0</b></div>
+    <div><div class="label">Longest tube</div><b class="num" id="sTube">0.0 s</b></div>
+    <div><div class="label">Top speed</div><b class="num" id="sSpeed">0</b></div>
+    <div><div class="label">Best move</div><b class="num" id="sMove">—</b></div>
+    <div><div class="label">Wipeouts</div><b class="num" id="sWipes">0</b></div>
+  </div>
+  <div id="newbest" style="display:none">★ new personal best</div>
+  <div class="go"><span class="kb-only">press R to paddle out again</span><span class="touch-only">tap to go again</span></div>
+</div>
+
+<div class="screen hide" id="pause">
+  <div class="eyebrow">paused</div>
+  <h1 style="font-size:clamp(34px,7vw,70px)">FLAT<br>SPELL</h1>
+  <div class="go"><span class="kb-only">press P to resume · R to restart</span><span class="touch-only">tap to resume</span></div>
+</div>
+
+<div id="fatal"></div>
+
+<script>/* ../js/math.js */
+/* =====================================================================
+   math.js — the only "library" this game uses: 3x3/4x4 matrices,
+   vec3 helpers and a few scalar utilities. Column-major mat4 (Float32Array)
+   so it can be uploaded straight to WebGL.
+   ===================================================================== */
+'use strict';
+
+const TAU = Math.PI * 2;
+const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+const lerp = (a, b, t) => a + (b - a) * t;
+const smoothstep = (e0, e1, x) => { const t = clamp((x - e0) / (e1 - e0), 0, 1); return t * t * (3 - 2 * t); };
+const sstep = smoothstep;
+// frame-rate independent exponential smoothing
+const damp = (a, b, lambda, dt) => lerp(a, b, 1 - Math.exp(-lambda * dt));
+const rnd = (a = 1, b) => (b === undefined ? Math.random() * a : a + Math.random() * (b - a));
+const sign = (v) => v < 0 ? -1 : 1;
+
+/* ---------------- vec3 (plain objects: {x,y,z}) ---------------- */
+function V3(x = 0, y = 0, z = 0) { return { x, y, z }; }
+V3.set = function (o, x, y, z) { o.x = x; o.y = y; o.z = z; return o; };
+V3.scale = function (o, a, s) { o.x = a.x * s; o.y = a.y * s; o.z = a.z * s; return o; };
+V3.dot = function (a, b) { return a.x * b.x + a.y * b.y + a.z * b.z; };
+V3.cross = function (o, a, b) {
+  const ax = a.x, ay = a.y, az = a.z, bx = b.x, by = b.y, bz = b.z;
+  o.x = ay * bz - az * by; o.y = az * bx - ax * bz; o.z = ax * by - ay * bx; return o;
+};
+V3.norm = function (o, a) {
+  const l = Math.hypot(a.x, a.y, a.z);
+  if (l > 1e-8) { o.x = a.x / l; o.y = a.y / l; o.z = a.z / l; }
+  else { o.x = 0; o.y = 1; o.z = 0; }
+  return o;
+};
+V3.lerp = function (o, a, b, t) { o.x = lerp(a.x, b.x, t); o.y = lerp(a.y, b.y, t); o.z = lerp(a.z, b.z, t); return o; };
+
+/* ---------------- mat4 (column-major) ---------------- */
+function M4() {
+  const m = new Float32Array(16);
+  m[0] = m[5] = m[10] = m[15] = 1;
+  return m;
+}
+
+function m4ident(o) {
+  o.fill(0); o[0] = o[5] = o[10] = o[15] = 1; return o;
+}
+
+function m4mul(o, a, b) { // o = a * b
+  const a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3],
+        a10 = a[4], a11 = a[5], a12 = a[6], a13 = a[7],
+        a20 = a[8], a21 = a[9], a22 = a[10], a23 = a[11],
+        a30 = a[12], a31 = a[13], a32 = a[14], a33 = a[15];
+  for (let i = 0; i < 4; i++) {
+    const b0 = b[i * 4], b1 = b[i * 4 + 1], b2 = b[i * 4 + 2], b3 = b[i * 4 + 3];
+    o[i * 4]     = a00 * b0 + a10 * b1 + a20 * b2 + a30 * b3;
+    o[i * 4 + 1] = a01 * b0 + a11 * b1 + a21 * b2 + a31 * b3;
+    o[i * 4 + 2] = a02 * b0 + a12 * b1 + a22 * b2 + a32 * b3;
+    o[i * 4 + 3] = a03 * b0 + a13 * b1 + a23 * b2 + a33 * b3;
+  }
+  return o;
+}
+
+function m4perspective(o, fovy, aspect, near, far) {
+  const f = 1 / Math.tan(fovy / 2), nf = 1 / (near - far);
+  o.fill(0);
+  o[0] = f / aspect; o[5] = f;
+  o[10] = (far + near) * nf;
+  o[11] = -1;
+  o[14] = 2 * far * near * nf;
+  return o;
+}
+
+function m4ortho(o, l, r, b, t, n, f) {
+  o.fill(0);
+  o[0] = 2 / (r - l); o[5] = 2 / (t - b); o[10] = 2 / (n - f);
+  o[12] = (l + r) / (l - r); o[13] = (t + b) / (b - t); o[14] = (f + n) / (n - f); o[15] = 1;
+  return o;
+}
+
+const _la_t = V3();
+function m4lookAt(o, ex, ey, ez, cx, cy, cz, upx, upy, upz) {
+  let zx = ex - cx, zy = ey - cy, zz = ez - cz;      // camera looks down -Z
+  let l = Math.hypot(zx, zy, zz); if (l < 1e-9) { zz = 1; l = 1; }
+  zx /= l; zy /= l; zz /= l;
+  let xx = upy * zz - upz * zy, xy = upz * zx - upx * zz, xz = upx * zy - upy * zx;
+  l = Math.hypot(xx, xy, xz);
+  if (l < 1e-6) { xx = 1; xy = 0; xz = 0; } else { xx /= l; xy /= l; xz /= l; }
+  const yx = zy * xz - zz * xy, yy = zz * xx - zx * xz, yz = zx * xy - zy * xx;
+  o[0] = xx; o[1] = yx; o[2] = zx; o[3] = 0;
+  o[4] = xy; o[5] = yy; o[6] = zy; o[7] = 0;
+  o[8] = xz; o[9] = yz; o[10] = zz; o[11] = 0;
+  o[12] = -(xx * ex + xy * ey + xz * ez);
+  o[13] = -(yx * ex + yy * ey + yz * ez);
+  o[14] = -(zx * ex + zy * ey + zz * ez);
+  o[15] = 1;
+  return o;
+}
+
+function m4invert(o, a) {
+  const a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3],
+        a10 = a[4], a11 = a[5], a12 = a[6], a13 = a[7],
+        a20 = a[8], a21 = a[9], a22 = a[10], a23 = a[11],
+        a30 = a[12], a31 = a[13], a32 = a[14], a33 = a[15];
+  const b00 = a00 * a11 - a01 * a10, b01 = a00 * a12 - a02 * a10, b02 = a00 * a13 - a03 * a10,
+        b03 = a01 * a12 - a02 * a11, b04 = a01 * a13 - a03 * a11, b05 = a02 * a13 - a03 * a12,
+        b06 = a20 * a31 - a21 * a30, b07 = a20 * a32 - a22 * a30, b08 = a20 * a33 - a23 * a30,
+        b09 = a21 * a32 - a22 * a31, b10 = a21 * a33 - a23 * a31, b11 = a22 * a33 - a23 * a32;
+  let det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
+  if (!det) return m4ident(o);
+  det = 1 / det;
+  o[0] = (a11 * b11 - a12 * b10 + a13 * b09) * det;
+  o[1] = (a02 * b10 - a01 * b11 - a03 * b09) * det;
+  o[2] = (a31 * b05 - a32 * b04 + a33 * b03) * det;
+  o[3] = (a22 * b04 - a21 * b05 - a23 * b03) * det;
+  o[4] = (a12 * b08 - a10 * b11 - a13 * b07) * det;
+  o[5] = (a00 * b11 - a02 * b08 + a03 * b07) * det;
+  o[6] = (a32 * b02 - a30 * b05 - a33 * b01) * det;
+  o[7] = (a20 * b05 - a22 * b02 + a23 * b01) * det;
+  o[8] = (a10 * b10 - a11 * b08 + a13 * b06) * det;
+  o[9] = (a01 * b08 - a00 * b10 - a03 * b06) * det;
+  o[10] = (a30 * b04 - a31 * b02 + a33 * b00) * det;
+  o[11] = (a21 * b02 - a20 * b04 - a23 * b00) * det;
+  o[12] = (a11 * b06 - a10 * b09 - a12 * b05) * det;
+  o[13] = (a00 * b09 - a01 * b06 + a02 * b05) * det;
+  o[14] = (a31 * b01 - a30 * b03 - a32 * b00) * det;
+  o[15] = (a20 * b03 - a21 * b01 + a22 * b00) * det;
+  return o;
+}
+
+/* Set a matrix directly from three basis vectors (columns = images of X,Y,Z).
+   NOTE: X,Y,Z must form a RIGHT-HANDED frame (Z = X × Y) or winding flips. */
+function m4axes(o, X, Y, Z, px, py, pz, scale) {
+  const s = scale === undefined ? 1 : scale;
+  o[0] = X.x * s; o[1] = X.y * s; o[2] = X.z * s; o[3] = 0;
+  o[4] = Y.x * s; o[5] = Y.y * s; o[6] = Y.z * s; o[7] = 0;
+  o[8] = Z.x * s; o[9] = Z.y * s; o[10] = Z.z * s; o[11] = 0;
+  o[12] = px; o[13] = py; o[14] = pz; o[15] = 1;
+  return o;
+}
+
+/* Same, with per-axis scale. */
+function m4axesS(o, X, Y, Z, px, py, pz, sx, sy, sz) {
+  o[0] = X.x * sx; o[1] = X.y * sx; o[2] = X.z * sx; o[3] = 0;
+  o[4] = Y.x * sy; o[5] = Y.y * sy; o[6] = Y.z * sy; o[7] = 0;
+  o[8] = Z.x * sz; o[9] = Z.y * sz; o[10] = Z.z * sz; o[11] = 0;
+  o[12] = px; o[13] = py; o[14] = pz; o[15] = 1;
+  return o;
+}
+
+/* Stretch a unit +Y cylinder to span a→b (used for limbs). */
+function m4limb(o, ax, ay, az, bx, by, bz, thickness) {
+  let fx = bx - ax, fy = by - ay, fz = bz - az;
+  const len = Math.hypot(fx, fy, fz) || 1e-5;
+  fx /= len; fy /= len; fz /= len;
+  // arbitrary perpendicular helper
+  let ux = 0, uy = 1, uz = 0;
+  if (Math.abs(fy) > 0.9) { ux = 1; uy = 0; uz = 0; }
+  let rxv = uy * fz - uz * fy, ryv = uz * fx - ux * fz, rzv = ux * fy - uy * fx;
+  let l = Math.hypot(rxv, ryv, rzv) || 1e-5;
+  rxv /= l; ryv /= l; rzv /= l;
+  const uxv = fy * rzv - fz * ryv, uyv = fz * rxv - fx * rzv, uzv = fx * ryv - fy * rxv;
+  o[0] = rxv * thickness; o[1] = ryv * thickness; o[2] = rzv * thickness; o[3] = 0;
+  o[4] = fx * len; o[5] = fy * len; o[6] = fz * len; o[7] = 0;
+  o[8] = -uxv * thickness; o[9] = -uyv * thickness; o[10] = -uzv * thickness; o[11] = 0;   // round, not a ribbon
+  o[12] = ax; o[13] = ay; o[14] = az; o[15] = 1;
+  return o;
+}
+
+/* Transform helpers */
+function m4point(out, m, x, y, z) {
+  const w = m[3] * x + m[7] * y + m[11] * z + m[15] || 1;
+  out.x = (m[0] * x + m[4] * y + m[8] * z + m[12]) / w;
+  out.y = (m[1] * x + m[5] * y + m[9] * z + m[13]) / w;
+  out.z = (m[2] * x + m[6] * y + m[10] * z + m[14]) / w;
+  return out;
+}
+
+/* Angle difference wrapped to [-PI, PI] */
+function angDelta(a, b) {
+  let d = (b - a) % TAU;
+  if (d > Math.PI) d -= TAU;
+  if (d < -Math.PI) d += TAU;
+  return d;
+}
+
+</script>
+<script>/* js/ocean.js */
+/* =====================================================================
+   ocean.js — the sea. Waves are straight swell lines travelling to shore
+   (+z) at SEA.C. Each one shoals, then breaks column by column outward
+   from its peak (the peel), so a wave reads: unbroken shoulder → pitching
+   lip → throwing barrel → collapsing whitewater.
+
+   A wave's cross-section at any x is one continuous curve in (z, y):
+     back → crest → top of the lip → lip tip → underside of the lip
+          → the wall (back of the tube) → trough → flat water ahead.
+   With no lip the "tongue" collapses to the crest, so the same sample
+   layout covers a gentle swell and a full barrel. The renderer sweeps
+   these curves along x; physics reads the same curves, so what you see
+   is what you ride.
+   ===================================================================== */
+'use strict';
+
+const SEA = {
+  C: 5.2,          // wave speed, m/s shoreward
+  G: 9.81,
+  ZB: -112,        // break line (where a set wave's peak pitches)
+  Z_END: -18,      // ride over: the wave has run out of reef
+  LINEUP: [-130, -116],
+  START_Z: -62,
+  LB: 34,          // profile span behind the crest
+  LF: 20,          // …and ahead of it
+  T_THROW: 1.0,    // s from first pitch to the lip landing in the trough
+  SHORE: 9         // water meets sand around here
+};
+
+// samples per section of the profile
+const NP_BACK = 24, NP_TON = 16, NP_TIP = 4, NP_WALL = 22, NP_FRONT = 10;
+const NP = NP_BACK + NP_TON + NP_TIP + NP_TON + NP_WALL + NP_FRONT;
+const I_TON = NP_BACK, I_TIP = I_TON + NP_TON, I_IN = I_TIP + NP_TIP,
+      I_WALL = I_IN + NP_TON, I_FRONT = I_WALL + NP_WALL;
+
+/* one column of one wave, reused (never allocate per frame) */
+function Profile() {
+  return {
+    z: new Float32Array(NP), y: new Float32Array(NP),
+    tz: new Float32Array(NP), ty: new Float32Array(NP),
+    foam: new Float32Array(NP), thin: new Float32Array(NP),
+    a: 0, H: 0, s: 0, lam: 0, foamAmt: 0, zT: 0, yT: 0, tipZ: 0, tipY: 0
+  };
+}
+
+/* small background swell so the sea is never a mirror. Three sines, each
+   amp·sin(ax·x + bz·z − w·t + ph); the renderer evaluates them separably.
+   It fades out near the shore and over the surf waves (whose profiles are exact). */
+const AMB = [[0.10, 0.06, 0.17, 1.05, 0], [0.06, -0.11, 0.23, 1.37, 1.3], [0.03, 0.31, 0.41, 2.1, 0.4]];
+function ambientRaw(x, z, t) {
+  let s = 0;
+  for (const [a, ax, bz, w, ph] of AMB) s += a * Math.sin(ax * x + bz * z - w * t + ph);
+  return s;
+}
+function ambientK(z) {               // shore fade × "not under a surf wave"
+  let k = 1 - smoothstep(-22, 4, z);
+  for (const w of Ocean.waves) {
+    const d = Math.max(w.zw - SEA.LB - z, z - w.zw - SEA.LF);
+    if (d < 8) k *= smoothstep(0, 8, d);
+  }
+  return k;
+}
+function ambient(x, z, t) { const k = ambientK(z); return k > 0 ? k * ambientRaw(x, z, t) : 0; }
+
+const Ocean = {
+  t: 0,
+  waves: [],
+  nextId: 1,
+
+  reset() { this.t = 0; this.waves.length = 0; },
+
+  /* opts: { zw, H0, xPeak, vp (peel speed; huge = closeout), main } */
+  spawn(o) {
+    const w = {
+      id: this.nextId++, zw: o.zw, H0: o.H0, xPeak: o.xPeak || 0, vp: o.vp || 6.5,
+      main: !!o.main, tb0: this.t + (SEA.ZB - o.zw) / SEA.C, broke: false,
+      // sections: the peel speeds up and slows down along the reef (keeps d(age)/dx > 0)
+      sec: o.sec === undefined ? 1.0 : o.sec, ph: o.ph === undefined ? Math.random() * TAU : o.ph
+    };
+    this.waves.push(w);
+    this.waves.sort((a, b) => a.zw - b.zw);
+    return w;
+  },
+
+  update(dt) {
+    this.t += dt;
+    for (const w of this.waves) {
+      w.zw += SEA.C * dt;
+      if (!w.broke && this.t >= w.tb0) w.broke = true;
+    }
+    for (let i = this.waves.length - 1; i >= 0; i--) if (this.waves[i].zw > SEA.SHORE + 2) this.waves.splice(i, 1);
+  },
+
+  /* height envelope: shoaling on the way in, dying in the shallows */
+  waveH(w) {
+    return w.H0 * (0.28 + 0.72 * smoothstep(SEA.ZB - 100, SEA.ZB, w.zw))
+                * (1 - 0.82 * smoothstep(-70, 2, w.zw));
+  },
+  age(w, x) {
+    const d = Math.abs(x - w.xPeak);
+    return this.t - w.tb0 - d / w.vp - w.sec * (Math.sin(d * 0.055 + w.ph) - Math.sin(w.ph));
+  },
+
+  /* stage of a column: a = seconds since it pitched (<0: not yet) */
+  stage(w, x, P) {
+    const a = this.age(w, x), T = SEA.T_THROW;
+    let H = this.waveH(w), s, lam, foam;
+    const pre = smoothstep(SEA.ZB - 70, SEA.ZB, w.zw);
+    if (a < 0) {
+      lam = 0; foam = 0;
+      s = 0.1 + 0.36 * pre + 0.54 * pre * smoothstep(-1.5, 0, a);
+    } else if (a < T) {
+      lam = a / T; s = 1; foam = 0.2 * smoothstep(0.7, 1, lam);
+    } else {
+      const k = a - T;
+      lam = Math.exp(-k * 1.2);
+      s = 0.5 + 0.5 * Math.exp(-k * 1.5);
+      H *= 0.42 + 0.58 * Math.exp(-k / 1.2);
+      foam = smoothstep(-0.05, 0.2, k) * (1 - 0.45 * smoothstep(-40, 4, w.zw));
+    }
+    P.a = a; P.H = H; P.s = s; P.lam = lam; P.foamAmt = foam;
+  },
+
+  /* fill P with the wave's cross-section at x (absolute z) */
+  profile(w, x, P) {
+    this.stage(w, x, P);
+    const H = Math.max(P.H, 0.02), s = P.s, lam = P.lam, foam = P.foamAmt, zw = w.zw;
+    const LB = SEA.LB, LF = SEA.LF;
+    const zT = H * (0.8 + 2.6 * (1 - s)), yT = -0.13 * H * s;
+    P.zT = zw + zT; P.yT = yT;
+    const crestFoam = P.a < 0 ? 0.3 * smoothstep(-0.7, 0, P.a) * s : 0;
+    let i = 0;
+
+    // back: y = H·smoothstep(u)^1.4
+    for (let k = 0; k < NP_BACK; k++, i++) {
+      const u = k / NP_BACK;
+      const f = (q) => Math.pow(q * q * (3 - 2 * q), 1.4);
+      const e = 1e-3, dy = H * (f(Math.min(1, u + e)) - f(Math.max(0, u - e))) / (2 * e);
+      P.z[i] = zw - LB + LB * u; P.y[i] = H * f(u);
+      setTan(P, i, LB, dy);
+      P.foam[i] = Math.max(foam * 0.85, crestFoam) * smoothstep(0.55, 1, u);
+      P.thin[i] = 0.45 * s * smoothstep(0.8, 1, u);
+    }
+
+    // the tongue (lip): a ballistic jet from the crest. centreline c(v)
+    const X = lam * 1.15 * H, rise = 0.18;
+    const th = (v) => 0.03 + lam * H * 0.12 * (1 - 0.5 * v);
+    const th0 = th(0), y0 = H - th0 / 2;
+    const D = lam * lam * (y0 + X * rise - (yT + 0.15));
+    const cz = (v) => X * v, cy = (v) => y0 + X * rise * v - D * v * v;
+    const tanAt = (v) => {            // unit tangent of the centreline
+      let dz = X, dy = X * rise - 2 * D * v;
+      const l = Math.sqrt(dz * dz + dy * dy);
+      return l < 1e-5 ? [1, 0] : [dz / l, dy / l];
+    };
+    const lipFoam = Math.max(foam, crestFoam, 0.12 * lam);
+    for (let k = 0; k < NP_TON; k++, i++) {          // top of the lip, crest → tip
+      const v = k / (NP_TON - 1), t = tanAt(v), h = th(v) / 2;
+      P.z[i] = zw + cz(v) - t[1] * h; P.y[i] = cy(v) + t[0] * h;
+      setTan(P, i, t[0], t[1]);
+      P.foam[i] = lipFoam * (0.6 + 0.4 * v); P.thin[i] = 0.35 + 0.65 * lam;
+    }
+    {                                                 // round the tip
+      const t = tanAt(1), h = th(1) / 2, nz = -t[1], ny = t[0];
+      for (let k = 1; k <= NP_TIP; k++, i++) {
+        const f = k / (NP_TIP + 1) * Math.PI, c = Math.cos(f), sn = Math.sin(f);
+        P.z[i] = zw + cz(1) + (nz * c + t[0] * sn) * h;
+        P.y[i] = cy(1) + (ny * c + t[1] * sn) * h;
+        setTan(P, i, -nz * sn + t[0] * c, -ny * sn + t[1] * c);
+        P.foam[i] = Math.max(lipFoam, 0.3 * lam); P.thin[i] = 1;
+      }
+      P.tipZ = zw + cz(1); P.tipY = cy(1);
+    }
+    for (let k = NP_TON - 1; k >= 0; k--, i++) {      // underside, tip → back of the tube
+      const v = k / (NP_TON - 1), t = tanAt(v), h = th(v) / 2;
+      P.z[i] = zw + cz(v) + t[1] * h; P.y[i] = cy(v) - t[0] * h;
+      setTan(P, i, -t[0], -t[1]);
+      P.foam[i] = foam * 0.8; P.thin[i] = 0.4 + 0.6 * lam;
+    }
+
+    // the wall: hermite from the back of the tube down into the trough
+    {
+      const Wz = 0, Wy = H - th0;
+      const phi = lerp(0.35, Math.PI / 2, Math.pow(s, 1.5)) + 0.2 * lam;
+      const L = Math.hypot(zT - Wz, yT - Wy) * 1.25;
+      const m0z = Math.cos(phi) * L, m0y = -Math.sin(phi) * L, m1z = L, m1y = 0;
+      for (let k = 0; k < NP_WALL; k++, i++) {
+        const u = k / NP_WALL, u2 = u * u, u3 = u2 * u;
+        const h00 = 2 * u3 - 3 * u2 + 1, h10 = u3 - 2 * u2 + u, h01 = -2 * u3 + 3 * u2, h11 = u3 - u2;
+        const d00 = 6 * u2 - 6 * u, d10 = 3 * u2 - 4 * u + 1, d01 = -6 * u2 + 6 * u, d11 = 3 * u2 - 2 * u;
+        P.z[i] = zw + h00 * Wz + h10 * m0z + h01 * zT + h11 * m1z;
+        P.y[i] = h00 * Wy + h10 * m0y + h01 * yT + h11 * m1y;
+        setTan(P, i, d00 * Wz + d10 * m0z + d01 * zT + d11 * m1z, d00 * Wy + d10 * m0y + d01 * yT + d11 * m1y);
+        P.foam[i] = foam * (1 - 0.4 * u) + 0.35 * lam * smoothstep(0.75, 1, P.lam) * smoothstep(0.6, 1, u);
+        P.thin[i] = 0.75 * s * (1 - u) * (1 - u);
+      }
+    }
+    // flat water ahead
+    for (let k = 0; k < NP_FRONT; k++, i++) {
+      const u = k / (NP_FRONT - 1), sm = u * u * (3 - 2 * u);
+      P.z[i] = zw + zT + (LF - zT) * u; P.y[i] = yT * (1 - sm);
+      setTan(P, i, LF - zT, -yT * 6 * u * (1 - u));
+      P.foam[i] = foam * 0.7 * (1 - u) * (1 - u); P.thin[i] = 0;
+    }
+  },
+
+  /* shoreward water speed under a wave: shallow-water orbital motion,
+     u ≈ C·η/h — near the crest the water itself is heading for the beach */
+  orbital(q, y) {
+    if (!q.wave || q.H < 0.1) return 0;
+    return SEA.C * 0.55 * clamp(y / q.H, 0, 1.1);
+  },
+
+  /* the wave whose profile span holds z (spans never overlap) */
+  waveAt(z) {
+    for (const w of this.waves) if (z >= w.zw - SEA.LB && z <= w.zw + SEA.LF) return w;
+    return null;
+  },
+
+  /* surface under (x, z). yRef picks which sheet when the lip overhangs:
+     the highest surface no more than `reach` above yRef (default: topmost).
+     Fills Q: y, foam, wave, P (profile), ceil (lowest water above yRef+0.25). */
+  _P: Profile(),
+  sheet(x, z, yRef, Q, reach = 0.45) {
+    const w = this.waveAt(z), amb = ambient(x, z, this.t);
+    Q.wave = w; Q.ceil = Infinity; Q.foam = 0; Q.covered = false;
+    if (!w) { Q.y = amb; Q.dydz = 0; return Q; }
+    const P = this._P;
+    this.profile(w, x, P);
+    let best = -Infinity, low = Infinity, bestK = -1, lowK = -1;
+    for (let k = 0; k < NP - 1; k++) {
+      const z0 = P.z[k], z1 = P.z[k + 1];
+      if ((z - z0) * (z - z1) > 0 || z0 === z1) continue;
+      const f = (z - z0) / (z1 - z0), y = P.y[k] + (P.y[k + 1] - P.y[k]) * f;
+      if (yRef === undefined || y <= yRef + reach) { if (y > best) { best = y; bestK = k; } }
+      else if (y < Q.ceil) Q.ceil = y;
+      if (y < low) { low = y; lowK = k; }
+    }
+    if (bestK < 0) { best = low; bestK = lowK; }
+    if (bestK < 0) { Q.y = amb; Q.dydz = 0; return Q; }
+    const k = bestK, z0 = P.z[k], z1 = P.z[k + 1];
+    Q.y = best + amb;
+    Q.dydz = (P.y[k + 1] - P.y[k]) / (z1 - z0);
+    Q.foam = Math.max(P.foam[k], P.foam[k + 1]);
+    Q.covered = Q.ceil < Infinity && bestK >= I_WALL - 2;
+    Q.ceil += amb;
+    Q.a = P.a; Q.H = P.H; Q.lam = P.lam; Q.s = P.s; Q.foamAmt = P.foamAmt;
+    Q.zT = P.zT; Q.yT = P.yT; Q.tipZ = P.tipZ; Q.tipY = P.tipY; Q.zw = w.zw;
+    return Q;
+  },
+
+  /* height + gradient of the supporting sheet */
+  _q0: {}, _q1: {}, _q2: {},
+  surface(x, z, yRef, out, reach) {
+    const q = this.sheet(x, z, yRef, out, reach);
+    const e = 0.35;
+    const qa = this.sheet(x - e, z, yRef, this._q1, reach).y, qb = this.sheet(x + e, z, yRef, this._q2, reach).y;
+    const ez = 0.3;
+    const za = this.sheet(x, z - ez, yRef, this._q1, reach).y, zb = this.sheet(x, z + ez, yRef, this._q2, reach).y;
+    q.gx = (qb - qa) / (2 * e);
+    q.gz = (zb - za) / (2 * ez);
+    // a near-vertical wall or a sheet switch makes finite differences explode
+    if (!isFinite(q.gx) || Math.abs(q.gx) > 3) q.gx = clamp(q.gx || 0, -3, 3);
+    if (!isFinite(q.gz) || Math.abs(q.gz) > 3) q.gz = clamp(q.gz || 0, -3, 3);
+    return q;
+  }
+};
+
+function setTan(P, i, dz, dy) {
+  const l = Math.sqrt(dz * dz + dy * dy);
+  if (l < 1e-6) { P.tz[i] = 1; P.ty[i] = 0; } else { P.tz[i] = dz / l; P.ty[i] = dy / l; }
+}
+
+
+</script>
+<script>/* js/gfx.js */
+/* =====================================================================
+   gfx.js — hand-written WebGL2 for the surf game.
+   One pass: sky → land → ocean → rider → spray. The ocean is rebuilt on
+   the CPU every frame by sweeping the wave profiles (ocean.js) along x, so
+   the barrel can overhang — a heightfield can't curl.
+   ===================================================================== */
+'use strict';
+
+const GLSL_COMMON = `
+precision highp float;
+uniform vec3 uSun; uniform vec3 uCam; uniform float uTime;
+float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vnoise(vec2 p){
+  vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);
+}
+vec3 skyCol(vec3 d){
+  float y = d.y;
+  vec3 zen = vec3(0.13, 0.30, 0.56), hor = vec3(1.0, 0.76, 0.55);
+  vec3 c = mix(hor, zen, pow(clamp(y, 0.0, 1.0), 0.48));
+  vec3 flat_ = normalize(vec3(d.x, 0.0, d.z) + 1e-5);
+  float sd = max(dot(flat_, normalize(vec3(uSun.x, 0.0, uSun.z))), 0.0);
+  c = mix(c, vec3(1.0, 0.58, 0.36), pow(sd, 4.0) * 0.5 * (1.0 - clamp(y * 2.5, 0.0, 1.0)));
+  float s = max(dot(d, uSun), 0.0);
+  c += vec3(1.0, 0.78, 0.5) * pow(s, 14.0) * 0.4;
+  c += vec3(1.0, 0.93, 0.78) * smoothstep(0.99955, 0.99975, s) * 5.0;
+  if (y < 0.0) c = mix(hor * 0.8, vec3(0.06, 0.2, 0.28), clamp(-y * 5.0, 0.0, 1.0));
+  return c;
+}
+vec3 fogged(vec3 c, vec3 P){
+  vec3 D = P - uCam; float d = length(D); vec3 V = D / d;
+  float f = 1.0 - exp(-max(d - 50.0, 0.0) * 0.0021);
+  return mix(c, skyCol(normalize(vec3(V.x, max(V.y, 0.015), V.z))), f);
+}
+vec3 tone(vec3 c){ c = max(c, 0.0); return c / (1.0 + 0.16 * c) * 1.12; }
+`;
+
+const VS_SKY = `
+out vec2 vUV;
+void main(){ vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2); vUV = p; gl_Position = vec4(p * 2.0 - 1.0, 0.9999, 1.0); }`;
+const FS_SKY = GLSL_COMMON + `
+in vec2 vUV; uniform vec3 uFwd, uRight, uUp; out vec4 o;
+void main(){
+  // view ray from the camera basis (inverting the projection in fp32 is too noisy)
+  vec2 n = vUV * 2.0 - 1.0;
+  vec3 d = normalize(uFwd + n.x * uRight + n.y * uUp);
+  vec3 c = skyCol(d);
+  if (d.y > 0.0) {                       // streaky sunset clouds
+    vec2 q = d.xz / (d.y + 0.08) * 1.6 + vec2(uTime * 0.01, 0.0);
+    float n = vnoise(q * vec2(0.5, 1.6)) * 0.6 + vnoise(q * vec2(1.1, 3.3)) * 0.3 + vnoise(q * 4.0) * 0.1;
+    float cl = smoothstep(0.55, 0.85, n) * smoothstep(0.0, 0.12, d.y) * (1.0 - smoothstep(0.25, 0.6, d.y));
+    float sd = pow(max(dot(normalize(vec3(d.x, 0.0, d.z)), normalize(vec3(uSun.x, 0.0, uSun.z))), 0.0), 3.0);
+    c = mix(c, mix(vec3(0.95, 0.55, 0.5), vec3(1.0, 0.82, 0.6), sd), cl * 0.75);
+  }
+  o = vec4(tone(c), 1.0);
+}`;
+
+const VS_WATER = `
+layout(location=0) in vec3 aPos; layout(location=1) in vec3 aNrm; layout(location=2) in vec2 aAux;
+uniform mat4 uVP; out vec3 vP; out vec3 vN; out vec2 vA;
+void main(){ vP = aPos; vN = aNrm; vA = aAux; gl_Position = uVP * vec4(aPos, 1.0); }`;
+const FS_WATER = GLSL_COMMON + `
+in vec3 vP; in vec3 vN; in vec2 vA; out vec4 o;
+float rip(vec2 q){ return vnoise(q * 1.3 + vec2(uTime * 0.5, uTime * 0.3)) + 0.5 * vnoise(q * 3.7 - vec2(uTime * 0.8, -uTime * 0.2)); }
+void main(){
+  vec3 V = normalize(uCam - vP);
+  vec3 N = normalize(vN);
+  if (dot(N, V) < 0.0) N = -N;
+  float dist = length(uCam - vP);
+  float e = 0.12, r0 = rip(vP.xz);
+  vec2 g = vec2(rip(vP.xz + vec2(e, 0)) - r0, rip(vP.xz + vec2(0, e)) - r0) / e;
+  N = normalize(N - vec3(g.x, 0.0, g.y) * 0.05 / (1.0 + dist * 0.02));
+  float ndv = max(dot(N, V), 0.0);
+  float fres = 0.02 + 0.98 * pow(1.0 - ndv, 5.0);
+  vec3 R = reflect(-V, N);
+  vec3 refl = skyCol(normalize(vec3(R.x, abs(R.y), R.z)));
+  float thin = vA.y, lit = max(dot(N, uSun), 0.0);
+  vec3 deep = vec3(0.02, 0.12, 0.17), face = vec3(0.05, 0.33, 0.37);
+  // water drawn up the face: streaks stretched along the wave, crawling upward
+  float streak = vnoise(vec2(vP.x * 0.35 + vP.z * 0.1, vP.y * 2.6 - uTime * 1.6)) * 0.6 + vnoise(vec2(vP.x * 1.1, vP.y * 6.0 - uTime * 2.4)) * 0.4;
+  float onWave = smoothstep(0.25, 1.2, vP.y);
+  vec3 body = mix(deep, face, clamp(thin * 0.75 + 0.2 * vP.y, 0.0, 1.0)) * (0.75 + 0.35 * lit);
+  body *= 1.0 + onWave * (streak - 0.5) * 0.45;
+  float back = pow(max(dot(-V, uSun), 0.0), 2.0);
+  body += thin * vec3(0.12, 0.52, 0.42) * (0.3 + 1.3 * back + 0.4 * lit);   // sun through the lip
+  vec3 col = mix(body, refl, fres * 0.9);
+  col += vec3(1.0, 0.82, 0.55) * pow(max(dot(R, uSun), 0.0), 260.0) * 4.0;
+  // foam: noisy, stretched along the wave, crawling with the water
+  float fn = vnoise(vec2(vP.x * 0.55, vP.z * 0.9 + vP.y * 0.7) + vec2(0.0, -uTime * 0.8)) * 0.6
+           + vnoise(vP.xz * 2.7 + vec2(vP.y * 2.0, uTime * 0.4)) * 0.4;
+  float f = vA.x;
+  float fm = smoothstep(0.42, 0.62, f + (fn - 0.5) * 0.75) * smoothstep(0.02, 0.15, f);
+  vec3 foamC = vec3(0.94, 0.96, 0.95) * (0.6 + 0.4 * lit) + vec3(0.15, 0.08, 0.02) * back;
+  col = mix(col, foamC, fm);
+  o = vec4(tone(fogged(col, vP)), 1.0);
+}`;
+
+const VS_LIT = `
+layout(location=0) in vec3 aPos; layout(location=1) in vec3 aNrm; layout(location=2) in vec3 aCol;
+uniform mat4 uVP; uniform mat4 uModel; out vec3 vP; out vec3 vN; out vec3 vC;
+void main(){ vec4 p = uModel * vec4(aPos, 1.0); vP = p.xyz; vN = mat3(uModel) * aNrm; vC = aCol; gl_Position = uVP * p; }`;
+const FS_LIT = GLSL_COMMON + `
+in vec3 vP; in vec3 vN; in vec3 vC; uniform vec3 uTint; uniform float uWet; out vec4 o;
+void main(){
+  vec3 N = normalize(vN); vec3 V = normalize(uCam - vP);
+  if (dot(N, V) < 0.0) N = -N;
+  float l = max(dot(N, uSun), 0.0);
+  vec3 alb = vC * uTint;
+  vec3 amb = mix(vec3(0.42, 0.34, 0.33), vec3(0.32, 0.45, 0.62), N.y * 0.5 + 0.5);
+  vec3 c = alb * (amb * 0.75 + vec3(1.0, 0.8, 0.6) * l * 1.05);
+  vec3 H = normalize(V + uSun);
+  c += vec3(1.0, 0.85, 0.65) * pow(max(dot(N, H), 0.0), 40.0) * uWet * 0.8;
+  float rim = pow(1.0 - max(dot(N, V), 0.0), 3.0);
+  c += vec3(1.0, 0.7, 0.45) * rim * 0.25 * max(dot(-V, uSun), 0.0);
+  if (vP.y < 0.0) c = mix(c, vec3(0.03, 0.2, 0.24), clamp(-vP.y * 0.9, 0.0, 0.85));   // underwater
+  o = vec4(tone(fogged(c, vP)), 1.0);
+}`;
+
+const VS_PART = `
+layout(location=0) in vec4 aP; layout(location=1) in vec4 aC;
+uniform mat4 uVP; uniform float uScale; out vec4 vC;
+void main(){ gl_Position = uVP * vec4(aP.xyz, 1.0); gl_PointSize = clamp(aP.w * uScale / gl_Position.w, 1.0, 256.0); vC = aC; }`;
+const FS_PART = `
+precision highp float; in vec4 vC; out vec4 o;
+void main(){ vec2 d = gl_PointCoord * 2.0 - 1.0; float r = dot(d, d); if (r > 1.0) discard;
+  float a = vC.a * (1.0 - r) * (1.0 - r); o = vec4(vC.rgb * a, a); }`;
+
+/* ---------------- tiny geometry helpers (pos3 nrm3 col3) ---------------- */
+function G() { return { v: [], i: [] }; }
+function gV(g, x, y, z, nx, ny, nz, r, gg, b) { g.v.push(x, y, z, nx, ny, nz, r, gg, b); return g.v.length / 9 - 1; }
+function gBox(g, col) {                // unit cube centred at origin
+  const F = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
+  for (const n of F) {
+    const u = n[1] ? [1, 0, 0] : [0, 1, 0], w = [n[1] * u[2] - n[2] * u[1], n[2] * u[0] - n[0] * u[2], n[0] * u[1] - n[1] * u[0]];
+    const b = g.v.length / 9;
+    for (const [s, t] of [[-1, -1], [1, -1], [1, 1], [-1, 1]])
+      gV(g, (n[0] + u[0] * s + w[0] * t) / 2, (n[1] + u[1] * s + w[1] * t) / 2, (n[2] + u[2] * s + w[2] * t) / 2, n[0], n[1], n[2], col[0], col[1], col[2]);
+    g.i.push(b, b + 1, b + 2, b, b + 2, b + 3);
+  }
+  return g;
+}
+function gCyl(g, seg, col) {           // unit cylinder along +Y, y∈[0,1], r=1, rounded-ish ends
+  const b = g.v.length / 9;
+  for (let j = 0; j <= 1; j++) for (let k = 0; k <= seg; k++) {
+    const a = k / seg * TAU; gV(g, Math.cos(a), j, Math.sin(a), Math.cos(a), 0, Math.sin(a), col[0], col[1], col[2]);
+  }
+  for (let k = 0; k < seg; k++) { const a = b + k, c = b + seg + 1 + k; g.i.push(a, c, a + 1, a + 1, c, c + 1); }
+  return g;
+}
+function gSphere(g, seg, col) {
+  const b = g.v.length / 9, R = seg >> 1;
+  for (let j = 0; j <= R; j++) for (let k = 0; k <= seg; k++) {
+    const t = j / R * Math.PI, a = k / seg * TAU, x = Math.sin(t) * Math.cos(a), y = Math.cos(t), z = Math.sin(t) * Math.sin(a);
+    gV(g, x, y, z, x, y, z, col[0], col[1], col[2]);
+  }
+  for (let j = 0; j < R; j++) for (let k = 0; k < seg; k++) {
+    const a = b + j * (seg + 1) + k, c = a + seg + 1; g.i.push(a, c, a + 1, a + 1, c, c + 1);
+  }
+  return g;
+}
+/* a tube between two points, baked into g (palms) */
+function gTube(g, a, b, ra, rb, seg, col) {
+  const d = V3(b.x - a.x, b.y - a.y, b.z - a.z), f = V3.norm(V3(), d);
+  const h = Math.abs(f.y) > 0.9 ? V3(1, 0, 0) : V3(0, 1, 0);
+  const s = V3.norm(V3(), V3.cross(V3(), f, h)), t = V3.cross(V3(), s, f);
+  const base = g.v.length / 9;
+  for (let j = 0; j <= 1; j++) for (let k = 0; k <= seg; k++) {
+    const an = k / seg * TAU, c = Math.cos(an), sn = Math.sin(an), r = j ? rb : ra, p = j ? b : a;
+    const nx = s.x * c + t.x * sn, ny = s.y * c + t.y * sn, nz = s.z * c + t.z * sn;
+    gV(g, p.x + nx * r, p.y + ny * r, p.z + nz * r, nx, ny, nz, col[0], col[1], col[2]);
+  }
+  for (let k = 0; k < seg; k++) { const x = base + k, y = base + seg + 1 + k; g.i.push(x, y, x + 1, x + 1, y, y + 1); }
+}
+
+/* the board: a lens-shaped shortboard along +Z (nose), ~1.85 m */
+function gBoard(deck, rail) {
+  const g = G(), N = 28, C = 10, L = 0.93;
+  const half = (u) => u > 0                        // u ∈ [-1,1] tail → nose: pulled-in nose, squash tail
+    ? 0.255 * Math.sqrt(Math.max(0, 1 - u * u)) * (1 - 0.25 * u)
+    : 0.255 * (1 - 0.37 * u * u);
+  const rocker = (u) => 0.11 * Math.pow(Math.max(u, 0), 3) + 0.03 * Math.pow(Math.max(-u, 0), 2);
+  const rows = [];
+  for (let k = 0; k <= N; k++) {
+    const u = -0.985 + 1.965 * k / N, w = Math.max(half(u), 0.004), th = 0.035 * (1 - 0.6 * u * u), y0 = rocker(u);
+    const ring = [];
+    for (let c = 0; c <= C; c++) {               // deck: c=0..C left→right over the top
+      const a = Math.PI * c / C, x = -Math.cos(a) * w, y = y0 + Math.sin(a) * th + th * 0.2;
+      ring.push([x, y, u * L, -Math.cos(a) * 0.4, Math.sin(a) + 0.2, 0, 1]);
+    }
+    for (let c = 1; c < C; c++) {                // hull: back underneath
+      const a = Math.PI * c / C, x = Math.cos(a) * w, y = y0 - Math.sin(a) * th * 0.35;
+      ring.push([x, y, u * L, Math.cos(a) * 0.3, -1, 0, 0]);
+    }
+    rows.push(ring);
+  }
+  const M = rows[0].length;
+  for (let k = 0; k <= N; k++) for (let c = 0; c < M; c++) {
+    const p = rows[k][c], stripe = p[6] && Math.abs(p[0]) < 0.03 ? 0.75 : 1;
+    const col = p[6] ? deck.map(v => v * stripe) : rail;
+    const l = Math.hypot(p[3], p[4], p[5]);
+    gV(g, p[0], p[1], p[2], p[3] / l, p[4] / l, p[5] / l, col[0], col[1], col[2]);
+  }
+  for (let k = 0; k < N; k++) for (let c = 0; c < M; c++) {
+    const a = k * M + c, b = k * M + (c + 1) % M, d = a + M, e = b + M;
+    g.i.push(a, d, b, b, d, e);
+  }
+  // three fins
+  for (const [x, z, s] of [[0, -0.84, 1], [-0.16, -0.72, 0.85], [0.16, -0.72, 0.85]]) {
+    const b = g.v.length / 9, fc = [0.2, 0.22, 0.25];
+    gV(g, x, 0, z + 0.06, 1, 0, 0, ...fc); gV(g, x, 0, z - 0.06 * s, 1, 0, 0, ...fc); gV(g, x, -0.12 * s, z - 0.09 * s, 1, 0, 0, ...fc);
+    g.i.push(b, b + 1, b + 2);
+  }
+  return g;
+}
+
+/* ---------------- land ---------------- */
+function landH(x, z) {
+  let y = -3;
+  if (z > -16) y = Math.max(y, -1.7 + (z + 16) * 0.075);
+  y += smoothstep(34, 70, z) * 2.4 * (1 + 0.4 * Math.sin(x * 0.05));
+  y += smoothstep(120, 280, z) * (34 + 24 * Math.sin(x * 0.006 + 1) + 12 * Math.sin(x * 0.019 + 0.4));
+  // a headland off to the left: why this is a right-hand point break
+  const hx = (x + 360) / 110;
+  y = Math.max(y, (26 + 6 * Math.sin(z * 0.03)) * Math.exp(-hx * hx) * smoothstep(-330, -40, z) - 4);
+  return y;
+}
+function landCol(x, y, z, slope) {
+  const wet = [0.5, 0.42, 0.32], dry = [0.88, 0.77, 0.58], grass = [0.38, 0.47, 0.25], hill = [0.25, 0.37, 0.24], rock = [0.42, 0.36, 0.31];
+  let c = y < 0.45 ? wet : dry;
+  if (y > 2.2 && z > 45) c = grass;
+  if (z > 110) c = hill;
+  if (slope > 0.75) c = rock;
+  const n = 0.92 + 0.08 * Math.sin(x * 1.3 + z * 0.7) * Math.sin(x * 0.31 - z * 0.9);
+  return c.map(v => v * n);
+}
+function buildLand() {
+  const g = G();
+  const xs = [], zs = [];
+  for (let u = -1; u <= 1.0001; u += 1 / 90) xs.push(Math.sign(u) * (Math.abs(u) * 260 + Math.pow(Math.abs(u), 3) * 640));
+  for (let u = 0; u <= 1.0001; u += 1 / 110) zs.push(-340 + u * 340 + 0) ;
+  for (let u = 1 / 80; u <= 1.0001; u += 1 / 80) zs.push(Math.pow(u, 1.6) * 520);
+  const W = xs.length;
+  for (const z of zs) for (const x of xs) {
+    const y = landH(x, z), e = 1;
+    const gx = (landH(x + e, z) - landH(x - e, z)) / 2, gz = (landH(x, z + e) - landH(x, z - e)) / 2;
+    const l = Math.hypot(gx, 1, gz), c = landCol(x, y, z, Math.hypot(gx, gz));
+    gV(g, x, y, z, -gx / l, 1 / l, -gz / l, c[0], c[1], c[2]);
+  }
+  for (let j = 0; j < zs.length - 1; j++) for (let i = 0; i < W - 1; i++) {
+    const a = j * W + i; g.i.push(a, a + W, a + 1, a + 1, a + W, a + W + 1);
+  }
+  // palms along the back of the beach
+  let seed = 7; const r = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let k = 0; k < 46; k++) {
+    const x = -230 + r() * 520, z = 38 + r() * 34, y0 = landH(x, z), hgt = 7 + r() * 6;
+    const lean = (r() - 0.5) * 0.5, lz = -0.3 * r(), trunk = [0.36, 0.28, 0.2], leaf = [0.17, 0.3, 0.13];
+    let prev = V3(x, y0 - 0.3, z);
+    for (let s = 1; s <= 6; s++) {
+      const t = s / 6, p = V3(x + lean * hgt * t * t, y0 + hgt * t, z + lz * hgt * t * t);
+      gTube(g, prev, p, 0.24 - 0.1 * t + 0.05, 0.24 - 0.1 * t, 6, trunk); prev = p;
+    }
+    for (let f = 0; f < 8; f++) {                      // fronds: drooping strips
+      const a = f / 8 * TAU + r(), L = 3.2 + r() * 1.4, dx = Math.cos(a), dz = Math.sin(a);
+      const b = g.v.length / 9, segs = 5;
+      for (let s = 0; s <= segs; s++) {
+        const t = s / segs, w = 0.5 * Math.sin(Math.PI * Math.min(1, t * 1.15 + 0.05)) + 0.05;
+        const cx = prev.x + dx * L * t, cz = prev.z + dz * L * t, cy = prev.y + 0.9 * t - 2.4 * t * t;
+        gV(g, cx - dz * w, cy, cz + dx * w, 0, 1, 0, ...leaf);
+        gV(g, cx + dz * w, cy, cz - dx * w, 0, 1, 0, ...leaf);
+      }
+      for (let s = 0; s < segs; s++) { const q = b + s * 2; g.i.push(q, q + 2, q + 1, q + 1, q + 2, q + 3); }
+    }
+  }
+  // a lifeguard tower for scale
+  {
+    const x = 40, z = 32, y = landH(x, z), c = [0.95, 0.9, 0.82], red = [0.85, 0.25, 0.2];
+    for (const [ox, oz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) gTube(g, V3(x + ox, y, z + oz), V3(x + ox * 0.8, y + 2.6, z + oz * 0.8), 0.08, 0.08, 5, c);
+    const b = G(); gBox(b, red);
+    for (let q = 0; q < b.v.length; q += 9) { b.v[q] = b.v[q] * 2.4 + x; b.v[q + 1] = b.v[q + 1] * 1.6 + y + 3.4; b.v[q + 2] = b.v[q + 2] * 2.2 + z; }
+    const o = g.v.length / 9; g.v.push(...b.v); g.i.push(...b.i.map(i => i + o));
+  }
+  return g;
+}
+
+/* ---------------- camera ---------------- */
+const Cam = {
+  pos: V3(0, 3, -60), tgt: V3(0, 0, -100), fov: 62 * Math.PI / 180,
+  proj: M4(), view: M4(), vp: M4(), shake: 0, aspect: 1,
+  set(aspect) {
+    this.fov = (aspect < 1 ? 74 : 62) * Math.PI / 180;     // portrait phones: see more of the wave
+    m4perspective(this.proj, this.fov, aspect, 0.1, 2500);
+    const s = this.shake, sx = (Math.random() - 0.5) * s, sy = (Math.random() - 0.5) * s;
+    m4lookAt(this.view, this.pos.x + sx, this.pos.y + sy, this.pos.z, this.tgt.x + sx, this.tgt.y + sy, this.tgt.z, 0, 1, 0);
+    m4mul(this.vp, this.proj, this.view);
+    this.aspect = aspect;
+  }
+};
+
+/* ---------------- spray particles ---------------- */
+const Fx = {
+  MAX: 2400, n: 0, p: null,  // per particle: x y z vx vy vz life max size r g b a drag grav
+  init() { this.p = new Float32Array(this.MAX * 15); this.data = new Float32Array(this.MAX * 8); },
+  emit(x, y, z, vx, vy, vz, life, size, r = 1, g = 1, b = 1, a = 0.8, drag = 1.2, grav = 1) {
+    if (this.n >= this.MAX) return;
+    const o = this.n++ * 15, P = this.p;
+    P[o] = x; P[o + 1] = y; P[o + 2] = z; P[o + 3] = vx; P[o + 4] = vy; P[o + 5] = vz;
+    P[o + 6] = life; P[o + 7] = life; P[o + 8] = size; P[o + 9] = r; P[o + 10] = g; P[o + 11] = b; P[o + 12] = a; P[o + 13] = drag; P[o + 14] = grav;
+  },
+  update(dt) {
+    const P = this.p;
+    for (let i = 0; i < this.n; i++) {
+      const o = i * 15;
+      P[o + 6] -= dt;
+      if (P[o + 6] <= 0) { this.n--; if (i < this.n) { P.copyWithin(o, this.n * 15, this.n * 15 + 15); i--; } continue; }
+      const d = Math.exp(-P[o + 13] * dt);
+      P[o + 3] *= d; P[o + 5] *= d; P[o + 4] = P[o + 4] * d - SEA.G * P[o + 14] * dt;
+      P[o] += P[o + 3] * dt; P[o + 1] += P[o + 4] * dt; P[o + 2] += P[o + 5] * dt;
+    }
+  },
+  fill() {
+    const P = this.p, D = this.data;
+    for (let i = 0; i < this.n; i++) {
+      const o = i * 15, q = i * 8, t = P[o + 6] / P[o + 7];
+      D[q] = P[o]; D[q + 1] = P[o + 1]; D[q + 2] = P[o + 2]; D[q + 3] = P[o + 8] * (1.6 - 0.6 * t);
+      D[q + 4] = P[o + 9]; D[q + 5] = P[o + 10]; D[q + 6] = P[o + 11]; D[q + 7] = P[o + 12] * Math.min(1, t * 2.5);
+    }
+    return this.n;
+  }
+};
+
+/* ---------------- the renderer ---------------- */
+const Gfx = {
+  gl: null, canvas: null, w: 1, h: 1, dpr: 1,
+  prog: {}, mesh: {},
+  sun: V3.norm(V3(), V3(0.38, 0.2, -1)),
+  oc: null,
+
+  init(canvas) {
+    this.canvas = canvas;
+    const gl = canvas.getContext('webgl2', { antialias: true, alpha: false, powerPreference: 'high-performance' });
+    if (!gl) throw new Error('WebGL2 is not available in this browser.');
+    this.gl = gl;
+    this.prog.sky = this.link(VS_SKY, FS_SKY, 'sky');
+    this.prog.water = this.link(VS_WATER, FS_WATER, 'water');
+    this.prog.lit = this.link(VS_LIT, FS_LIT, 'lit');
+    this.prog.part = this.link(VS_PART, FS_PART, 'part');
+    this.mesh.land = this.upload(buildLand());
+    this.mesh.box = this.upload(gBox(G(), [1, 1, 1]));
+    this.mesh.cyl = this.upload(gCyl(G(), 10, [1, 1, 1]));
+    this.mesh.sph = this.upload(gSphere(G(), 14, [1, 1, 1]));
+    this.mesh.board = this.upload(gBoard([0.98, 0.95, 0.88], [0.95, 0.45, 0.2]));
+    this.initOcean();
+    // far sea: a big flat ring under/around the swept mesh
+    const f = [], S = 6000, y = -1.2;
+    for (const [x, z] of [[-S, -S], [S, -S], [S, S], [-S, S]]) f.push(x, y, z, 0, 1, 0, 0, 0);
+    this.mesh.far = this.uploadWater(new Float32Array(f), new Uint32Array([0, 1, 2, 0, 2, 3]));
+    Fx.init();
+    this.partVao = gl.createVertexArray(); gl.bindVertexArray(this.partVao);
+    this.partBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, this.partBuf);
+    gl.bufferData(gl.ARRAY_BUFFER, Fx.data.byteLength, gl.DYNAMIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 32, 0);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 32, 16);
+    gl.bindVertexArray(null);
+    this.resize();
+  },
+  compile(type, src, name) {
+    const gl = this.gl, s = gl.createShader(type);
+    gl.shaderSource(s, '#version 300 es\n' + src); gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error('Shader ' + name + ': ' + gl.getShaderInfoLog(s));
+    return s;
+  },
+  link(vs, fs, name) {
+    const gl = this.gl, p = gl.createProgram();
+    gl.attachShader(p, this.compile(gl.VERTEX_SHADER, vs, name + '.vs'));
+    gl.attachShader(p, this.compile(gl.FRAGMENT_SHADER, fs, name + '.fs'));
+    gl.linkProgram(p);
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error('Link ' + name + ': ' + gl.getProgramInfoLog(p));
+    const u = { p };
+    const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+    for (let i = 0; i < n; i++) { const a = gl.getActiveUniform(p, i); u[a.name] = gl.getUniformLocation(p, a.name); }
+    return u;
+  },
+  upload(geo) {
+    const gl = this.gl, vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+    const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(geo.v), gl.STATIC_DRAW);
+    for (let k = 0; k < 3; k++) { gl.enableVertexAttribArray(k); gl.vertexAttribPointer(k, 3, gl.FLOAT, false, 36, k * 12); }
+    const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint32Array(geo.i), gl.STATIC_DRAW);
+    gl.bindVertexArray(null);
+    return { vao, count: geo.i.length };
+  },
+  uploadWater(v, idx, dynamic) {
+    const gl = this.gl, vao = gl.createVertexArray();
+    gl.bindVertexArray(vao);
+    const vb = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, vb);
+    gl.bufferData(gl.ARRAY_BUFFER, v, dynamic ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 32, 0);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 32, 12);
+    gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 2, gl.FLOAT, false, 32, 24);
+    const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, dynamic ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW);
+    gl.bindVertexArray(null);
+    return { vao, vb, ib, count: idx.length };
+  },
+  resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.75);
+    const w = Math.max(1, Math.round(innerWidth * dpr)), h = Math.max(1, Math.round(innerHeight * dpr));
+    if (w === this.w && h === this.h) return;
+    this.canvas.width = this.w = w; this.canvas.height = this.h = h; this.dpr = dpr;
+  },
+
+  /* ---------- the swept ocean ---------- */
+  initOcean() {
+    const NX = 132, MAXR = 720;
+    this.oc = {
+      NX, MAXR, rows: 0, xs: new Float32Array(NX),
+      rowWave: new Int16Array(MAXR), rowK: new Int16Array(MAXR), rowZ: new Float32Array(MAXR),
+      data: new Float32Array(NX * MAXR * 8), tan: new Float32Array(NX * MAXR * 2),
+      profs: [Profile(), Profile(), Profile(), Profile(), Profile(), Profile()],
+      mesh: null, idxRows: -1
+    };
+    const o = this.oc;
+    o.mesh = this.uploadWater(o.data, new Uint32Array(6), true);
+  },
+  buildOcean(cx, cz) {
+    const o = this.oc, t = Ocean.t, NX = o.NX;
+    cx = Math.round(cx / 0.5) * 0.5;
+    for (let i = 0; i < NX; i++) {
+      const u = (i / (NX - 1)) * 2 - 1, a = Math.abs(u);
+      o.xs[i] = cx + Math.sign(u) * (a * 52 + a * a * a * 520);
+    }
+    // rows: a grid in z, with each wave's profile spliced in
+    const zFar = cz - 520, zNear = Math.min(cz + 170, 42);
+    const waves = Ocean.waves.filter(w => w.zw + SEA.LF > zFar && w.zw - SEA.LB < zNear).sort((a, b) => a.zw - b.zw).slice(0, o.profs.length);
+    let r = 0, z = zFar, wi = 0;
+    const dz = (z) => clamp(0.6 + 0.024 * Math.abs(z - cz), 0.6, 16);
+    while (z < zNear && r < o.MAXR - NP) {
+      const w = waves[wi];
+      if (w && z >= w.zw - SEA.LB - 0.4) {
+        for (let k = 0; k < NP; k++, r++) { o.rowWave[r] = wi; o.rowK[r] = k; }
+        z = w.zw + SEA.LF + Math.max(0.4, dz(w.zw + SEA.LF)); wi++; continue;
+      }
+      o.rowWave[r] = -1; o.rowZ[r] = z; r++; z += dz(z);
+    }
+    const R = o.rows = r, D = o.data, T = o.tan;
+    // ambient swell, separably: sin(ax·x + (bz·z − w·t + ph)) from per-column and per-row trig
+    if (!o.cs) { o.cs = new Float32Array(NX * 6); o.rs = new Float32Array(o.MAXR * 7); }
+    for (let i = 0; i < NX; i++) for (let m = 0; m < 3; m++) {
+      const a = AMB[m][1] * o.xs[i]; o.cs[i * 6 + m * 2] = Math.sin(a); o.cs[i * 6 + m * 2 + 1] = Math.cos(a);
+    }
+    for (let j = 0; j < R; j++) {
+      if (o.rowWave[j] >= 0) continue;
+      const z = o.rowZ[j]; o.rs[j * 7 + 6] = ambientK(z);
+      for (let m = 0; m < 3; m++) {
+        const b = AMB[m][2] * z - AMB[m][3] * t + AMB[m][4];
+        o.rs[j * 7 + m * 2] = Math.sin(b); o.rs[j * 7 + m * 2 + 1] = Math.cos(b);
+      }
+    }
+    for (let i = 0; i < NX; i++) {
+      const x = o.xs[i], cs = o.cs, ci = i * 6;
+      for (let k = 0; k < waves.length; k++) Ocean.profile(waves[k], x, o.profs[k]);
+      for (let j = 0; j < R; j++) {
+        const v = (j * NX + i) * 8, q = (j * NX + i) * 2;
+        const wv = o.rowWave[j];
+        if (wv < 0) {                     // open water
+          const rs = o.rs, rj = j * 7, kk = rs[rj + 6];
+          let am = 0, dam = 0;
+          if (kk > 0) for (let m = 0; m < 3; m++) {
+            const sA = cs[ci + m * 2], cA = cs[ci + m * 2 + 1], sB = rs[rj + m * 2], cB = rs[rj + m * 2 + 1];
+            am += AMB[m][0] * (sA * cB + cA * sB);
+            dam += AMB[m][0] * AMB[m][2] * (cA * cB - sA * sB);
+          }
+          D[v] = x; D[v + 1] = am * kk; D[v + 2] = o.rowZ[j]; D[v + 6] = 0; D[v + 7] = 0;
+          const l = Math.sqrt(1 + dam * kk * dam * kk); T[q] = 1 / l; T[q + 1] = dam * kk / l;
+        } else {                          // a wave's profile (no ambient over the waves)
+          const P = o.profs[wv], k = o.rowK[j];
+          D[v] = x; D[v + 1] = P.y[k]; D[v + 2] = P.z[k]; D[v + 6] = P.foam[k]; D[v + 7] = P.thin[k];
+          T[q] = P.tz[k]; T[q + 1] = P.ty[k];
+        }
+      }
+    }
+    // normals: cross(profile tangent, across-columns difference)
+    for (let j = 0; j < R; j++) for (let i = 0; i < NX; i++) {
+      const v = (j * NX + i) * 8, q = (j * NX + i) * 2;
+      const a = (j * NX + Math.max(i - 1, 0)) * 8, b = (j * NX + Math.min(i + 1, NX - 1)) * 8;
+      const ax = D[b] - D[a], ay = D[b + 1] - D[a + 1], az = D[b + 2] - D[a + 2];
+      const sz = T[q], sy = T[q + 1];      // s = (0, sy, sz)
+      let nx = sy * az - sz * ay, ny = sz * ax, nz = -sy * ax;
+      const l = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1;
+      D[v + 3] = nx / l; D[v + 4] = ny / l; D[v + 5] = nz / l;
+    }
+    const gl = this.gl, m = o.mesh;
+    gl.bindBuffer(gl.ARRAY_BUFFER, m.vb);
+    gl.bufferSubData(gl.ARRAY_BUFFER, 0, D, 0, R * NX * 8);
+    if (o.idxRows !== R) {
+      const idx = new Uint32Array((R - 1) * (NX - 1) * 6);
+      let n = 0;
+      for (let j = 0; j < R - 1; j++) for (let i = 0; i < NX - 1; i++) {
+        const a = j * NX + i, b = a + NX;
+        idx[n++] = a; idx[n++] = b; idx[n++] = a + 1; idx[n++] = a + 1; idx[n++] = b; idx[n++] = b + 1;
+      }
+      gl.bindVertexArray(m.vao);
+      gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, m.ib);
+      gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.DYNAMIC_DRAW);
+      gl.bindVertexArray(null);
+      m.count = idx.length; o.idxRows = R;
+    }
+  },
+
+  common(p) {
+    const gl = this.gl;
+    gl.useProgram(p.p);
+    if (p.uVP) gl.uniformMatrix4fv(p.uVP, false, Cam.vp);
+    if (p.uSun) gl.uniform3f(p.uSun, this.sun.x, this.sun.y, this.sun.z);
+    if (p.uCam) gl.uniform3f(p.uCam, Cam.pos.x, Cam.pos.y, Cam.pos.z);
+    if (p.uTime) gl.uniform1f(p.uTime, Ocean.t);
+  },
+
+  _m: M4(), _m2: M4(), _id: M4(),
+  part(mesh, local, base, col) {
+    const gl = this.gl, p = this.prog.lit;
+    m4mul(this._m2, base, local);
+    gl.uniformMatrix4fv(p.uModel, false, this._m2);
+    gl.uniform3f(p.uTint, col[0], col[1], col[2]);
+    gl.bindVertexArray(mesh.vao); gl.drawElements(gl.TRIANGLES, mesh.count, gl.UNSIGNED_INT, 0);
+  },
+
+  frame(S) {
+    const gl = this.gl;
+    this.resize();
+    gl.viewport(0, 0, this.w, this.h);
+    Cam.set(this.w / this.h);
+    this.buildOcean(Cam.pos.x, Cam.pos.z);
+    gl.clearColor(0, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.disable(gl.CULL_FACE);
+    // sky
+    let p = this.prog.sky; this.common(p);
+    {   // camera basis rows of the view matrix, scaled to the frustum
+      const v = Cam.view, ty = Math.tan(Cam.fov / 2), tx = ty * Cam.aspect;
+      gl.uniform3f(p.uRight, v[0] * tx, v[4] * tx, v[8] * tx);
+      gl.uniform3f(p.uUp, v[1] * ty, v[5] * ty, v[9] * ty);
+      gl.uniform3f(p.uFwd, -v[2], -v[6], -v[10]);
+    }
+    gl.depthMask(false); gl.drawArrays(gl.TRIANGLES, 0, 3); gl.depthMask(true);
+    // land
+    p = this.prog.lit; this.common(p);
+    gl.uniform1f(p.uWet, 0);
+    this.part(this.mesh.land, this._id, this._id, [1, 1, 1]);
+    // ocean
+    p = this.prog.water; this.common(p);
+    gl.bindVertexArray(this.mesh.far.vao); gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_INT, 0);
+    gl.bindVertexArray(this.oc.mesh.vao); gl.drawElements(gl.TRIANGLES, this.oc.mesh.count, gl.UNSIGNED_INT, 0);
+    // rider
+    p = this.prog.lit; this.common(p);
+    if (S) this.drawRider(S);
+    // spray
+    const n = Fx.fill();
+    if (n) {
+      p = this.prog.part; this.common(p);
+      gl.uniform1f(p.uScale, this.h * 0.5 / Math.tan(Cam.fov / 2));
+      gl.bindBuffer(gl.ARRAY_BUFFER, this.partBuf);
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, Fx.data, 0, n * 8);
+      gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
+      gl.bindVertexArray(this.partVao); gl.drawArrays(gl.POINTS, 0, n);
+      gl.depthMask(true); gl.disable(gl.BLEND);
+    }
+    gl.bindVertexArray(null);
+  },
+
+  /* ---------- the surfer ---------- */
+  _L: M4(), _B: M4(), _bx: V3(), _by: V3(), _bz: V3(),
+  drawRider(S) {
+    const gl = this.gl, p = this.prog.lit;
+    gl.uniform1f(p.uWet, 1);
+    const suit = [0.07, 0.08, 0.1], skin = [0.78, 0.55, 0.4], hair = [0.25, 0.17, 0.1], trim = [0.1, 0.55, 0.75];
+    // board frame: Z = nose, Y = deck normal
+    const B = this._B, X = this._bx, Y = this._by, Z = this._bz;
+    V3.set(Y, S.up.x, S.up.y, S.up.z);
+    V3.set(Z, S.fwd.x, S.fwd.y, S.fwd.z);
+    V3.cross(X, Y, Z); V3.norm(X, X); V3.cross(Z, X, Y);
+    m4axes(B, X, Y, Z, S.bpos.x, S.bpos.y, S.bpos.z, 1);
+    this.part(this.mesh.board, this._id, B, [1, 1, 1]);
+    // the body has its own frame (separates from the board in a wipeout)
+    if (S.bodyM) m4axes(B, S.bodyM.X, S.bodyM.Y, S.bodyM.Z, S.bodyM.p.x, S.bodyM.p.y, S.bodyM.p.z, 1);
+    const J = S.pose;            // joints in body-local metres
+    const L = this._L;
+    const limb = (a, b, r, col) => { m4limb(L, a[0], a[1], a[2], b[0], b[1], b[2], r); this.part(this.mesh.cyl, L, B, col); };
+    const ball = (c, r, col, sy = 1) => {
+      m4ident(L); L[0] = r; L[5] = r * sy; L[10] = r; L[12] = c[0]; L[13] = c[1]; L[14] = c[2];
+      this.part(this.mesh.sph, L, B, col);
+    };
+    limb(J.hip, J.chest, 0.15, suit);
+    ball(J.chest, 0.17, suit, 1.1); ball(J.hip, 0.15, suit);
+    limb(J.chest, J.neck, 0.06, skin);
+    ball(J.head, 0.12, skin, 1.1); ball([J.head[0] + J.hairOff[0], J.head[1] + J.hairOff[1], J.head[2] + J.hairOff[2]], 0.115, hair);
+    for (const s of [0, 1]) {
+      limb(J.sh[s], J.el[s], 0.055, suit); limb(J.el[s], J.ha[s], 0.045, s ? trim : suit); ball(J.ha[s], 0.05, skin);
+      ball(J.el[s], 0.055, suit);
+      limb(J.hp[s], J.kn[s], 0.085, suit); limb(J.kn[s], J.ft[s], 0.065, suit); ball(J.kn[s], 0.08, suit);
+      ball(J.ft[s], 0.06, skin, 0.7);
+    }
+    gl.uniform1f(p.uWet, 0);
+  }
+};
+
+</script>
+<script>/* js/surfer.js */
+/* =====================================================================
+   surfer.js — the rider. Lives on the moving water surface in world
+   space: gravity pulls down the local slope, the water drags.
+     prone : isotropic drag, paddle thrust along the board. To catch a wave
+             you need enough paddle speed when the face is under you that
+             gravity on the slope can take you to wave speed.
+     ride  : fins — little drag along the board, a lot across it, so
+             angling down the face turns the slope into speed down the line.
+             Stalling (drag the tail/hand) slows you so the curl catches up.
+   Water is still except in whitewater, which shoves you shoreward.
+   ===================================================================== */
+'use strict';
+
+const _Q = {}, _QA = {};
+
+function J3(x, y, z) { return [x, y, z]; }
+function poseNew() {
+  return { hip: J3(0, 0, 0), chest: J3(0, 0, 0), neck: J3(0, 0, 0), head: J3(0, 0, 0), hairOff: J3(0, 0, 0),
+           sh: [J3(0, 0, 0), J3(0, 0, 0)], el: [J3(0, 0, 0), J3(0, 0, 0)], ha: [J3(0, 0, 0), J3(0, 0, 0)],
+           hp: [J3(0, 0, 0), J3(0, 0, 0)], kn: [J3(0, 0, 0), J3(0, 0, 0)], ft: [J3(0, 0, 0), J3(0, 0, 0)] };
+}
+function poseLerp(o, a, b, t) {
+  for (const k in o) {
+    if (typeof o[k][0] === 'number') for (let i = 0; i < 3; i++) o[k][i] = lerp(a[k][i], b[k][i], t);
+    else for (let s = 0; s < 2; s++) for (let i = 0; i < 3; i++) o[k][s][i] = lerp(a[k][s][i], b[k][s][i], t);
+  }
+}
+const set3 = (o, x, y, z) => { o[0] = x; o[1] = y; o[2] = z; };
+
+const Surfer = {
+  mode: 'prone',
+  pos: V3(), vx: 0, vz: 0, vy: 0, yaw: Math.PI,
+  stamina: 1, duckT: 0, duckCool: 0, popT: 0, wipeT: 0, tumbleT: 0, pumpT: 0, pumpCool: 0,
+  phase: 0, crouch: 0.3, lean: 0, stall: 0, paddling: 0,
+  lastHit: 0, rideWave: null, offWave: 0, bogT: 0, yPrev: 0, ydot: 0,
+  tubeT: 0, tubeGap: 0, covered: false, inTube: false, tubeDepth: 0,
+  turnAcc: 0, turnIdle: 0, turnFrac: 0, airT: 0, airSpin: 0, rideT: 0,
+  lastMove: '', streak: 0,
+  // render state
+  nrm: V3(0, 1, 0), up: V3(0, 1, 0), fwd: V3(0, 0, -1), bpos: V3(), pose: poseNew(), bodyM: null,
+  _pa: poseNew(), _pb: poseNew(), tumble: V3(), tumbleV: V3(),
+  q: _Q,
+
+  reset(x, z) {
+    this.mode = 'prone'; V3.set(this.pos, x, 0, z); this.vx = this.vz = this.vy = 0; this.yaw = Math.PI;
+    this.stamina = 1; this.duckT = this.duckCool = this.popT = this.wipeT = this.tumbleT = 0;
+    this.lastHit = 0; this.rideWave = null; this.bodyM = null; this.tubeT = 0; this.covered = false; this.inTube = false;
+    V3.set(this.up, 0, 1, 0); V3.set(this.nrm, 0, 1, 0);
+  },
+
+  speed() { return Math.hypot(this.vx, this.vz); },
+  hx() { return Math.sin(this.yaw); }, hz() { return Math.cos(this.yaw); },
+
+  /* where the rider sits relative to the wave in the query */
+  zr(q) { return q.wave ? this.pos.z - q.zw : 1e9; },
+
+  step(dt, In) {
+    this.duckCool -= dt; this.pumpCool -= dt;
+    switch (this.mode) {
+      case 'prone': case 'duck': this.stepProne(dt, In); break;
+      case 'popup': case 'ride': this.stepRide(dt, In); break;
+      case 'air': this.stepAir(dt, In); break;
+      case 'wipe': this.stepWipe(dt, In); break;
+    }
+    this.updatePose(dt, In);
+  },
+
+  /* ---------------- paddling, duck diving, catching ---------------- */
+  stepProne(dt, In) {
+    const P = this.pos, q = Ocean.surface(P.x, P.z, this.mode === 'duck' ? undefined : P.y + 0.2, _Q);
+    const ducking = this.mode === 'duck';
+    const g2 = q.gx * q.gx + q.gz * q.gz;
+    let ax = 0, az = 0;
+    if (!ducking) { ax = -SEA.G * q.gx / (1 + g2); az = -SEA.G * q.gz / (1 + g2); }
+    // whitewater moves: the turbulent front shoves you toward the beach
+    const zr = this.zr(q);
+    const front = q.wave ? (zr > -2 && zr < q.zT - q.zw + 2.5 ? 1 : 0.25) : 0;
+    let wz = ducking ? 0 : Ocean.orbital(q, q.y);
+    // once it has hit you (or you went under it) the bore rolls over rather than carrying you
+    const passed = q.wave && q.wave.id === this.lastHit ? 0.3 : 0.95;
+    wz = Math.max(wz, SEA.C * smoothstep(0.3, 0.8, q.foam) * front * (ducking ? 0.1 : passed));
+    // bore hits you: once per wave
+    if (q.wave && q.foam > 0.5 && zr < q.zT - q.zw + 1 && zr > -2 && q.wave.id !== this.lastHit) {
+      this.lastHit = q.wave.id;
+      if (ducking) Game.onDuckedUnder();
+      else { this.tumbleT = 1.0; this.yaw += (Math.random() - 0.5) * 1.6; this.stamina = Math.max(0, this.stamina - 0.12); Game.onWashed(); }
+    }
+    if (this.tumbleT > 0) { this.tumbleT -= dt; wz = Math.max(wz, SEA.C * 0.75 * this.tumbleT); }
+    // the lip pitching on top of you while you lie on the face
+    if (!ducking && q.wave && q.lam > 0.2 && q.a < SEA.T_THROW && zr < 1.0 && zr > -1.0 && P.y > 0.45 * q.H) {
+      this.wipe('Over the falls!', q); return;
+    }
+    // paddling
+    const hx = this.hx(), hz = this.hz();
+    const want = this.tumbleT > 0 ? 0 : In.up;
+    this.paddling = damp(this.paddling, want, 8, dt);
+    if (want > 0.05) {       // tired arms are slower, never useless
+      const tired = 0.6 + 0.4 * smoothstep(0, 0.3, this.stamina);
+      const th = 3.3 * want * tired * (ducking ? 0.5 : 1);
+      ax += hx * th; az += hz * th;
+      this.stamina = Math.max(0, this.stamina - 0.035 * want * dt);
+      this.phase += dt * 7.5 * want;
+    } else this.stamina = Math.min(1, this.stamina + 0.08 * dt);
+    this.stamina = Math.min(1, this.stamina + 0.012 * dt);
+    // drag relative to the water: a prone board slides along itself more easily
+    const rx = this.vx, rz = this.vz - wz;
+    const rl = rx * hx + rz * hz, rn = rx * hz - rz * hx;
+    const kl = 0.72 + 0.1 * Math.abs(rl), kn = 2.2 + 0.2 * Math.abs(rn);
+    ax -= hx * kl * rl + hz * kn * rn; az -= hz * kl * rl - hx * kn * rn;
+    this.vx += ax * dt; this.vz += az * dt;
+    // the shallows: whitewater dies on the sand
+    if (P.z > SEA.SHORE - 6) { this.vz = Math.min(this.vz, 0.5); }
+    // pivoting: easy when slow
+    const turn = (this.tumbleT > 0 ? 0 : In.steer) * 2.3 / (1 + 0.2 * this.speed());
+    this.yaw += turn * dt;
+    // a little of your speed follows the nose as you turn
+    P.x += this.vx * dt; P.z += this.vz * dt;
+    if (ducking) {
+      this.duckT -= dt;
+      const k = Math.sin(Math.PI * clamp(1 - this.duckT / 1.15, 0, 1));
+      P.y = q.y - 1.3 * k;
+      if (this.duckT <= 0) { this.mode = 'prone'; this.duckCool = 0.5; }
+    } else P.y = q.y;
+    this.ydot = (P.y - this.yPrev) / dt; this.yPrev = P.y;
+    this.surfNormal(q, dt, 10);
+
+    // the action button: pop up if the wave has you, else duck dive
+    if (In.actionPressed && !ducking && this.tumbleT <= 0) {
+      const onFace = q.wave && zr > -0.8 && zr < q.zT - q.zw + 1.5 && q.gz < -0.12;
+      if (this.canPop()) this.popUp(q);
+      else if (onFace && this.vz > 1.2 && hz > 0) Game.onTooEarly();
+      else if (this.duckCool <= 0 && this.stamina > 0.05) {
+        this.mode = 'duck'; this.duckT = 1.15; this.stamina -= 0.04; Game.onDuck();
+      }
+    }
+    // missed: the wave went under you
+    this.q = q;
+  },
+
+  /* the wave has you: on its face, carried at near wave speed, nose to the beach */
+  canPop() {
+    const q = this.q;
+    if (this.mode !== 'prone' || this.tumbleT > 0 || !q || !q.wave) return false;
+    const zr = this.pos.z - q.zw;
+    return zr > 0.3 && zr < q.zT - q.zw + 1.5 && this.pos.y < 0.85 * q.H && q.gz < -0.12 && this.vz > 0.8 * SEA.C && this.hz() > 0.25 && q.foam < 0.5 && q.foamAmt < 0.3 && q.lam < 0.4 && q.zw < SEA.Z_END - 8;
+  },
+
+  popUp(q) {
+    this.mode = 'popup'; this.popT = 0.38; this.rideWave = q.wave; this.offWave = 0; this.bogT = 0;
+    this.tubeT = 0; this.covered = false; this.turnAcc = 0; this.airT = 0; this.rideT = 0;
+    this.lastMove = ''; this.streak = 0;
+    const steep = -q.gz;
+    Game.onPopUp(steep);
+  },
+
+  /* ---------------- riding ---------------- */
+  stepRide(dt, In) {
+    const P = this.pos;
+    const q = Ocean.surface(P.x, P.z, P.y + 0.1, _Q);
+    const g2 = q.gx * q.gx + q.gz * q.gz;
+    let ax = -SEA.G * q.gx / (1 + g2), az = -SEA.G * q.gz / (1 + g2);
+    const hx = this.hx(), hz = this.hz();
+    const zr = this.zr(q);
+    if (this.mode === 'popup') { this.popT -= dt; if (this.popT <= 0) this.mode = 'ride'; }
+    const popping = this.mode === 'popup';
+    this.rideT += dt;
+
+    // controls: stall/crouch on down, pump on up
+    this.stall = damp(this.stall, In.down, 10, dt);
+    if (In.up > 0.5 && this.pumpCool <= 0 && !popping && Math.abs(q.gz) > 0.12) { this.pumpT = 0.32; this.pumpCool = 0.6; Game.onPump(); }
+    if (this.pumpT > 0) { this.pumpT -= dt; ax += hx * 3.4; az += hz * 3.4; }
+
+    const wz = Math.max(Ocean.orbital(q, q.y), SEA.C * smoothstep(0.35, 0.8, q.foam) * 0.9);
+    this.vx += ax * dt; this.vz += az * dt;
+    // fins: the board redirects the flow past it (keeping most of the speed)
+    // rather than braking it — that's what lets a carve hold speed
+    let rx = this.vx, rz = this.vz - wz;
+    let rs = Math.hypot(rx, rz), rn = 0, rl = rs;
+    if (rs > 0.05) {
+      let ang = Math.atan2(rx, rz), d = angDelta(ang, this.yaw);
+      const back = Math.abs(d) > Math.PI / 2;
+      if (back) d = angDelta(ang, this.yaw + Math.PI);
+      const grip = (popping ? 2.5 : 7) * dt, rot = clamp(d, -grip, grip);
+      rn = rs * Math.sin(d - rot);                         // what the fins couldn't hold: slip
+      ang += rot;
+      rs *= (1 - 0.05 * Math.abs(rot)) * Math.exp(-dt * 2.5 * Math.abs(Math.sin(d - rot)));
+      const kl = 0.1 + 0.012 * rs + this.stall * (0.6 + 0.04 * rs) + (popping ? 0.3 : 0);
+      rs = Math.max(0, rs - kl * rs * dt);
+      rl = back ? -rs : rs;
+      rx = Math.sin(ang) * rs; rz = Math.cos(ang) * rs;
+    }
+    this.vx = rx; this.vz = rz + wz;
+    const sp = this.speed();
+    // steering: a carve; harder with speed
+    const rate = (popping ? 0.8 : 1) * In.steer * clamp(3.1 - 0.07 * sp, 1.6, 3.1);
+    this.yaw += rate * dt;
+    this.lean = damp(this.lean, In.steer * clamp(sp / 7, 0.3, 1), 8, dt);
+    P.x += this.vx * dt; P.z += this.vz * dt;
+    P.y = q.y;
+    this.ydot = (P.y - this.yPrev) / dt; this.yPrev = P.y;
+    this.surfNormal(q, dt, 14);
+    this.q = q;
+    // spray off the rail
+    const slip = Math.abs(rn) + Math.abs(In.steer) * sp * 0.25;
+    if (slip > 1.2 && Math.random() < dt * 60) {
+      const k = Math.min(1, slip / 6), sx = -hz * Math.sign(In.steer || 1), sz = hx * Math.sign(In.steer || 1);
+      for (let i = 0; i < 1 + k * 4; i++)
+        Fx.emit(P.x - hx * 0.6, P.y + 0.1, P.z - hz * 0.6, sx * (2 + 4 * k) + rnd(-1, 1) + this.vx * 0.5, 2 + 4 * k * Math.random(),
+                sz * (2 + 4 * k) + rnd(-1, 1) + this.vz * 0.5, 0.6 + Math.random() * 0.4, 0.09 + 0.08 * k, 1, 1, 1, 0.75, 1.5, 1);
+    }
+
+    // ---- scoring: turns, tube, speed ----
+    if (!popping) {
+      Game.ridePts(sp * dt * 5);
+      const frac = q.wave ? clamp((P.y - q.yT) / Math.max(q.H, 0.5), 0, 1.2) : 0;
+      if (Math.abs(In.steer) > 0.3 && Math.sign(In.steer) === Math.sign(this.turnAcc || In.steer)) {
+        if (this.turnAcc === 0) this.turnFrac = frac;
+        this.turnAcc += rate * dt; this.turnIdle = 0; this.turnFrac = Math.max(this.turnFrac, frac);
+      } else if (this.turnAcc !== 0) {
+        this.turnIdle += dt;
+        if (this.turnIdle > 0.12 || Math.sign(In.steer) === -Math.sign(this.turnAcc)) this.endTurn(sp);
+      }
+    }
+    // tube: water over your head, with the lip still throwing
+    const covered = q.covered && q.lam > 0.25 && q.a < SEA.T_THROW;
+    if (covered) {
+      const clear = q.ceil - P.y;
+      this.tubeDepth = clamp((q.tipZ - P.z) / 2.5, 0, 1);
+      if (clear < 0.75) return this.wipe('Lip to the head', q);
+      this.tubeT += dt; this.tubeGap = 0;
+      if (!this.inTube) { this.inTube = true; Game.onTubeIn(); }
+    } else if (this.inTube) {
+      this.tubeGap += dt;
+      if (this.tubeGap > 0.25) { this.inTube = false; Game.onTubeOut(this.tubeT); this.tubeT = 0; }
+    }
+    this.covered = covered;
+    this.crouch = damp(this.crouch, Math.max(this.stall, covered ? 1 : 0, 0.3 + 0.25 * Math.abs(In.steer)), 6, dt);
+
+    // ---- endings ----
+    if (q.wave && q.foam > 0.55 && zr > -1 && zr < q.zT - q.zw + 3) {
+      return this.wipe(this.inTube ? 'The barrel shut on you' : 'Swallowed by the whitewater', q);
+    }
+    if (this.inTube && q.wave && q.a > SEA.T_THROW + 0.05 && zr < q.tipZ - q.zw) return this.wipe('The barrel shut on you', q);
+    if (!q.wave || zr < -1.6) { this.offWave += dt; if (this.offWave > 0.35) return this.endRide(q.wave ? 'Kicked out the back' : 'Lost the wave'); }
+    else this.offWave = 0;
+    if (q.wave && q.zw > SEA.Z_END) return this.endRide('Rode it to the inside');
+    if (!q.wave && Math.abs(rl) < 1.5 && !popping) { this.bogT += dt; if (this.bogT > 0.7) return this.endRide('Bogged down'); } else this.bogT = 0;
+    // launch: off the lip with upward speed
+    const nearLip = q.wave && zr < 1.0 && P.y > 0.72 * q.H && q.lam < 0.35;
+    if (!popping && nearLip && this.ydot > 1.4 && In.actionPressed) {
+      this.mode = 'air'; this.vy = this.ydot * 0.85 + 2.4;
+      this.airT = 0; this.airSpin = 0; this.flushTurn(sp);
+      Game.onAir();
+    }
+  },
+
+  endTurn(sp) {
+    const deg = Math.abs(this.turnAcc) * 180 / Math.PI, f = this.turnFrac;
+    this.turnAcc = 0; this.turnIdle = 0;
+    if (deg < 55) return;
+    let name;
+    if (deg >= 150) name = 'Cutback';
+    else if (f > 0.66) name = deg > 100 ? 'Re-entry' : 'Snap';
+    else if (f < 0.35) name = 'Bottom turn';
+    else name = 'Carve';
+    const rep = name === this.lastMove;
+    this.streak = rep ? this.streak : this.streak + 1; this.lastMove = name;
+    let pts = deg * 2.4 * clamp(sp / 7, 0.5, 1.6) * (name === 'Snap' || name === 'Re-entry' ? 1.5 : 1);
+    if (rep) pts *= 0.5;
+    Game.trick(name, Math.round(pts / 10) * 10);
+  },
+  flushTurn(sp) { if (this.turnAcc) this.endTurn(sp); },
+
+  /* ---------------- air ---------------- */
+  stepAir(dt, In) {
+    const P = this.pos;
+    this.airT += dt;
+    this.vy -= SEA.G * dt;
+    P.x += this.vx * dt; P.z += this.vz * dt; P.y += this.vy * dt;
+    const spin = In.steer * 6.0 * dt;
+    this.yaw += spin; this.airSpin += spin;
+    this.crouch = damp(this.crouch, 1, 8, dt);
+    const q = Ocean.surface(P.x, P.z, P.y, _Q);
+    this.q = q;
+    damp3(this.nrm, 0, 1, 0, 3, dt);
+    if (P.y <= q.y && this.vy < 0) {
+      P.y = q.y;
+      const travel = Math.atan2(this.vx, this.vz), off = Math.abs(angDelta(this.yaw, travel));
+      const turns = Math.abs(this.airSpin) * 180 / Math.PI;
+      if (off > 0.85) return this.wipe('Blew the landing', q);
+      const rot = Math.round(turns / 180) * 180;
+      const name = rot >= 180 ? 'Air ' + rot : 'Air';
+      Game.trick(name, Math.round((350 + this.airT * 500 + rot * 4) / 10) * 10);
+      Game.onLand();
+      // landing pushes the speed along the board
+      const hx = this.hx(), hz = this.hz(), sp = Math.hypot(this.vx, this.vz);
+      this.vx = lerp(this.vx, hx * sp, 0.6); this.vz = lerp(this.vz, hz * sp, 0.6);
+      this.mode = 'ride'; this.yPrev = P.y; this.offWave = 0;
+      for (let i = 0; i < 16; i++) Fx.emit(P.x, P.y, P.z, rnd(-3, 3), rnd(1, 4), rnd(-3, 3), 0.7, 0.14, 1, 1, 1, 0.8);
+    }
+  },
+
+  /* ---------------- wipeout ---------------- */
+  wipe(reason, q) {
+    if (this.mode === 'wipe') return;
+    const wasRiding = this.mode === 'ride' || this.mode === 'popup' || this.mode === 'air';
+    this.mode = 'wipe'; this.wipeT = 2.6; this.inTube = false;
+    V3.set(this.tumble, 0, 0, 0); V3.set(this.tumbleV, rnd(-6, 6), rnd(-9, 9), rnd(4, 9));
+    if (q && q.wave) this.lastHit = q.wave.id;
+    const P = this.pos;
+    for (let i = 0; i < 40; i++) Fx.emit(P.x, P.y + 0.3, P.z, rnd(-4, 4), rnd(2, 7), rnd(-2, 6), 1.0, 0.25, 1, 1, 1, 0.8);
+    Game.onWipe(reason, wasRiding);
+  },
+  stepWipe(dt, In) {
+    const P = this.pos;
+    this.wipeT -= dt;
+    if (In.actionPressed) this.wipeT -= 0.22;
+    const q = Ocean.surface(P.x, P.z, undefined, _Q);
+    // tumbled toward the beach with the whitewater, slowing as it passes
+    const push = SEA.C * 0.7 * smoothstep(0.2, 0.7, q.foam);
+    this.vx = damp(this.vx, 0, 1.5, dt); this.vz = damp(this.vz, push, 1.5, dt);
+    P.x += this.vx * dt; P.z += this.vz * dt;
+    P.y = damp(P.y, q.y - (this.wipeT > 0.4 ? 1.3 : 0), 4, dt);
+    this.tumble.x += this.tumbleV.x * dt; this.tumble.y += this.tumbleV.y * dt; this.tumble.z += this.tumbleV.z * dt;
+    V3.scale(this.tumbleV, this.tumbleV, Math.exp(-0.6 * dt));
+    if (Math.random() < dt * 20) Fx.emit(P.x + rnd(-0.5, 0.5), P.y + 0.2, P.z + rnd(-0.5, 0.5), 0, 1.5, 0, 0.8, 0.05, 0.85, 0.95, 1, 0.6, 0.5, -0.4);
+    this.q = q;
+    if (this.wipeT <= 0) {
+      this.mode = 'prone'; this.yaw = Math.PI; this.vx = this.vz = 0; this.bodyM = null; this.tumbleT = 0;
+      this.stamina = Math.max(this.stamina, 0.45);
+      Game.onSurface();
+    }
+  },
+
+  endRide(reason) {
+    this.flushTurn(this.speed());
+    if (this.inTube) { this.inTube = false; Game.onTubeOut(this.tubeT); }
+    this.mode = 'prone'; this.vx *= 0.3; this.vz *= 0.3;
+    if (this.rideWave) this.lastHit = this.rideWave.id;
+    Game.onRideEnd(reason);
+  },
+
+  /* ---------------- render frame + pose ---------------- */
+  surfNormal(q, dt, k) {
+    const l = Math.hypot(q.gx, 1, q.gz);
+    damp3(this.nrm, -q.gx / l, 1 / l, -q.gz / l, k, dt);
+  },
+  updatePose(dt, In) {
+    const P = this.pos, u = this.nrm;
+    let hx = this.hx(), hz = this.hz();
+    // board forward: heading projected onto the deck plane
+    let fx = hx, fy = 0, fz = hz;
+    const d = fx * u.x + fy * u.y + fz * u.z;
+    fx -= u.x * d; fy -= u.y * d; fz -= u.z * d;
+    let l = Math.hypot(fx, fy, fz) || 1; fx /= l; fy /= l; fz /= l;
+    const U = V3(u.x, u.y, u.z);
+    const ride = this.mode === 'ride' || this.mode === 'popup' || this.mode === 'air';
+    if (this.mode === 'ride') {     // roll into the carve: rotate up about forward
+      const a = -this.lean * 0.5, c = Math.cos(a), s = Math.sin(a);
+      const sx = fy * U.z - fz * U.y, sy = fz * U.x - fx * U.z, sz = fx * U.y - fy * U.x;
+      V3.set(U, U.x * c + sx * s, U.y * c + sy * s, U.z * c + sz * s);
+    }
+    if (this.mode === 'air') { fy += clamp(this.vy * 0.06, -0.4, 0.4); l = Math.hypot(fx, fy, fz); fx /= l; fy /= l; fz /= l; }
+    if (this.mode === 'duck') { const k = Math.sin(Math.PI * clamp(1 - this.duckT / 1.15, 0, 1)); fy -= 0.35 * k * (this.duckT > 0.57 ? 1 : -1); }
+    V3.set(this.fwd, fx, fy, fz); V3.set(this.up, U.x, U.y, U.z);
+    V3.set(this.bpos, P.x, P.y + 0.02, P.z);
+
+    const A = this._pa, B = this._pb;
+    if (this.mode === 'wipe') {
+      this.spread(A);
+      poseLerp(this.pose, this.pose, A, 1 - Math.exp(-8 * dt));
+      const t = this.tumble;
+      this.bodyM = this.bodyM || { X: V3(), Y: V3(), Z: V3(), p: V3() };
+      const M = M4(); m4ident(M); rotXYZ(M, t.x, t.y, t.z);
+      V3.set(this.bodyM.X, M[0], M[1], M[2]); V3.set(this.bodyM.Y, M[4], M[5], M[6]); V3.set(this.bodyM.Z, M[8], M[9], M[10]);
+      V3.set(this.bodyM.p, P.x + 0.6, P.y - 0.3, P.z + 0.4);
+      // the board, on its leash, tumbles too
+      const bt = t.y * 0.7;
+      V3.set(this.fwd, Math.sin(bt), Math.sin(t.x * 0.5) * 0.6, Math.cos(bt)); V3.norm(this.fwd, this.fwd);
+      V3.set(this.up, Math.sin(t.z * 0.6) * 0.8, Math.cos(t.z * 0.6), 0.2); V3.norm(this.up, this.up);
+      V3.set(this.bpos, P.x - 0.8, Math.max(P.y + 0.6, (this.q.y || 0)) , P.z - 0.5);
+      return;
+    }
+    this.bodyM = null;
+    if (ride) {
+      this.stand(A, this.crouch, this.lean, this.stall, this.mode === 'air');
+      if (this.mode === 'popup') {
+        this.prone(B, false, false);
+        poseLerp(this.pose, B, A, smoothstep(0.38, 0.0, this.popT));
+      } else poseLerp(this.pose, this.pose, A, 1 - Math.exp(-14 * dt));
+    } else {
+      this.prone(A, this.paddling > 0.1, this.mode === 'duck');
+      poseLerp(this.pose, this.pose, A, 1 - Math.exp(-16 * dt));
+    }
+  },
+
+  /* body-local joints: X = to the rider's chest side, Y = up, Z = board nose */
+  stand(J, c, l, stall, air) {
+    const hy = 0.95 - 0.4 * c;
+    set3(J.hip, 0.03 + 0.1 * l, hy, -0.02);
+    set3(J.chest, 0.1 + 0.13 * c + 0.16 * l, hy + 0.49 - 0.06 * c, 0.07);
+    set3(J.neck, J.chest[0] + 0.04, J.chest[1] + 0.17, J.chest[2] + 0.03);
+    set3(J.head, J.chest[0] + 0.07 + 0.04 * c, J.chest[1] + 0.31, J.chest[2] + 0.05);
+    set3(J.hairOff, -0.025, 0.04, -0.01);
+    set3(J.hp[0], J.hip[0], hy, 0.1); set3(J.hp[1], J.hip[0], hy, -0.12);
+    set3(J.ft[0], 0, 0.07, 0.36); set3(J.ft[1], 0, 0.07, -0.34);
+    set3(J.kn[0], 0.18 + 0.16 * c, hy * 0.5 + 0.06, 0.33); set3(J.kn[1], 0.15 + 0.14 * c, hy * 0.5 + 0.03, -0.2);
+    set3(J.sh[0], J.chest[0], J.chest[1] + 0.1, J.chest[2] + 0.19); set3(J.sh[1], J.chest[0], J.chest[1] + 0.1, J.chest[2] - 0.19);
+    if (air) { set3(J.ha[0], 0.24, 0.14, 0.12); set3(J.ha[1], 0.1, hy + 0.5, -0.55); }
+    else {
+      set3(J.ha[0], 0.22 + 0.1 * l, hy + 0.26, 0.7);
+      set3(J.ha[1], lerp(0.12, 0.45, stall), lerp(hy + 0.34, 0.1, stall), lerp(-0.62, -0.3, stall));
+    }
+    for (const s of [0, 1]) set3(J.el[s], (J.sh[s][0] + J.ha[s][0]) / 2 + 0.1, (J.sh[s][1] + J.ha[s][1]) / 2 - 0.04, (J.sh[s][2] + J.ha[s][2]) / 2);
+  },
+  prone(J, paddling, duck) {
+    set3(J.hip, 0, 0.19, -0.22); set3(J.chest, 0, 0.24, 0.3); set3(J.neck, 0, 0.32, 0.48); set3(J.head, 0, 0.42, 0.6);
+    set3(J.hairOff, 0, 0.03, -0.04);
+    for (const s of [0, 1]) {
+      const sd = s ? 1 : -1;
+      set3(J.hp[s], sd * 0.11, 0.18, -0.3);
+      set3(J.kn[s], sd * 0.13, 0.15, -0.72);
+      set3(J.ft[s], sd * 0.12, 0.22 + (duck ? 0.2 : 0), -1.08);
+      set3(J.sh[s], sd * 0.2, 0.3, 0.36);
+      if (duck) set3(J.ha[s], sd * 0.24, 0.1, 0.66);
+      else if (paddling) {
+        const f = this.phase + s * Math.PI;
+        set3(J.ha[s], sd * 0.33, 0.04 - 0.32 * Math.sin(f), 0.5 + 0.34 * Math.cos(f));
+      } else set3(J.ha[s], sd * 0.3, 0.06, 0.15);
+      set3(J.el[s], (J.sh[s][0] + J.ha[s][0]) / 2 + sd * 0.1, (J.sh[s][1] + J.ha[s][1]) / 2 + 0.06, (J.sh[s][2] + J.ha[s][2]) / 2);
+    }
+  },
+  spread(J) {
+    set3(J.hip, 0, 0, 0); set3(J.chest, 0, 0.5, 0); set3(J.neck, 0, 0.67, 0); set3(J.head, 0, 0.8, 0); set3(J.hairOff, 0, 0.04, -0.03);
+    for (const s of [0, 1]) {
+      const sd = s ? 1 : -1;
+      set3(J.sh[s], sd * 0.2, 0.6, 0); set3(J.el[s], sd * 0.45, 0.75, 0.1); set3(J.ha[s], sd * 0.7, 0.9, 0.15);
+      set3(J.hp[s], sd * 0.11, 0, 0); set3(J.kn[s], sd * 0.25, -0.4, 0.1); set3(J.ft[s], sd * 0.3, -0.8, -0.1);
+    }
+  }
+};
+
+function damp3(v, x, y, z, k, dt) {
+  const t = 1 - Math.exp(-k * dt);
+  v.x += (x - v.x) * t; v.y += (y - v.y) * t; v.z += (z - v.z) * t;
+  V3.norm(v, v);
+}
+/* M = Rx(a)·Ry(b)·Rz(c), written straight into the upper 3x3 */
+function rotXYZ(M, a, b, c) {
+  const ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b), cc = Math.cos(c), sc = Math.sin(c);
+  M[0] = cb * cc; M[1] = ca * sc + sa * sb * cc; M[2] = sa * sc - ca * sb * cc;
+  M[4] = -cb * sc; M[5] = ca * cc - sa * sb * sc; M[6] = sa * cc + ca * sb * sc;
+  M[8] = sb; M[9] = -sa * cb; M[10] = ca * cb;
+}
+
+</script>
+<script>/* js/audio.js */
+/* =====================================================================
+   audio.js — all sound is shaped noise: the sea's hiss, the roar of a
+   wave pitching, the hollow rumble inside the tube, splashes.
+   ===================================================================== */
+'use strict';
+
+const Sfx = {
+  ctx: null, master: null, noise: null, muted: false,
+  sea: null, seaF: null, roar: null, roarF: null, tube: null,
+
+  start() {
+    if (this.ctx) { if (this.ctx.state === 'suspended') this.ctx.resume(); return; }
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    const c = this.ctx = new AC();
+    this.master = c.createGain(); this.master.gain.value = this.muted ? 0 : 0.8; this.master.connect(c.destination);
+    const len = c.sampleRate * 2, buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
+    let b = 0;
+    for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; b = 0.97 * b + 0.03 * w; d[i] = w * 0.5 + b * 3; }
+    this.noise = buf;
+    [this.sea, this.seaF] = this.loop(500, 0.12);
+    [this.roar, this.roarF] = this.loop(900, 0);
+    [this.tube] = this.loop(180, 0);
+  },
+  loop(freq, gain) {
+    const c = this.ctx, s = c.createBufferSource(); s.buffer = this.noise; s.loop = true;
+    s.playbackRate.value = 0.6 + Math.random() * 0.5;
+    const f = c.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = freq;
+    const g = c.createGain(); g.gain.value = gain;
+    s.connect(f); f.connect(g); g.connect(this.master); s.start();
+    return [g, f];
+  },
+  burst(dur, f0, f1, gain, type = 'lowpass') {
+    if (!this.ctx) return;
+    const c = this.ctx, t = c.currentTime, s = c.createBufferSource(); s.buffer = this.noise;
+    const f = c.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(f0, t); f.frequency.exponentialRampToValueAtTime(f1, t + dur);
+    const g = c.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + 0.03);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    s.connect(f); f.connect(g); g.connect(this.master); s.start(t, Math.random()); s.stop(t + dur + 0.05);
+  },
+  splash(k = 1) { this.burst(0.5 + 0.3 * k, 3000, 500, 0.35 * k, 'bandpass'); },
+  stroke() { this.burst(0.22, 1800, 700, 0.06, 'bandpass'); },
+  crash(k) { this.burst(2.4, 1400, 200, 0.5 * k); },
+
+  /* per frame: roar = how close breaking water is, tube = inside the barrel */
+  update(roar, tube, under) {
+    if (!this.ctx) return;
+    const t = this.ctx.currentTime;
+    this.sea.gain.setTargetAtTime(under ? 0.05 : 0.12, t, 0.3);
+    this.seaF.frequency.setTargetAtTime(under ? 250 : 520, t, 0.2);
+    this.roar.gain.setTargetAtTime(0.5 * roar * (under ? 0.4 : 1), t, 0.15);
+    this.roarF.frequency.setTargetAtTime(400 + 1100 * roar, t, 0.2);
+    this.tube.gain.setTargetAtTime(tube ? 0.9 : (under ? 0.6 : 0), t, 0.12);
+  },
+  toggle() {
+    this.muted = !this.muted;
+    if (this.master) this.master.gain.value = this.muted ? 0 : 0.8;
+    return this.muted;
+  }
+};
+
+</script>
+<script>/* js/main.js */
+/* =====================================================================
+   main.js — session flow, sets, camera, input, HUD.
+   A session: paddle out → sit in the lineup → a set wave comes → turn,
+   paddle, pop up → ride → paddle back out. Three waves.
+   ===================================================================== */
+'use strict';
+
+const $ = (id) => document.getElementById(id);
+const WAVES = 3;
+
+const Game = {
+  state: 'menu',       // menu | play | pause | over
+  main: null,          // the set wave you're meant to surf
+  boreT: 0, setT: 0, attractT: 0,
+  waveIdx: 0, rideScore: 0, total: 0, scores: [], riding: false,
+  best: 0, bestTube: 0, topSpeed: 0, bestMove: null, wipes: 0,
+  flash: '', flashT: 0, flashCls: '', missedT: 0, endT: 0, bannerT: 0,
+  camDir: V3(1, 0, 0), tubeCam: 0, camMode: '', sideSign: 1,
+  roar: 0,
+
+  init() {
+    try { this.best = +(localStorage.getItem('swellline.best') || 0); } catch (e) { /* private mode */ }
+    Ocean.reset();
+    Surfer.reset(0, SEA.START_Z);
+    this.attract(true);
+  },
+
+  start() {
+    Sfx.start();
+    Ocean.reset();
+    Surfer.reset(0, SEA.START_Z);
+    this.main = null; this.boreT = 0.5; this.setT = 3; this.waveIdx = 0; this.total = 0; this.scores = [];
+    this.rideScore = 0; this.riding = false; this.bestTube = 0; this.topSpeed = 0; this.bestMove = null; this.wipes = 0;
+    this.endT = 0; this.missedT = 0; this.respawnT = 0; $('fade').classList.remove('on');
+    // the first whitewater is already on its way in
+    Ocean.spawn({ zw: SEA.ZB + 6, H0: 2.1, xPeak: 0, vp: 60, sec: 0 });
+    this.state = 'play';
+    $('menu').classList.add('hide'); $('over').classList.add('hide'); $('pause').classList.add('hide');
+    $('hud').classList.add('on'); $('under').classList.remove('on'); document.body.classList.add('playing');
+    this.snapCam();
+  },
+
+  /* ---------------- the sea's schedule ---------------- */
+  outermost() { let z = Infinity; for (const w of Ocean.waves) z = Math.min(z, w.zw); return z; },
+  updateSea(dt) {
+    const P = Surfer.pos;
+    if (this.main && !Ocean.waves.includes(this.main)) this.main = null;
+    // a set wave that rolled through without you
+    if (this.main && !this.riding && Surfer.rideWave !== this.main && this.main.zw > P.z + 12) {
+      this.main = null; this.missedT = 2.2; this.setT = 4;
+    }
+    if (this.main) return;
+    const inside = P.z > SEA.LINEUP[1];
+    const spawnZ = Math.min(SEA.ZB - 60, this.outermost() - 64);
+    if (inside && Surfer.mode !== 'wipe') {
+      this.boreT -= dt;
+      if (this.boreT <= 0 && spawnZ > SEA.ZB - 110) {
+        Ocean.spawn({ zw: spawnZ, H0: rnd(1.7, 2.4), xPeak: P.x, vp: 60, sec: 0 });
+        this.boreT = rnd(9.5, 12.5);
+      }
+    }
+    const inLineup = P.z >= SEA.LINEUP[0] - 8 && P.z <= SEA.LINEUP[1];
+    if (inLineup && Surfer.mode === 'prone' && !this.riding && this.endT <= 0) {
+      this.setT -= dt;
+      if (this.setT <= 0 && spawnZ > SEA.ZB - 110) {
+        const side = Math.random() < 0.5 ? -1 : 1;
+        this.main = Ocean.spawn({ zw: Math.min(SEA.ZB - 52, spawnZ), H0: rnd(2.8, 3.4), xPeak: P.x + side * rnd(3, 7), vp: 6.5, main: true });
+        this.sideSign = -side;
+        this.setT = 5;
+      }
+    }
+  },
+
+  /* menu backdrop: perfect peelers, no rider */
+  attract(first) {
+    if (first || this.attractT <= 0) {
+      Ocean.spawn({ zw: first ? SEA.ZB - 8 : Math.min(SEA.ZB - 64, this.outermost() - 64), H0: 3.1, xPeak: -30, vp: 6.5, main: true, sec: 0.6 });
+      this.attractT = 12.3;
+    }
+  },
+
+  /* ---------------- per frame ---------------- */
+  update(dt, In) {
+    if (this.state === 'menu' || this.state === 'over') {
+      this.attractT -= dt; this.attract(false);
+      Ocean.update(dt); Fx.update(dt); this.waveFx(dt, V3(30, 0, -100));
+      const t = Ocean.t * 0.05;
+      V3.set(Cam.tgt, -6, 0.8, -96 + Math.sin(t) * 3);
+      V3.set(Cam.pos, 24 + Math.sin(t * 0.7) * 6, 4.2, -84);
+      return;
+    }
+    if (this.state !== 'play') return;
+    Ocean.update(dt);
+    this.updateSea(dt);
+    Surfer.step(dt, In);
+    Fx.update(dt);
+    this.waveFx(dt, Surfer.pos);
+    this.camera(dt);
+    this.flashT -= dt; this.missedT -= dt; this.bannerT -= dt;
+    if (this.respawnT > 0) {
+      this.respawnT -= dt;
+      $('fade').classList.toggle('on', this.respawnT < 1.4 && this.respawnT > 0.2);
+      if (this.respawnT <= 0.8 && Surfer.pos.z > SEA.START_Z) { Surfer.reset(Surfer.pos.x, SEA.START_Z); this.snapCam(); }
+    }
+    if (Surfer.mode === 'wipe' && Surfer.wipeT < 0.1 && Surfer.pos.z > SEA.START_Z && this.waveIdx < WAVES) this.respawnT = 1.6;
+    // washed all the way in on your belly: walk back up and paddle out from the usual spot
+    if (Surfer.mode === 'prone' && Surfer.pos.z > SEA.START_Z + 14 && !(this.respawnT > 0)) {
+      this.respawnT = 1.6; this.say('Washed in <small>back out you go</small>', 'warn', 1.6);
+    }
+    if (this.endT > 0) { this.endT -= dt; if (this.endT <= 0 && this.waveIdx >= WAVES) this.over(); }
+    if (this.riding || Surfer.mode === 'air') this.topSpeed = Math.max(this.topSpeed, Surfer.speed());
+    // sound
+    let roar = 0;
+    for (const w of Ocean.waves) {
+      const st = Ocean._P; Ocean.stage(w, Surfer.pos.x, st);
+      const k = Math.max(st.lam > 0.05 ? 0.9 : 0, st.foamAmt) * Math.exp(-Math.abs(Surfer.pos.z - w.zw) / 22);
+      roar = Math.max(roar, k);
+      if (w.broke && !w.heard) { w.heard = true; Sfx.crash(Math.exp(-Math.abs(Surfer.pos.z - w.zw) / 40)); }
+    }
+    this.roar = damp(this.roar, roar, 3, dt);
+    Sfx.update(this.roar, Surfer.inTube, Surfer.mode === 'wipe' || Surfer.mode === 'duck');
+    if (Surfer.mode === 'prone' && Surfer.paddling > 0.3) {
+      const ph = Math.floor(Surfer.phase / Math.PI);
+      if (ph !== this._stroke) { this._stroke = ph; Sfx.stroke(); }
+    }
+  },
+
+  /* mist off the lip and the whitewater, near the camera */
+  waveFx(dt, near) {
+    const st = Ocean._P;
+    for (const w of Ocean.waves) {
+      if (Math.abs(w.zw - near.z) > 90) continue;
+      const n = Math.floor(dt * 70 + Math.random());
+      for (let i = 0; i < n; i++) {
+        const x = near.x + rnd(-45, 45);
+        Ocean.stage(w, x, st);
+        if (st.lam > 0.15 && st.a < SEA.T_THROW) {
+          Ocean.profile(w, x, st);
+          Fx.emit(x, st.tipY + 0.1, st.tipZ, rnd(-0.5, 0.5), rnd(-1, 1.5), SEA.C * 0.8 + rnd(0, 1.5), 0.9, 0.28, 1, 1, 1, 0.35, 0.8, 0.5);
+          if (st.a > 0.6 && Math.random() < 0.5)       // the lip landing: a big puff
+            Fx.emit(x, st.yT + 0.6, st.tipZ + 0.3, rnd(-1, 1), rnd(2, 6), SEA.C + rnd(-1, 2), 1.4, 0.9, 1, 1, 1, 0.22, 1.2, 0.35);
+        } else if (st.foamAmt > 0.5) {
+          Fx.emit(x, st.H * 0.7, w.zw + rnd(0, 1.5), rnd(-0.5, 0.5), rnd(0.5, 2.5), SEA.C * 0.9, 1.1, 0.7 + st.H * 0.15, 1, 1, 1, 0.16, 0.6, 0.15);
+        } else if (st.a < 0 && st.a > -0.6 && st.s > 0.85 && Math.random() < 0.3) {
+          Fx.emit(x, st.H + 0.1, w.zw + 0.2, 0, rnd(0.5, 1.5), SEA.C * 0.6 - 2, 0.7, 0.15, 1, 1, 1, 0.4, 1, 0.3);   // feathering crest
+        }
+      }
+    }
+  },
+
+  /* ---------------- camera ---------------- */
+  snapCam() { this.camera(1 / 60, true); },
+  camera(dt, snap) {
+    const S = Surfer, P = S.pos, q = S.q || {};
+    const eye = V3(), tgt = V3();
+    let k = 3.5, kt = 6;
+    const ride = S.mode === 'ride' || S.mode === 'popup' || S.mode === 'air';
+    const zr = q.wave ? P.z - q.zw : 99;
+    const catching = S.mode === 'prone' && q.wave && zr > -1 && zr < 7 && S.vz > 2.6 && S.hz() > 0.3;
+    const setNear = this.main && S.mode === 'prone' && this.main.zw < P.z && P.z - this.main.zw < 45 && S.hz() > 0.2;
+    this.tubeCam = damp(this.tubeCam, S.covered ? 1 : 0, 2.5, dt);
+    if (ride) {
+      let dx = S.vx, dz = S.vz - SEA.C;
+      const l = Math.hypot(dx, dz);
+      if (l > 1) { dx /= l; dz /= l; damp3(this.camDir, dx, 0, dz * 0.6, 2.2, dt); }
+      // in front of the wave, a little behind the rider: the face, the rider and the
+      // curl chasing them are all in shot. In the tube it tucks in behind, under the lip.
+      const c = this.camDir, tc = this.tubeCam, wz = q.wave ? q.zw : P.z - 1.5;
+      const back = lerp(4.6, 2.6, tc);
+      // under the lip: keep the camera below the ceiling over the rider
+      // inside: sit near the middle of the barrel, wherever the rider is on the wall
+      const mid = q.covered && isFinite(q.ceil) ? (q.ceil + q.yT) * 0.5 : P.y + 0.95;
+      const h = lerp(1.7, clamp(mid - P.y, -0.6, 0.95), tc);
+      // tube: hug the wall (the column behind is further into its collapse, so stay deep)
+      const sx = Math.sign(c.x) || 1, ax = lerp(c.x, sx, tc), az = lerp(c.z, 0, tc);
+      const ex = P.x - ax * back, ey = P.y + h;
+      const tz = tc > 0.01 && q.wave ? this.tubeEyeZ(q.wave, ex, ey, P.z) : P.z;
+      const ez = lerp(Math.max(P.z + 4.2, wz + 6.5), tz, tc);
+      V3.set(eye, ex, ey, ez);
+      V3.set(tgt, P.x + ax * 6, P.y + lerp(0.5, 0.8, tc), lerp(P.z + az * 6 - 0.6, P.z + 0.4, tc));
+      k = 5; this.camMode = 'ride';
+    } else if (S.mode === 'wipe') {
+      const a = Ocean.t * 0.4;
+      V3.set(eye, P.x + Math.cos(a) * 6, Math.max(P.y, 0) + 3.5, P.z + Math.sin(a) * 6 - 2);
+      V3.set(tgt, P.x, P.y + 0.5, P.z); k = 2; this.camMode = 'wipe';
+    } else if (catching) {
+      V3.set(eye, P.x - S.hx() * 4.5, P.y + 3.4, P.z - S.hz() * 4.5);
+      V3.set(tgt, P.x + S.hx() * 6, P.y - 0.6, P.z + S.hz() * 6); k = 3; this.camMode = 'catch';
+    } else if (setNear) {
+      // side-on: watch the set stand up behind you
+      const s = this.sideSign;
+      V3.set(eye, P.x + s * 9, P.y + 3.6, P.z - 5.5);
+      V3.set(tgt, P.x - s * 1.5, P.y + 0.8, P.z + 1.5); k = 2.2; this.camMode = 'side';
+    } else {
+      const hx = S.hx(), hz = S.hz();
+      V3.set(eye, P.x - hx * 6.2, P.y + 2.7, P.z - hz * 6.2);
+      V3.set(tgt, P.x + hx * 14, P.y + 0.6, P.z + hz * 14); k = 3; this.camMode = 'paddle';
+    }
+    if (snap) { V3.set(Cam.pos, eye.x, eye.y, eye.z); V3.set(Cam.tgt, tgt.x, tgt.y, tgt.z); }
+    else {
+      Cam.pos.x = damp(Cam.pos.x, eye.x, k, dt); Cam.pos.y = damp(Cam.pos.y, eye.y, k, dt); Cam.pos.z = damp(Cam.pos.z, eye.z, k, dt);
+      Cam.tgt.x = damp(Cam.tgt.x, tgt.x, kt, dt); Cam.tgt.y = damp(Cam.tgt.y, tgt.y, kt, dt); Cam.tgt.z = damp(Cam.tgt.z, tgt.z, kt, dt);
+    }
+    // stay out of the water (but the tube cam may sit under the lip)
+    // (inside the tube the lip is overhead: trust the framing instead)
+    if (this.tubeCam < 0.3) {
+      const w = Ocean.sheet(Cam.pos.x, Cam.pos.z, undefined, this._cq || (this._cq = {}));
+      if (Cam.pos.y < w.y + 0.7) Cam.pos.y = w.y + 0.7;
+    }
+    Cam.shake = Math.max(0, Cam.shake - dt * 2);
+    if (S.inTube) Cam.shake = Math.max(Cam.shake, 0.05);
+  },
+
+  /* inside the barrel at column x, height y: between the wall and the falling curtain */
+  _tp: null,
+  tubeEyeZ(w, x, y, fallback) {
+    const P = this._tp || (this._tp = Profile());
+    Ocean.profile(w, x, P);
+    let wallZ = null;
+    for (let k = I_WALL; k < I_FRONT; k++) {
+      const y0 = P.y[k], y1 = P.y[k + 1];
+      if ((y - y0) * (y - y1) <= 0 && y0 !== y1) { wallZ = P.z[k] + (P.z[k + 1] - P.z[k]) * (y - y0) / (y1 - y0); break; }
+    }
+    if (wallZ === null) return fallback;
+    const room = P.tipZ - wallZ;
+    return room > 1.2 ? wallZ + Math.min(0.9, room * 0.4) : wallZ + 0.6;
+  },
+
+  /* ---------------- hooks from the surfer ---------------- */
+  say(text, cls = '', t = 1.6) { this.flash = text; this.flashCls = cls; this.flashT = t; },
+  onDuckedUnder() { this.say('Under it!', 'go', 0.9); },
+  onWashed() { Sfx.splash(1); Cam.shake = 0.5; this.say('Caught inside! <small>duck dive (Space) just before the whitewater hits</small>', 'warn', 2.2); },
+  onTooEarly() { this.say('Not yet — keep paddling', 'warn', 1); },
+  onDuck() { Sfx.splash(0.5); },
+  onPopUp(steep) {
+    this.riding = true; this.rideScore = 0; Sfx.splash(0.7);
+    if (this.main && Surfer.rideWave !== this.main) this.main = Surfer.rideWave;
+    if (steep > 0.75) this.trick('Late drop', 300);
+    this.say('Up and riding! <small>A / D to trim · S to stall for the barrel · W to pump</small>', 'go', 2.4);
+  },
+  onPump() { Sfx.stroke(); },
+  ridePts(p) { this.rideScore += p; },
+  trick(name, pts) {
+    this.rideScore += pts;
+    if (!this.bestMove || pts > this.bestMove.pts) this.bestMove = { name, pts };
+    const el = $('trick');
+    $('trickName').textContent = name; $('trickPts').textContent = '+' + pts.toLocaleString();
+    el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+  },
+  onTubeIn() { Sfx.splash(0.3); },
+  onTubeOut(t) {
+    if (t < 0.35) return;
+    this.bestTube = Math.max(this.bestTube, t);
+    this.trick((t > 2.5 ? 'Deep tube ' : 'Tube ride ') + t.toFixed(1) + ' s', Math.round((450 * t + 220 * t * t) / 10) * 10);
+  },
+  onAir() { Sfx.splash(0.4); },
+  onLand() { Sfx.splash(0.8); Cam.shake = 0.15; },
+  onWipe(reason, wasRiding) {
+    this.wipes++; Sfx.splash(1.3); Cam.shake = 0.7;
+    $('underTxt').firstChild.textContent = reason.toUpperCase();
+    $('under').classList.add('on');
+    if (wasRiding) this.endWave(reason, true);
+  },
+  onSurface() { $('under').classList.remove('on'); },
+  onRideEnd(reason) { this.endWave(reason, false); },
+  endWave(reason, wiped) {
+    if (!this.riding) return;
+    this.riding = false;
+    const s = Math.round(this.rideScore * (wiped ? 0.5 : 1) / 10) * 10;
+    this.scores.push(s); this.total += s; this.waveIdx++;
+    this.main = null; this.setT = 6; this.boreT = 3;
+    this.banner = (wiped ? reason + ' — half points' : reason) + ': ' + s.toLocaleString();
+    if (!wiped && Surfer.pos.z > SEA.START_Z) this.respawnT = 2.2;   // walk up the beach, back out through the channel
+    this.bannerT = 3.2;
+    if (this.waveIdx >= WAVES) this.endT = 3.2;
+  },
+  over() {
+    this.state = 'over';
+    const nb = this.total > this.best;
+    if (nb) { this.best = this.total; try { localStorage.setItem('swellline.best', String(this.best)); } catch (e) { /* ignore */ } }
+    $('sTotal').textContent = this.total.toLocaleString();
+    $('sBest').textContent = Math.max(0, ...this.scores).toLocaleString();
+    $('sTube').textContent = this.bestTube.toFixed(1) + ' s';
+    $('sSpeed').textContent = Math.round(this.topSpeed * 3.6) + ' km/h';
+    $('sMove').textContent = this.bestMove ? this.bestMove.name : '—';
+    $('sWipes').textContent = this.wipes;
+    $('newbest').style.display = nb ? 'block' : 'none';
+    $('overHead').textContent = this.total > 6000 ? 'PUMPING' : this.total > 2500 ? 'GOOD SESH' : 'KEEP PADDLING';
+    $('over').classList.remove('hide'); $('hud').classList.remove('on'); $('under').classList.remove('on'); document.body.classList.remove('playing');
+  },
+
+  /* ---------------- HUD ---------------- */
+  prompt() {
+    const S = Surfer, P = S.pos, q = S.q || {};
+    if (this.bannerT > 0) return [this.banner, 'go'];
+    if (this.flashT > 0) return [this.flash, this.flashCls];
+    if (S.mode === 'wipe' || S.mode === 'duck' || S.mode === 'air') return ['', ''];
+    if (S.mode === 'ride' || S.mode === 'popup') return S.covered ? ['', ''] : ['', ''];
+    if (this.missedT > 0) return ['Missed it <small>it rolled under you — wait for the next one</small>', 'warn'];
+    if (this.waveIdx >= WAVES) return ['', ''];
+    if (S.canPop()) return ['POP UP! <small>Space</small>', 'go'];
+    const m = this.main;
+    if (m && m.zw < P.z + 2) {
+      const d = P.z - m.zw;
+      if (S.hz() < 0.3) return ['Set wave! Turn around <small>A / D to face the beach · ' + Math.round(d) + ' m</small>', 'warn'];
+      if (d < 11) return ['Paddle! <small>hold W — pop up when it takes you</small>', 'go'];
+      if (d < 17) return ['Get ready… <small>not yet — paddle too soon and you\'ll be under the lip</small>', ''];
+      return ['Set wave coming… <small>face the beach and wait · ' + Math.round(d) + ' m</small>', ''];
+    }
+    for (const w of Ocean.waves) {
+      const d = P.z - w.zw;
+      if (d > 0 && d < 20) { Ocean.stage(w, P.x, Ocean._P); if (Ocean._P.foamAmt > 0.4 || Ocean._P.lam > 0.1) return ['Whitewater! <small>duck dive — Space, just before it hits</small>', 'warn']; }
+    }
+    if (P.z > SEA.LINEUP[1]) return ['Paddle out to the lineup <small>hold W · ' + Math.round(P.z - SEA.LINEUP[1]) + ' m to go</small>', ''];
+    if (P.z < SEA.LINEUP[0] - 8) return ['Too far out <small>paddle back toward the beach a little</small>', ''];
+    return ['In the lineup <small>sit tight — a set is on its way</small>', ''];
+  },
+  hud() {
+    const S = Surfer;
+    const ride = this.riding || S.mode === 'air';
+    $('waveNo').textContent = Math.min(this.waveIdx + 1, WAVES) + ' / ' + WAVES;
+    $('waveSub').textContent = ride ? 'riding' : S.mode === 'wipe' ? 'held down' : S.pos.z > SEA.LINEUP[1] ? 'paddle out' : 'in the lineup';
+    $('total').textContent = this.total.toLocaleString();
+    $('best').textContent = 'BEST ' + this.best.toLocaleString();
+    $('speed').firstChild.textContent = Math.round(S.speed() * 3.6);
+    $('stamFill').style.width = Math.round(S.stamina * 100) + '%';
+    $('waveScore').classList.toggle('on', ride);
+    $('wsVal').textContent = Math.round(this.rideScore).toLocaleString();
+    $('tube').classList.toggle('on', S.inTube && S.tubeT > 0.2);
+    $('tubeT').textContent = S.tubeT.toFixed(1) + ' s';
+    const [txt, cls] = this.prompt();
+    const el = $('prompt');
+    if (el._t !== txt) { el.innerHTML = txt; el._t = txt; }
+    el.className = cls;
+    this.map();
+  },
+  map() {
+    const c = $('map'), g = c.getContext('2d'), W = c.width, H = c.height, P = Surfer.pos;
+    const z0 = -160, z1 = 16, X = 70;
+    const sy = (z) => (z - z0) / (z1 - z0) * H, sx = (x) => W / 2 + (x - P.x) / X * (W / 2);
+    g.clearRect(0, 0, W, H);
+    g.fillStyle = 'rgba(222,196,150,.75)'; g.fillRect(0, sy(SEA.SHORE), W, H);
+    g.fillStyle = 'rgba(95,240,224,.16)'; g.fillRect(0, sy(SEA.LINEUP[0]), W, sy(SEA.LINEUP[1]) - sy(SEA.LINEUP[0]));
+    g.strokeStyle = 'rgba(255,255,255,.25)'; g.setLineDash([5, 6]); g.beginPath(); g.moveTo(0, sy(SEA.ZB)); g.lineTo(W, sy(SEA.ZB)); g.stroke(); g.setLineDash([]);
+    g.font = '600 15px system-ui'; g.fillStyle = 'rgba(95,240,224,.8)'; g.fillText('LINEUP', 6, sy(SEA.LINEUP[0]) + 16);
+    const st = Ocean._P;
+    for (const w of Ocean.waves) {
+      if (w.zw < z0 || w.zw > z1) continue;
+      for (let i = 0; i < W; i += 4) {
+        const x = P.x + (i - W / 2) / (W / 2) * X;
+        Ocean.stage(w, x, st);
+        g.fillStyle = st.foamAmt > 0.4 ? 'rgba(255,255,255,.9)' : st.lam > 0.05 ? '#ffb85c' : w.main ? 'rgba(120,220,255,.9)' : 'rgba(120,200,240,.5)';
+        g.fillRect(i, sy(w.zw) - 1.5, 4, 3 + st.H);
+      }
+    }
+    const hx = Surfer.hx(), hz = Surfer.hz(), px = sx(P.x), py = sy(P.z);
+    g.strokeStyle = '#ffd36a'; g.lineWidth = 3; g.beginPath(); g.moveTo(px, py); g.lineTo(px + hx * 14, py + hz * 14); g.stroke();
+    g.fillStyle = '#ffd36a'; g.beginPath(); g.arc(px, py, 5, 0, TAU); g.fill();
+  }
+};
+
+/* ---------------- input ---------------- */
+const Input = {
+  keys: new Set(), act: false, touch: { on: false, x: 0, y: 0, id: null, ox: 0, oy: 0 }, btn: false,
+  read() {
+    const k = this.keys, t = this.touch;
+    let steer = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
+    let up = k.has('KeyW') || k.has('ArrowUp') ? 1 : 0, down = k.has('KeyS') || k.has('ArrowDown') ? 1 : 0;
+    if (t.on) {
+      const dx = clamp(t.x / 52, -1, 1), dy = clamp(t.y / 52, -1, 1);
+      steer = Math.abs(dx) > 0.15 ? dx : 0; up = Math.max(0, -dy) > 0.25 ? Math.min(1, -dy * 1.3) : 0; down = dy > 0.3 ? dy : 0;
+    }
+    const In = { steer, up, down, actionPressed: this.act };
+    this.act = false;
+    return In;
+  }
+};
+// steering sign: the camera looks along the board, so "right" on the keys turns the board to screen-right
+function steerSign() { return -1; }
+
+addEventListener('keydown', (e) => {
+  if (e.repeat && e.code === 'Space') { e.preventDefault(); return; }
+  Input.keys.add(e.code);
+  if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+  Sfx.start();
+  if (Game.state === 'menu') { Game.start(); return; }
+  if (Game.state === 'over') { if (e.code === 'KeyR' || e.code === 'Space' || e.code === 'Enter') Game.start(); return; }
+  if (e.code === 'KeyP' || e.code === 'Escape') { togglePause(); return; }
+  if (e.code === 'KeyR') { Game.start(); return; }
+  if (e.code === 'KeyM') { Sfx.toggle(); return; }
+  if (e.code === 'Space') Input.act = true;
+});
+addEventListener('keyup', (e) => Input.keys.delete(e.code));
+addEventListener('blur', () => Input.keys.clear());
+function togglePause() {
+  if (Game.state === 'play') { Game.state = 'pause'; $('pause').classList.remove('hide'); }
+  else if (Game.state === 'pause') { Game.state = 'play'; $('pause').classList.add('hide'); }
+}
+
+(function touchSetup() {
+  const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+  if (isTouch) document.body.classList.add('touch');
+  const zone = $('stickZone'), stick = $('stick'), knob = $('knob'), t = Input.touch;
+  zone.addEventListener('pointerdown', (e) => {
+    t.on = true; t.id = e.pointerId; t.ox = e.clientX; t.oy = e.clientY; t.x = t.y = 0;
+    stick.style.display = 'block'; stick.style.left = e.clientX + 'px'; stick.style.top = (e.clientY - zone.getBoundingClientRect().top) + 'px';
+    knob.style.transform = ''; zone.setPointerCapture(e.pointerId);
+  });
+  zone.addEventListener('pointermove', (e) => {
+    if (!t.on || e.pointerId !== t.id) return;
+    t.x = clamp(e.clientX - t.ox, -60, 60); t.y = clamp(e.clientY - t.oy, -60, 60);
+    knob.style.transform = `translate(${t.x}px,${t.y}px)`;
+  });
+  const end = (e) => { if (e.pointerId !== t.id) return; t.on = false; stick.style.display = 'none'; };
+  zone.addEventListener('pointerup', end); zone.addEventListener('pointercancel', end);
+  const b = $('actBtn');
+  b.addEventListener('pointerdown', (e) => { e.preventDefault(); Input.act = true; b.classList.add('down'); });
+  b.addEventListener('pointerup', () => b.classList.remove('down'));
+  b.addEventListener('pointercancel', () => b.classList.remove('down'));
+  $('pauseBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); togglePause(); });
+  for (const id of ['menu', 'over', 'pause']) $(id).addEventListener('pointerdown', () => {
+    Sfx.start();
+    if (Game.state === 'menu' || Game.state === 'over') Game.start();
+    else if (Game.state === 'pause') togglePause();
+  });
+})();
+
+/* ---------------- loop ---------------- */
+let last = performance.now();
+function frame(now) {
+  requestAnimationFrame(frame);
+  let dt = Math.min((now - last) / 1000, 0.1); last = now;
+  const In = Input.read();
+  In.steer *= steerSign();
+  if (Game.manual) return;           // a test harness is stepping and drawing
+  // fixed steps keep the physics identical at any frame rate
+  while (dt > 1e-4) { const h = Math.min(dt, 1 / 60); Game.update(h, In); In.actionPressed = false; dt -= h; }
+  Gfx.frame(Game.state === 'menu' || Game.state === 'over' ? null : Surfer);
+  if (Game.state === 'play') Game.hud();
+}
+try {
+  Gfx.init($('gl'));
+  Game.init();
+  requestAnimationFrame(frame);
+} catch (err) {
+  const f = $('fatal'); f.style.display = 'block'; f.textContent = 'Could not start: ' + (err && err.message || err);
+  console.error(err);
+}
+addEventListener('error', (e) => { const f = $('fatal'); f.style.display = 'block'; f.textContent += '\n' + e.message; });
+
+</script>
+</body>
+</html>
