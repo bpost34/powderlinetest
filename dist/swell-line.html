@@ -2331,8 +2331,12 @@ const Game = {
     const cp = Math.cos(cpit), r = this.camDist * lerp(1, L.zoom, free);
     const ox = Math.sin(cyaw) * cp * r, oy = Math.sin(cpit) * r, oz = Math.cos(cyaw) * cp * r;
     const ty = Math.max(P.y, -0.3) + 0.6;
+    // while the player orbits, pivot on the rider itself: the auto look-ahead offset would
+    // otherwise make the orbit circle a point beside them
+    const orb = L.dragging ? 1 : clamp(Math.max(Math.abs(angDelta(0, L.yaw)) / 0.35, Math.abs(L.pitch) / 0.3), 0, 1);
+    const la = this.lookAhead * (1 - orb * free);
     V3.set(eye, P.x + ox, ty + oy, P.z + oz);
-    V3.set(tgt, P.x + this.ldx * this.lookAhead, ty, P.z + this.ldz * this.lookAhead);
+    V3.set(tgt, P.x + this.ldx * la, ty, P.z + this.ldz * la);
     // the barrel: tuck in behind the rider under the lip (blended in by tubeCam)
     const tc = this.tubeCam;
     if (tc > 0.01 && q.wave) {
