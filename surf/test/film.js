@@ -17,7 +17,7 @@ const srv = http.createServer((q, r) => {
   await pg.addScriptTag({ path: path.join(__dirname, 'bot.js') });
   // drive the game clock ourselves at 1/30 s per frame so slow software GL still plays at game speed
   await pg.evaluate(`(() => { Game.manual = true; Game.start(); window.__bst = {}; window.__t = 0;
-    window.TUBE = '${stage}' === 'tube'; if ('${stage}' === 'set' || TUBE) { Ocean.reset(); Surfer.reset(0, -121); Surfer.yaw = 0; Game.main = Ocean.spawn({ zw: SEA.ZB - 30, H0: 3.1, xPeak: -5, vp: 6.5, main: true }); Game.sideSign = 1; Game.snapCam(); }
+    window.TUBE = '${stage}' === 'tube'; if ('${stage}' === 'set' || '${stage}' === 'setL' || TUBE) { Ocean.reset(); Surfer.reset(0, -121); Surfer.yaw = 0; const pk = '${stage}' === 'setL' ? 5 : -5; Game.main = Ocean.spawn({ zw: SEA.ZB - 30, H0: 3.1, xPeak: pk, vp: 6.5, main: true }); Game.sideSign = pk < 0 ? 1 : -1; Surfer.sitMode = true; Game.snapCam(); }
     if ('${stage}' === 'deep') { Ocean.reset(); const w = Ocean.spawn({ zw: -125, H0: 3.2, xPeak: 0, vp: 6.5, main: true, sec: 0 }); Ocean.t = w.tb0 + 2.5; w.zw = SEA.ZB + 5.2 * 2.5;
       const x = 6.5 * (2.5 - 0.45); Surfer.reset(x, w.zw + 1.3); Surfer.mode = 'ride'; Surfer.rideWave = w; Game.main = w; Game.riding = true; Surfer.yaw = 0.92; Surfer.vx = 6.6; Surfer.vz = 5.2; V3.set(Game.camDir, 1, 0, 0); Game.tubeCam = 1; Surfer.step(1/60, {steer:0,up:0,down:0,actionPressed:false}); Game.snapCam(); }
     if ('${stage}' === 'pocket') { Ocean.reset(); const w = Ocean.spawn({ zw: -125, H0: 3.1, xPeak: 0, vp: 6.5, main: true, sec: 0.3, ph: 0 }); Ocean.t = w.tb0 + 2.2; w.zw = SEA.ZB + 5.2 * 2.2;
