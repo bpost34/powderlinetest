@@ -83,25 +83,85 @@
   #newbest{color:var(--gold);font-weight:800;letter-spacing:.14em;margin-bottom:14px}
   #back{margin-top:26px;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);text-decoration:none}
 
-  /* touch */
-  #touch{position:fixed;inset:0;pointer-events:none;display:none}
+  /* ---------- touch controls (Powder Line's scheme): thumbstick + A/B/X/Y, both movable ---------- */
+  #touch{position:fixed;inset:0;pointer-events:none;display:none;z-index:5;
+    --gx:max(18px,env(safe-area-inset-right));--gl:max(18px,env(safe-area-inset-left));
+    --gb:max(20px,env(safe-area-inset-bottom));--stick:min(150px,37vw);--dia:min(172px,44vw);--fb:calc(var(--dia) * .34)}
   body.touch.playing #touch{display:block}
   body.touch .kb-only{display:none}
   body:not(.touch) .touch-only{display:none}
-  #stickZone{position:absolute;left:0;bottom:0;width:50%;height:62%;pointer-events:auto}
-  #stick{position:absolute;width:128px;height:128px;margin:-64px 0 0 -64px;border-radius:50%;border:2px solid rgba(200,240,255,.35);
-    background:rgba(10,30,44,.25);display:none}
-  #knob{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;background:rgba(220,250,255,.55)}
-  #actBtn{position:absolute;right:max(26px,env(safe-area-inset-right));bottom:max(34px,env(safe-area-inset-bottom));width:96px;height:96px;
-    border-radius:50%;border:2px solid var(--accent);background:rgba(10,40,52,.5);color:var(--accent);pointer-events:auto;
-    display:flex;align-items:center;justify-content:center;font:800 13px/1.1 inherit;letter-spacing:.1em;text-align:center}
-  #actBtn.down{background:rgba(95,240,224,.35)}
-  #pauseBtn{position:absolute;left:50%;margin-left:-21px;top:max(10px,env(safe-area-inset-top));width:42px;height:42px;border-radius:50%;border:1px solid var(--line);
-    background:var(--panel);color:#fff;pointer-events:auto;font-size:14px;display:flex;align-items:center;justify-content:center}
-  body.touch #map{top:auto;bottom:150px;right:16px;width:96px;height:140px}
+  .tbtn{position:absolute;border-radius:50%;color:#eaf6ff;font-size:11px;letter-spacing:.12em;font-weight:800;
+    pointer-events:auto;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-transform:uppercase;backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);
+    transition:transform .06s,background .06s;touch-action:none}
+  .tbtn small{font-size:7px;letter-spacing:.14em;color:var(--dim);margin-top:1px;font-weight:700}
+  /* movable groups: each cluster sits in a box with a grip above it (hold, then drag) */
+  .tgroup{position:absolute;pointer-events:none;touch-action:none}
+  #gStick{left:var(--gl);bottom:var(--gb);width:var(--stick);height:var(--stick)}
+  #gAbxy{right:var(--gx);bottom:var(--gb);width:var(--dia);height:var(--dia)}
+  .tgrip{position:absolute;left:50%;top:-30px;width:44px;height:22px;margin-left:-22px;border-radius:11px;
+    background:rgba(14,16,22,.45);border:1px solid rgba(255,255,255,.18);pointer-events:auto;touch-action:none;
+    display:flex;align-items:center;justify-content:center;color:rgba(234,246,255,.7);font-size:12px;letter-spacing:1px;
+    transition:transform .12s,background .12s,border-color .12s}
+  .tgrip.armed{background:rgba(95,240,224,.35);border-color:var(--accent);transform:scale(1.15)}
+  .tgroup.moving{filter:drop-shadow(0 0 10px rgba(95,240,224,.75))}
+  .tgroup.moving .tgrip{background:rgba(95,240,224,.55);border-color:var(--accent)}
+  .xbtn{width:var(--fb);height:var(--fb);background:radial-gradient(circle at 50% 38%,rgba(48,52,62,.62),rgba(14,16,22,.62));
+    border:1.5px solid rgba(255,255,255,.16);box-shadow:0 2px 8px rgba(0,0,0,.25)}
+  .xbtn b{font-size:calc(var(--fb) * .40);line-height:1;font-weight:900;letter-spacing:0;color:var(--xc)}
+  .xbtn.held{background:radial-gradient(circle,color-mix(in srgb,var(--xc) 55%,transparent),rgba(14,16,22,.6));
+    border-color:var(--xc);transform:scale(.92)}
+  #xA{--xc:#5fd35a;left:50%;bottom:0;margin-left:calc(var(--fb) / -2)}
+  #xY{--xc:#f5c638;left:50%;top:0;margin-left:calc(var(--fb) / -2)}
+  #xX{--xc:#4c9bff;left:0;top:50%;margin-top:calc(var(--fb) / -2)}
+  #xB{--xc:#ff5a4c;right:0;top:50%;margin-top:calc(var(--fb) / -2)}
+  #steerPad{position:absolute;left:0;top:0;width:var(--stick);height:var(--stick);border-radius:50%;border:1.5px solid rgba(255,255,255,.14);
+    background:radial-gradient(circle,rgba(14,16,22,.30) 0 55%,rgba(14,16,22,.55) 100%);
+    box-shadow:inset 0 2px 10px rgba(0,0,0,.35);pointer-events:auto;touch-action:none;backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+  #steerPad .arr{position:absolute;font-size:13px;line-height:1;color:rgba(220,240,255,.45);pointer-events:none}
+  #steerPad .arr.l{left:10px;top:50%;transform:translateY(-50%)}
+  #steerPad .arr.r{right:10px;top:50%;transform:translateY(-50%)}
+  #steerPad .arr.u,#steerPad .arr.d{left:50%;transform:translateX(-50%);text-align:center;white-space:nowrap}
+  #steerPad .arr.u{top:7px}
+  #steerPad .arr.d{bottom:7px}
+  #steerPad .arr small{display:block;font-size:6.5px;letter-spacing:.14em;text-transform:uppercase;font-weight:700;margin:2px 0}
+  #steerPad.fwd .arr.u,#steerPad.back .arr.d{color:var(--accent)}
+  #steerKnob{position:absolute;left:50%;top:50%;width:62px;height:62px;margin:-31px 0 0 -31px;border-radius:50%;
+    background:radial-gradient(circle at 50% 45%,#2a2e37 0 38%,#3a3f4b 39% 58%,#20232b 60%);
+    border:2px solid rgba(255,255,255,.18);box-shadow:0 4px 10px rgba(0,0,0,.45);pointer-events:none;will-change:transform}
+  #steerPad.fwd #steerKnob,#steerPad.back #steerKnob{border-color:rgba(95,240,224,.7)}
+  /* small round buttons, top centre: pause / restart / mute */
+  #sbtns{position:absolute;left:50%;top:max(10px,env(safe-area-inset-top));transform:translateX(-50%);display:flex;gap:8px;pointer-events:none}
+  .sbtn{position:static;width:38px;height:38px;font-size:14px;letter-spacing:0;border:1px solid var(--line);background:var(--panel)}
+  .sbtn.held{background:rgba(95,240,224,.32)}
+  #tM.off{color:var(--dim);text-decoration:line-through}
+  /* the HUD makes room: speed goes up under the wave count, the score drops below the buttons */
+  body.touch .corner.bl{bottom:auto;top:92px;padding-top:0}
+  body.touch #speed{font-size:36px}
+  body.touch #waveScore{top:58px}
+  @media (orientation:landscape) and (min-height:501px){ body.touch #prompt{bottom:calc(var(--stick, 150px) + 44px)} }
+  /* control-layout editor (menu → Controls): drag the clusters directly */
+  #ctrlBtn,#pLayout{margin-top:6px;margin-bottom:16px;min-height:42px;padding:0 20px;border-radius:22px;border:1.5px solid rgba(190,225,255,.4);
+    background:rgba(10,22,38,.45);color:#eaf6ff;font:800 11px/1 inherit;font-family:inherit;letter-spacing:.16em;text-transform:uppercase;touch-action:manipulation}
+  #pLayout{margin-top:18px}
+  #layoutBar{position:fixed;left:50%;top:max(14px,env(safe-area-inset-top));transform:translateX(-50%);z-index:8;
+    display:none;align-items:center;gap:10px;padding:8px 8px 8px 16px;border-radius:24px;max-width:calc(100vw - 32px);
+    background:rgba(10,22,38,.78);border:1.5px solid rgba(190,225,255,.35);color:#eaf6ff;font-size:12px;font-weight:700;letter-spacing:.04em}
+  #layoutBar span{flex:1;min-width:0;white-space:nowrap}
+  #layoutBar button{min-height:40px;padding:0 16px;border-radius:20px;border:1.5px solid rgba(190,225,255,.4);background:rgba(10,22,38,.5);
+    color:#eaf6ff;font:800 11px/1 inherit;font-family:inherit;letter-spacing:.14em;text-transform:uppercase;touch-action:manipulation}
+  #layoutBar #lDone{border-color:var(--accent);color:var(--accent)}
+  body.editLayout #layoutBar{display:flex}
+  body.editLayout #touch{display:block}
+  body.editLayout #menu, body.editLayout #sbtns{display:none!important}
+  body.editLayout .tgroup{pointer-events:auto;cursor:grab;border-radius:24px;outline:2px dashed rgba(95,240,224,.55);outline-offset:8px}
+  body.editLayout .tgroup *{pointer-events:none!important}
   @media (max-width:700px){ .corner{padding:14px 16px} #speed{font-size:40px} #total{font-size:26px} #waveNo{font-size:24px}
     #prompt{bottom:140px;font-size:16px}
-    body.touch #waveScore{top:64px} #map{top:96px;width:92px;height:136px} .stats{grid-template-columns:repeat(2,1fr)} }
+    #map{top:96px;width:92px;height:136px} body.touch #map{top:150px} .stats{grid-template-columns:repeat(2,1fr)} }
+  /* short landscape phones: the menu has to fit without scrolling */
+  @media (max-height:500px){ .screen{justify-content:safe center;padding:14px 24px} h1{font-size:clamp(34px,9vh,56px);margin:6px 0 8px}
+    .sub{display:none} .keys{gap:5px 14px;margin-bottom:10px;font-size:12.5px} #ctrlBtn{margin:0 0 10px;min-height:36px} }
   @media (orientation:portrait){ #prompt{bottom:auto;top:118px} #trick{top:30%} }
   @media (orientation:landscape) and (max-height:500px){ #prompt{bottom:auto;top:64px} #tube{top:30%} }
   /* which way the wave will peel: an arrow pointing along the open face */
@@ -141,13 +201,21 @@
   <div id="dirCue"><div id="dirArrow">➜</div><div id="dirTxt">it peels this way</div></div>
 </div>
 <div id="fade"></div>
-<div id="under"><div id="underTxt">HELD DOWN<small><span class="kb-only">mash SPACE</span><span class="touch-only">mash the button</span> to swim up</small></div></div>
+<div id="under"><div id="underTxt">HELD DOWN<small><span class="kb-only">mash SPACE</span><span class="touch-only">mash A</span> to swim up</small></div></div>
 
 <div id="touch">
-  <div id="stickZone"><div id="stick"><div id="knob"></div></div></div>
-  <div id="actBtn">ACTION</div>
-  <div id="pauseBtn">❚❚</div>
+  <div class="tgroup" id="gStick"><div class="tgrip" title="Hold, then drag to move">⠿</div>
+    <div id="steerPad"><span class="arr l">◀</span><span class="arr r">▶</span><span class="arr u">▲<small>pump</small></span><span class="arr d"><small>stall</small>▼</span><div id="steerKnob"></div></div>
+  </div>
+  <div class="tgroup" id="gAbxy"><div class="tgrip" title="Hold, then drag to move">⠿</div>
+    <div class="tbtn xbtn" id="xY"><b>Y</b><small>pump</small></div>
+    <div class="tbtn xbtn" id="xX"><b>X</b><small>view</small></div>
+    <div class="tbtn xbtn" id="xB"><b>B</b><small>stall</small></div>
+    <div class="tbtn xbtn" id="xA"><b>A</b><small>pop · air</small></div>
+  </div>
+  <div id="sbtns"><div class="tbtn sbtn" id="tP" title="Pause">❚❚</div><div class="tbtn sbtn" id="tR" title="Restart">↺</div><div class="tbtn sbtn" id="tM" title="Sound">♪</div></div>
 </div>
+<div id="layoutBar"><span>Drag to move</span><button type="button" id="lReset">Reset</button><button type="button" id="lDone">Done</button></div>
 
 <div class="screen" id="menu">
   <div class="eyebrow">WebGL2 · no engine · no assets</div>
@@ -164,10 +232,12 @@
     <div><i class="key">P</i> <i class="key">R</i> <i class="key">M</i></div><div>Pause · restart · mute</div>
   </div>
   <div class="keys touch-only">
-    <div><i class="key">ACTION</i></div><div>Pop up as the wave lifts you · launch off the lip</div>
-    <div><i class="key">L thumb</i></div><div>Drag: ◀ ▶ carve · ▲ pump · ▼ stall</div>
-    <div><i class="key">swipe</i></div><div>Swipe open screen to look around</div>
+    <div><i class="key">A</i></div><div>Pop up as the wave lifts you · launch off the lip</div>
+    <div><i class="key">stick</i></div><div>◀ ▶ carve · ▲ pump · ▼ stall</div>
+    <div><i class="key">Y</i> <i class="key">B</i></div><div>Pump · stall (same as the stick)</div>
+    <div><i class="key">X</i> / <i class="key">swipe</i></div><div>Reset view · swipe open screen to look around</div>
   </div>
+  <button type="button" id="ctrlBtn" class="touch-only">⠿ Controls</button>
   <div class="go"><span class="kb-only">press any key to paddle in</span><span class="touch-only">tap to start</span></div>
   <a id="back" href="../">← back to Powder Line (snowboarding)</a>
 </div>
@@ -191,6 +261,7 @@
   <div class="eyebrow">paused</div>
   <h1 style="font-size:clamp(34px,7vw,70px)">FLAT<br>SPELL</h1>
   <div class="go"><span class="kb-only">press P to resume · R to restart</span><span class="touch-only">tap to resume</span></div>
+  <button type="button" id="pLayout" class="touch-only">⠿ Reset controls</button>
 </div>
 
 <div id="fatal"></div>
@@ -2181,7 +2252,7 @@ const Game = {
     this.endT = 0; this.missedT = 0; this.respawnT = 0; $('fade').classList.remove('on');
     this.state = 'play'; Look.recenter();
     $('menu').classList.add('hide'); $('over').classList.add('hide'); $('pause').classList.add('hide');
-    $('hud').classList.add('on'); $('under').classList.remove('on'); document.body.classList.add('playing');
+    $('hud').classList.add('on'); $('under').classList.remove('on'); document.body.classList.add('playing'); TouchLayout.apply();
     this.snapCam();
   },
 
@@ -2566,15 +2637,19 @@ const Look = {
 
 /* ---------------- input ---------------- */
 const Input = {
-  keys: new Set(), act: false, touch: { on: false, x: 0, y: 0, id: null, ox: 0, oy: 0 }, btn: false,
+  keys: new Set(), act: false, btn: false,
+  stick: null,          // touch thumbstick { x, y } in -1..1 while a thumb is on it
+  down: {},             // touch buttons held: pump / stall
   read() {
-    const k = this.keys, t = this.touch;
+    const k = this.keys, t = this.stick, d = this.down;
     let steer = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
     let up = k.has('KeyW') || k.has('ArrowUp') ? 1 : 0, down = k.has('KeyS') || k.has('ArrowDown') ? 1 : 0;
-    if (t.on) {
-      const dx = clamp(t.x / 52, -1, 1), dy = clamp(t.y / 52, -1, 1);
-      steer = Math.abs(dx) > 0.15 ? dx : 0; up = Math.max(0, -dy) > 0.25 ? Math.min(1, -dy * 1.3) : 0; down = dy > 0.3 ? dy : 0;
+    if (t) {
+      steer = Math.abs(t.x) > 0.12 ? t.x : 0;
+      up = Math.max(up, -t.y > 0.3 ? Math.min(1, -t.y * 1.3) : 0); down = Math.max(down, t.y > 0.3 ? t.y : 0);
     }
+    if (d.pump) up = 1;
+    if (d.stall) down = 1;
     const In = { steer, up, down, actionPressed: this.act, action: k.has('Space') || this.btn };
     this.act = false;
     return In;
@@ -2587,6 +2662,7 @@ addEventListener('keydown', (e) => {
   if (e.repeat && e.code === 'Space') { e.preventDefault(); return; }
   Input.keys.add(e.code);
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+  if (TouchLayout.editing) { if (e.code === 'Escape' || e.code === 'Enter') TouchLayout.closeEditor(); return; }
   Sfx.start();
   if (Game.state === 'menu') { Game.start(); return; }
   if (Game.state === 'over') { if (e.code === 'KeyR' || e.code === 'Space' || e.code === 'Enter') Game.start(); return; }
@@ -2604,32 +2680,185 @@ function togglePause() {
 }
 
 (function touchSetup() {
-  const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
-  if (isTouch) document.body.classList.add('touch');
-  const zone = $('stickZone'), stick = $('stick'), knob = $('knob'), t = Input.touch;
-  zone.addEventListener('pointerdown', (e) => {
-    t.on = true; t.id = e.pointerId; t.ox = e.clientX; t.oy = e.clientY; t.x = t.y = 0;
-    stick.style.display = 'block'; stick.style.left = e.clientX + 'px'; stick.style.top = (e.clientY - zone.getBoundingClientRect().top) + 'px';
-    knob.style.transform = ''; zone.setPointerCapture(e.pointerId);
+  const enable = () => document.body.classList.add('touch');
+  if (matchMedia('(pointer: coarse)').matches || (navigator.maxTouchPoints > 0 && !matchMedia('(hover: hover)').matches)) enable();
+  addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') enable(); }, true);
+  // no browser zoom while playing: a thumb on the stick plus one on a button can read as a pinch
+  const noZoom = (e) => e.preventDefault();
+  for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, noZoom, { passive: false });
+  document.addEventListener('touchmove', (e) => { if (e.cancelable) e.preventDefault(); }, { passive: false });
+  document.addEventListener('dblclick', noZoom, { passive: false });
+
+  // buttons: hold-to-act, multi-touch safe (each button captures its own finger)
+  const hold = (id, on, off) => {
+    const el = $(id);
+    const press = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      try { el.setPointerCapture(e.pointerId); } catch (_) { }
+      Sfx.start(); el.classList.add('held'); on();
+    };
+    const lift = () => { if (!el.classList.contains('held')) return; el.classList.remove('held'); if (off) off(); };
+    el.addEventListener('pointerdown', press);
+    el.addEventListener('pointerup', lift); el.addEventListener('pointercancel', lift);
+    el.addEventListener('lostpointercapture', lift);
+  };
+  hold('xA', () => { Input.act = true; Input.btn = true; }, () => { Input.btn = false; });
+  hold('xY', () => { Input.down.pump = true; }, () => { Input.down.pump = false; });
+  hold('xB', () => { Input.down.stall = true; }, () => { Input.down.stall = false; });
+  hold('xX', () => Look.recenter());
+  hold('tP', () => togglePause());
+  hold('tR', () => { if (Game.state === 'play' || Game.state === 'pause') { $('pause').classList.add('hide'); Game.start(); } });
+  hold('tM', () => $('tM').classList.toggle('off', Sfx.toggle()));
+
+  // thumbstick: x = carve, push up = pump, pull down = stall
+  const pad = $('steerPad'), knob = $('steerKnob');
+  let padId = null;
+  const steerAt = (e) => {
+    const r = pad.getBoundingClientRect();
+    const half = Math.max(30, Math.min(r.width, r.height) / 2 - 22);
+    let x = (e.clientX - (r.left + r.width / 2)) / half, y = (e.clientY - (r.top + r.height / 2)) / half;
+    const m = Math.hypot(x, y);
+    if (m > 1) { x /= m; y /= m; }                       // knob stays inside the ring
+    knob.style.transform = 'translate(' + (x * half).toFixed(0) + 'px,' + (y * half).toFixed(0) + 'px)';
+    Input.stick = { x, y };
+    pad.classList.toggle('fwd', y < -0.3); pad.classList.toggle('back', y > 0.3);
+  };
+  const release = () => { padId = null; Input.stick = null; knob.style.transform = ''; pad.classList.remove('fwd', 'back'); };
+  pad.addEventListener('pointerdown', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    try { pad.setPointerCapture(e.pointerId); } catch (_) { }
+    Sfx.start(); padId = e.pointerId; steerAt(e);
   });
-  zone.addEventListener('pointermove', (e) => {
-    if (!t.on || e.pointerId !== t.id) return;
-    t.x = clamp(e.clientX - t.ox, -60, 60); t.y = clamp(e.clientY - t.oy, -60, 60);
-    knob.style.transform = `translate(${t.x}px,${t.y}px)`;
-  });
-  const end = (e) => { if (e.pointerId !== t.id) return; t.on = false; stick.style.display = 'none'; };
-  zone.addEventListener('pointerup', end); zone.addEventListener('pointercancel', end);
-  const b = $('actBtn');
-  b.addEventListener('pointerdown', (e) => { e.preventDefault(); Input.act = true; Input.btn = true; b.classList.add('down'); });
-  const up = () => { Input.btn = false; b.classList.remove('down'); };
-  b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
-  $('pauseBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); togglePause(); });
+  pad.addEventListener('pointermove', (e) => { if (e.pointerId === padId) steerAt(e); });
+  pad.addEventListener('pointerup', release); pad.addEventListener('pointercancel', release);
+  pad.addEventListener('lostpointercapture', release);
+
   for (const id of ['menu', 'over', 'pause']) $(id).addEventListener('pointerdown', () => {
+    if (TouchLayout.editing) return;
     Sfx.start();
     if (Game.state === 'menu' || Game.state === 'over') Game.start();
     else if (Game.state === 'pause') togglePause();
   });
 })();
+
+/* ---------------- movable touch controls (as in Powder Line) ----------------
+   Each cluster (stick, A/B/X/Y) has a grip above it: press and hold ~0.3 s until it
+   lights up, then drag the cluster anywhere and let go. Or arrange them from the menu
+   (Controls). Positions are saved per orientation as fractions of the screen;
+   "Reset controls" on the pause screen restores the defaults. */
+const TouchLayout = {
+  KEY: 'swellline.touchLayout',
+  HOLD_MS: 300,
+  IDS: ['gStick', 'gAbxy'],
+  saved: {},
+  editing: false,
+  orient() { return innerWidth > innerHeight ? 'land' : 'port'; },
+
+  init() {
+    try { this.saved = JSON.parse(localStorage.getItem(this.KEY) || '{}') || {}; } catch (e) { this.saved = {}; }
+    for (const id of this.IDS) this.bind($(id));
+    addEventListener('resize', () => this.apply());
+    // keep these taps from reaching the screen underneath (which would start / resume)
+    const stop = (el) => { for (const t of ['pointerdown', 'click', 'touchstart', 'mousedown']) el.addEventListener(t, (e) => e.stopPropagation()); };
+    const cb = $('ctrlBtn');
+    stop(cb); cb.addEventListener('click', () => { this.openEditor(); cb.blur(); });
+    stop($('layoutBar'));
+    $('lDone').addEventListener('click', () => this.closeEditor());
+    $('lReset').addEventListener('click', () => this.reset());
+    const rb = $('pLayout');
+    stop(rb); rb.addEventListener('click', () => { this.reset(); rb.blur(); });
+    this.apply();
+  },
+
+  /* place every group: saved centre (fractions of the screen) or the CSS default */
+  apply() {
+    const b = document.body.classList;
+    if (!b.contains('playing') && !b.contains('editLayout')) return;   // hidden: nothing to measure yet
+    const o = this.saved[this.orient()] || {};
+    for (const id of this.IDS) {
+      const g = $(id), c = o[id];
+      if (!c) { g.style.left = g.style.top = g.style.right = g.style.bottom = ''; continue; }
+      this.place(g, c[0] * innerWidth, c[1] * innerHeight);
+    }
+  },
+
+  /* centre a group at (x, y), kept fully on screen (grip included) */
+  place(g, x, y) {
+    const w = g.offsetWidth, h = g.offsetHeight, pad = 8;
+    x = clamp(x, w / 2 + pad, innerWidth - w / 2 - pad);
+    y = clamp(y, h / 2 + 34, innerHeight - h / 2 - pad);
+    g.style.right = g.style.bottom = 'auto';
+    g.style.left = (x - w / 2) + 'px'; g.style.top = (y - h / 2) + 'px';
+    return [x, y];
+  },
+
+  bind(g) {
+    const grip = g.querySelector('.tgrip');
+    let id = null, timer = 0, moving = false, dx = 0, dy = 0, last = null, sx = 0, sy = 0, dragged = false;
+    const end = () => {
+      clearTimeout(timer);
+      dragged = false;
+      if (moving && last) {
+        const o = this.saved[this.orient()] || (this.saved[this.orient()] = {});
+        o[g.id] = [last[0] / innerWidth, last[1] / innerHeight];
+        try { localStorage.setItem(this.KEY, JSON.stringify(this.saved)); } catch (e) { }
+      }
+      id = null; moving = false; last = null;
+      grip.classList.remove('armed'); g.classList.remove('moving');
+    };
+    const grab = (e) => {
+      const r = g.getBoundingClientRect();
+      dx = e.clientX - (r.left + r.width / 2); dy = e.clientY - (r.top + r.height / 2);
+    };
+    // editor: grab the whole cluster straight away (no hold needed)
+    g.addEventListener('pointerdown', (e) => {
+      if (!this.editing) return;
+      e.preventDefault(); e.stopPropagation();
+      try { g.setPointerCapture(e.pointerId); } catch (_) { }
+      id = e.pointerId; moving = true; g.classList.add('moving');
+      sx = e.clientX; sy = e.clientY; dragged = false; grab(e);
+    });
+    g.addEventListener('pointermove', (e) => {
+      if (!this.editing || e.pointerId !== id || !moving) return;
+      if (!dragged && Math.hypot(e.clientX - sx, e.clientY - sy) < 8) return;   // still a tap
+      dragged = true;
+      last = this.place(g, e.clientX - dx, e.clientY - dy);
+    });
+    g.addEventListener('pointerup', end); g.addEventListener('pointercancel', end);
+    // in play: hold the grip to unlock, then drag
+    grip.addEventListener('pointerdown', (e) => {
+      if (this.editing) return;                      // the group handler takes it
+      e.preventDefault(); e.stopPropagation();
+      try { grip.setPointerCapture(e.pointerId); } catch (_) { }
+      id = e.pointerId; grab(e);
+      grip.classList.add('armed');
+      timer = setTimeout(() => { moving = true; g.classList.add('moving'); }, this.HOLD_MS);
+    });
+    grip.addEventListener('pointermove', (e) => {
+      if (e.pointerId !== id || !moving) return;
+      last = this.place(g, e.clientX - dx, e.clientY - dy);
+    });
+    grip.addEventListener('pointerup', end); grip.addEventListener('pointercancel', end);
+    grip.addEventListener('lostpointercapture', end);
+  },
+
+  openEditor() {
+    if (Game.state !== 'menu') return;
+    this.editing = true;
+    document.body.classList.add('editLayout');
+    this.apply();
+  },
+  closeEditor() {
+    this.editing = false;
+    document.body.classList.remove('editLayout');
+  },
+  reset() {
+    delete this.saved[this.orient()];
+    try { localStorage.setItem(this.KEY, JSON.stringify(this.saved)); } catch (e) { }
+    this.apply();
+  }
+};
+TouchLayout.init();
 
 /* ---------------- loop ---------------- */
 let last = performance.now();

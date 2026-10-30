@@ -35,7 +35,7 @@ const Game = {
     this.endT = 0; this.missedT = 0; this.respawnT = 0; $('fade').classList.remove('on');
     this.state = 'play'; Look.recenter();
     $('menu').classList.add('hide'); $('over').classList.add('hide'); $('pause').classList.add('hide');
-    $('hud').classList.add('on'); $('under').classList.remove('on'); document.body.classList.add('playing');
+    $('hud').classList.add('on'); $('under').classList.remove('on'); document.body.classList.add('playing'); TouchLayout.apply();
     this.snapCam();
   },
 
@@ -420,15 +420,19 @@ const Look = {
 
 /* ---------------- input ---------------- */
 const Input = {
-  keys: new Set(), act: false, touch: { on: false, x: 0, y: 0, id: null, ox: 0, oy: 0 }, btn: false,
+  keys: new Set(), act: false, btn: false,
+  stick: null,          // touch thumbstick { x, y } in -1..1 while a thumb is on it
+  down: {},             // touch buttons held: pump / stall
   read() {
-    const k = this.keys, t = this.touch;
+    const k = this.keys, t = this.stick, d = this.down;
     let steer = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
     let up = k.has('KeyW') || k.has('ArrowUp') ? 1 : 0, down = k.has('KeyS') || k.has('ArrowDown') ? 1 : 0;
-    if (t.on) {
-      const dx = clamp(t.x / 52, -1, 1), dy = clamp(t.y / 52, -1, 1);
-      steer = Math.abs(dx) > 0.15 ? dx : 0; up = Math.max(0, -dy) > 0.25 ? Math.min(1, -dy * 1.3) : 0; down = dy > 0.3 ? dy : 0;
+    if (t) {
+      steer = Math.abs(t.x) > 0.12 ? t.x : 0;
+      up = Math.max(up, -t.y > 0.3 ? Math.min(1, -t.y * 1.3) : 0); down = Math.max(down, t.y > 0.3 ? t.y : 0);
     }
+    if (d.pump) up = 1;
+    if (d.stall) down = 1;
     const In = { steer, up, down, actionPressed: this.act, action: k.has('Space') || this.btn };
     this.act = false;
     return In;
@@ -441,6 +445,7 @@ addEventListener('keydown', (e) => {
   if (e.repeat && e.code === 'Space') { e.preventDefault(); return; }
   Input.keys.add(e.code);
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+  if (TouchLayout.editing) { if (e.code === 'Escape' || e.code === 'Enter') TouchLayout.closeEditor(); return; }
   Sfx.start();
   if (Game.state === 'menu') { Game.start(); return; }
   if (Game.state === 'over') { if (e.code === 'KeyR' || e.code === 'Space' || e.code === 'Enter') Game.start(); return; }
@@ -458,32 +463,185 @@ function togglePause() {
 }
 
 (function touchSetup() {
-  const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
-  if (isTouch) document.body.classList.add('touch');
-  const zone = $('stickZone'), stick = $('stick'), knob = $('knob'), t = Input.touch;
-  zone.addEventListener('pointerdown', (e) => {
-    t.on = true; t.id = e.pointerId; t.ox = e.clientX; t.oy = e.clientY; t.x = t.y = 0;
-    stick.style.display = 'block'; stick.style.left = e.clientX + 'px'; stick.style.top = (e.clientY - zone.getBoundingClientRect().top) + 'px';
-    knob.style.transform = ''; zone.setPointerCapture(e.pointerId);
+  const enable = () => document.body.classList.add('touch');
+  if (matchMedia('(pointer: coarse)').matches || (navigator.maxTouchPoints > 0 && !matchMedia('(hover: hover)').matches)) enable();
+  addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') enable(); }, true);
+  // no browser zoom while playing: a thumb on the stick plus one on a button can read as a pinch
+  const noZoom = (e) => e.preventDefault();
+  for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, noZoom, { passive: false });
+  document.addEventListener('touchmove', (e) => { if (e.cancelable) e.preventDefault(); }, { passive: false });
+  document.addEventListener('dblclick', noZoom, { passive: false });
+
+  // buttons: hold-to-act, multi-touch safe (each button captures its own finger)
+  const hold = (id, on, off) => {
+    const el = $(id);
+    const press = (e) => {
+      e.preventDefault(); e.stopPropagation();
+      try { el.setPointerCapture(e.pointerId); } catch (_) { }
+      Sfx.start(); el.classList.add('held'); on();
+    };
+    const lift = () => { if (!el.classList.contains('held')) return; el.classList.remove('held'); if (off) off(); };
+    el.addEventListener('pointerdown', press);
+    el.addEventListener('pointerup', lift); el.addEventListener('pointercancel', lift);
+    el.addEventListener('lostpointercapture', lift);
+  };
+  hold('xA', () => { Input.act = true; Input.btn = true; }, () => { Input.btn = false; });
+  hold('xY', () => { Input.down.pump = true; }, () => { Input.down.pump = false; });
+  hold('xB', () => { Input.down.stall = true; }, () => { Input.down.stall = false; });
+  hold('xX', () => Look.recenter());
+  hold('tP', () => togglePause());
+  hold('tR', () => { if (Game.state === 'play' || Game.state === 'pause') { $('pause').classList.add('hide'); Game.start(); } });
+  hold('tM', () => $('tM').classList.toggle('off', Sfx.toggle()));
+
+  // thumbstick: x = carve, push up = pump, pull down = stall
+  const pad = $('steerPad'), knob = $('steerKnob');
+  let padId = null;
+  const steerAt = (e) => {
+    const r = pad.getBoundingClientRect();
+    const half = Math.max(30, Math.min(r.width, r.height) / 2 - 22);
+    let x = (e.clientX - (r.left + r.width / 2)) / half, y = (e.clientY - (r.top + r.height / 2)) / half;
+    const m = Math.hypot(x, y);
+    if (m > 1) { x /= m; y /= m; }                       // knob stays inside the ring
+    knob.style.transform = 'translate(' + (x * half).toFixed(0) + 'px,' + (y * half).toFixed(0) + 'px)';
+    Input.stick = { x, y };
+    pad.classList.toggle('fwd', y < -0.3); pad.classList.toggle('back', y > 0.3);
+  };
+  const release = () => { padId = null; Input.stick = null; knob.style.transform = ''; pad.classList.remove('fwd', 'back'); };
+  pad.addEventListener('pointerdown', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    try { pad.setPointerCapture(e.pointerId); } catch (_) { }
+    Sfx.start(); padId = e.pointerId; steerAt(e);
   });
-  zone.addEventListener('pointermove', (e) => {
-    if (!t.on || e.pointerId !== t.id) return;
-    t.x = clamp(e.clientX - t.ox, -60, 60); t.y = clamp(e.clientY - t.oy, -60, 60);
-    knob.style.transform = `translate(${t.x}px,${t.y}px)`;
-  });
-  const end = (e) => { if (e.pointerId !== t.id) return; t.on = false; stick.style.display = 'none'; };
-  zone.addEventListener('pointerup', end); zone.addEventListener('pointercancel', end);
-  const b = $('actBtn');
-  b.addEventListener('pointerdown', (e) => { e.preventDefault(); Input.act = true; Input.btn = true; b.classList.add('down'); });
-  const up = () => { Input.btn = false; b.classList.remove('down'); };
-  b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
-  $('pauseBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); togglePause(); });
+  pad.addEventListener('pointermove', (e) => { if (e.pointerId === padId) steerAt(e); });
+  pad.addEventListener('pointerup', release); pad.addEventListener('pointercancel', release);
+  pad.addEventListener('lostpointercapture', release);
+
   for (const id of ['menu', 'over', 'pause']) $(id).addEventListener('pointerdown', () => {
+    if (TouchLayout.editing) return;
     Sfx.start();
     if (Game.state === 'menu' || Game.state === 'over') Game.start();
     else if (Game.state === 'pause') togglePause();
   });
 })();
+
+/* ---------------- movable touch controls (as in Powder Line) ----------------
+   Each cluster (stick, A/B/X/Y) has a grip above it: press and hold ~0.3 s until it
+   lights up, then drag the cluster anywhere and let go. Or arrange them from the menu
+   (Controls). Positions are saved per orientation as fractions of the screen;
+   "Reset controls" on the pause screen restores the defaults. */
+const TouchLayout = {
+  KEY: 'swellline.touchLayout',
+  HOLD_MS: 300,
+  IDS: ['gStick', 'gAbxy'],
+  saved: {},
+  editing: false,
+  orient() { return innerWidth > innerHeight ? 'land' : 'port'; },
+
+  init() {
+    try { this.saved = JSON.parse(localStorage.getItem(this.KEY) || '{}') || {}; } catch (e) { this.saved = {}; }
+    for (const id of this.IDS) this.bind($(id));
+    addEventListener('resize', () => this.apply());
+    // keep these taps from reaching the screen underneath (which would start / resume)
+    const stop = (el) => { for (const t of ['pointerdown', 'click', 'touchstart', 'mousedown']) el.addEventListener(t, (e) => e.stopPropagation()); };
+    const cb = $('ctrlBtn');
+    stop(cb); cb.addEventListener('click', () => { this.openEditor(); cb.blur(); });
+    stop($('layoutBar'));
+    $('lDone').addEventListener('click', () => this.closeEditor());
+    $('lReset').addEventListener('click', () => this.reset());
+    const rb = $('pLayout');
+    stop(rb); rb.addEventListener('click', () => { this.reset(); rb.blur(); });
+    this.apply();
+  },
+
+  /* place every group: saved centre (fractions of the screen) or the CSS default */
+  apply() {
+    const b = document.body.classList;
+    if (!b.contains('playing') && !b.contains('editLayout')) return;   // hidden: nothing to measure yet
+    const o = this.saved[this.orient()] || {};
+    for (const id of this.IDS) {
+      const g = $(id), c = o[id];
+      if (!c) { g.style.left = g.style.top = g.style.right = g.style.bottom = ''; continue; }
+      this.place(g, c[0] * innerWidth, c[1] * innerHeight);
+    }
+  },
+
+  /* centre a group at (x, y), kept fully on screen (grip included) */
+  place(g, x, y) {
+    const w = g.offsetWidth, h = g.offsetHeight, pad = 8;
+    x = clamp(x, w / 2 + pad, innerWidth - w / 2 - pad);
+    y = clamp(y, h / 2 + 34, innerHeight - h / 2 - pad);
+    g.style.right = g.style.bottom = 'auto';
+    g.style.left = (x - w / 2) + 'px'; g.style.top = (y - h / 2) + 'px';
+    return [x, y];
+  },
+
+  bind(g) {
+    const grip = g.querySelector('.tgrip');
+    let id = null, timer = 0, moving = false, dx = 0, dy = 0, last = null, sx = 0, sy = 0, dragged = false;
+    const end = () => {
+      clearTimeout(timer);
+      dragged = false;
+      if (moving && last) {
+        const o = this.saved[this.orient()] || (this.saved[this.orient()] = {});
+        o[g.id] = [last[0] / innerWidth, last[1] / innerHeight];
+        try { localStorage.setItem(this.KEY, JSON.stringify(this.saved)); } catch (e) { }
+      }
+      id = null; moving = false; last = null;
+      grip.classList.remove('armed'); g.classList.remove('moving');
+    };
+    const grab = (e) => {
+      const r = g.getBoundingClientRect();
+      dx = e.clientX - (r.left + r.width / 2); dy = e.clientY - (r.top + r.height / 2);
+    };
+    // editor: grab the whole cluster straight away (no hold needed)
+    g.addEventListener('pointerdown', (e) => {
+      if (!this.editing) return;
+      e.preventDefault(); e.stopPropagation();
+      try { g.setPointerCapture(e.pointerId); } catch (_) { }
+      id = e.pointerId; moving = true; g.classList.add('moving');
+      sx = e.clientX; sy = e.clientY; dragged = false; grab(e);
+    });
+    g.addEventListener('pointermove', (e) => {
+      if (!this.editing || e.pointerId !== id || !moving) return;
+      if (!dragged && Math.hypot(e.clientX - sx, e.clientY - sy) < 8) return;   // still a tap
+      dragged = true;
+      last = this.place(g, e.clientX - dx, e.clientY - dy);
+    });
+    g.addEventListener('pointerup', end); g.addEventListener('pointercancel', end);
+    // in play: hold the grip to unlock, then drag
+    grip.addEventListener('pointerdown', (e) => {
+      if (this.editing) return;                      // the group handler takes it
+      e.preventDefault(); e.stopPropagation();
+      try { grip.setPointerCapture(e.pointerId); } catch (_) { }
+      id = e.pointerId; grab(e);
+      grip.classList.add('armed');
+      timer = setTimeout(() => { moving = true; g.classList.add('moving'); }, this.HOLD_MS);
+    });
+    grip.addEventListener('pointermove', (e) => {
+      if (e.pointerId !== id || !moving) return;
+      last = this.place(g, e.clientX - dx, e.clientY - dy);
+    });
+    grip.addEventListener('pointerup', end); grip.addEventListener('pointercancel', end);
+    grip.addEventListener('lostpointercapture', end);
+  },
+
+  openEditor() {
+    if (Game.state !== 'menu') return;
+    this.editing = true;
+    document.body.classList.add('editLayout');
+    this.apply();
+  },
+  closeEditor() {
+    this.editing = false;
+    document.body.classList.remove('editLayout');
+  },
+  reset() {
+    delete this.saved[this.orient()];
+    try { localStorage.setItem(this.KEY, JSON.stringify(this.saved)); } catch (e) { }
+    this.apply();
+  }
+};
+TouchLayout.init();
 
 /* ---------------- loop ---------------- */
 let last = performance.now();
