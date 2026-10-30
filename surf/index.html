@@ -141,9 +141,11 @@
   body.touch #waveScore{top:58px}
   @media (orientation:landscape) and (min-height:501px){ body.touch #prompt{bottom:calc(var(--stick, 150px) + 44px)} }
   /* control-layout editor (menu → Controls): drag the clusters directly */
-  #ctrlBtn,#pLayout{margin-top:6px;margin-bottom:16px;min-height:42px;padding:0 20px;border-radius:22px;border:1.5px solid rgba(190,225,255,.4);
+  .opts{display:flex;flex-wrap:wrap;justify-content:center;gap:8px;margin:2px 0 16px}
+  #pause .opts{margin-top:18px}
+  .opt{min-height:42px;padding:0 18px;border-radius:22px;border:1.5px solid rgba(190,225,255,.4);cursor:pointer;
     background:rgba(10,22,38,.45);color:#eaf6ff;font:800 11px/1 inherit;font-family:inherit;letter-spacing:.16em;text-transform:uppercase;touch-action:manipulation}
-  #pLayout{margin-top:18px}
+  .opt.on{border-color:var(--accent);color:var(--accent)}
   #layoutBar{position:fixed;left:50%;top:max(14px,env(safe-area-inset-top));transform:translateX(-50%);z-index:8;
     display:none;align-items:center;gap:10px;padding:8px 8px 8px 16px;border-radius:24px;max-width:calc(100vw - 32px);
     background:rgba(10,22,38,.78);border:1.5px solid rgba(190,225,255,.35);color:#eaf6ff;font-size:12px;font-weight:700;letter-spacing:.04em}
@@ -161,7 +163,7 @@
     #map{top:96px;width:92px;height:136px} body.touch #map{top:150px} .stats{grid-template-columns:repeat(2,1fr)} }
   /* short landscape phones: the menu has to fit without scrolling */
   @media (max-height:500px){ .screen{justify-content:safe center;padding:14px 24px} h1{font-size:clamp(34px,9vh,56px);margin:6px 0 8px}
-    .sub{display:none} .keys{gap:5px 14px;margin-bottom:10px;font-size:12.5px} #ctrlBtn{margin:0 0 10px;min-height:36px} }
+    .sub{display:none} .keys{gap:5px 14px;margin-bottom:10px;font-size:12.5px} .opts{margin:0 0 10px} .opt{min-height:36px} }
   @media (orientation:portrait){ #prompt{bottom:auto;top:118px} #trick{top:30%} }
   @media (orientation:landscape) and (max-height:500px){ #prompt{bottom:auto;top:64px} #tube{top:30%} }
   /* which way the wave will peel: an arrow pointing along the open face */
@@ -230,14 +232,15 @@
     <div><i class="key">S</i> / <i class="key">↓</i></div><div>Stall (drag a hand) — let the curl catch you for the tube</div>
     <div><i class="key">Right</i> / <i class="key">Middle</i> drag</div><div>Orbit camera · wheel to zoom (<i class="key">C</i> resets)</div>
     <div><i class="key">P</i> <i class="key">R</i> <i class="key">M</i></div><div>Pause · restart · mute</div>
+    <div><i class="key">T</i></div><div>Autopilot on / off (it carves the line; you pop up, stall, and steer over it)</div>
   </div>
   <div class="keys touch-only">
     <div><i class="key">A</i></div><div>Pop up as the wave lifts you · launch off the lip</div>
-    <div><i class="key">stick</i></div><div>◀ ▶ carve · ▲ pump · ▼ stall</div>
+    <div><i class="key">stick</i> / <i class="key">tilt</i></div><div>◀ ▶ carve (with autopilot: nudge its line) · ▲ pump · ▼ stall</div>
     <div><i class="key">Y</i> <i class="key">B</i></div><div>Pump · stall (same as the stick)</div>
     <div><i class="key">X</i> / <i class="key">swipe</i></div><div>Reset view · swipe open screen to look around</div>
   </div>
-  <button type="button" id="ctrlBtn" class="touch-only">⠿ Controls</button>
+  <div class="opts"><button type="button" class="opt autoBtn">Autopilot: OFF</button><button type="button" class="opt tiltBtn touch-only">Tilt: OFF</button><button type="button" id="ctrlBtn" class="opt touch-only">⠿ Controls</button></div>
   <div class="go"><span class="kb-only">press any key to paddle in</span><span class="touch-only">tap to start</span></div>
   <a id="back" href="../">← back to Powder Line (snowboarding)</a>
 </div>
@@ -261,17 +264,17 @@
   <div class="eyebrow">paused</div>
   <h1 style="font-size:clamp(34px,7vw,70px)">FLAT<br>SPELL</h1>
   <div class="go"><span class="kb-only">press P to resume · R to restart</span><span class="touch-only">tap to resume</span></div>
-  <button type="button" id="pLayout" class="touch-only">⠿ Reset controls</button>
+  <div class="opts"><button type="button" class="opt autoBtn">Autopilot: OFF</button><button type="button" class="opt tiltBtn touch-only">Tilt: OFF</button><button type="button" id="pLayout" class="opt touch-only">⠿ Reset controls</button></div>
 </div>
 
 <div id="fatal"></div>
 
-<script src="../js/math.js?v=20261030a"></script>
-<script src="js/ocean.js?v=20261030a"></script>
-<script src="js/fft.js?v=20261030a"></script>
-<script src="js/gfx.js?v=20261030a"></script>
-<script src="js/surfer.js?v=20261030a"></script>
-<script src="js/audio.js?v=20261030a"></script>
-<script src="js/main.js?v=20261030a"></script>
+<script src="../js/math.js?v=20261030b"></script>
+<script src="js/ocean.js?v=20261030b"></script>
+<script src="js/fft.js?v=20261030b"></script>
+<script src="js/gfx.js?v=20261030b"></script>
+<script src="js/surfer.js?v=20261030b"></script>
+<script src="js/audio.js?v=20261030b"></script>
+<script src="js/main.js?v=20261030b"></script>
 </body>
 </html>

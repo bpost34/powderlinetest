@@ -427,6 +427,7 @@ const Input = {
     const k = this.keys, t = this.stick, d = this.down;
     let steer = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
     let up = k.has('KeyW') || k.has('ArrowUp') ? 1 : 0, down = k.has('KeyS') || k.has('ArrowDown') ? 1 : 0;
+    if (Tilt.on && Tilt.steer !== null && !steer) steer = Tilt.steer;
     if (t) {
       steer = Math.abs(t.x) > 0.12 ? t.x : 0;
       up = Math.max(up, -t.y > 0.3 ? Math.min(1, -t.y * 1.3) : 0); down = Math.max(down, t.y > 0.3 ? t.y : 0);
@@ -438,6 +439,87 @@ const Input = {
     return In;
   }
 };
+/* ---------------- tilt steering (as in Powder Line) ----------------
+   Steering-wheel tilt: project "world up" into the screen plane and steer by its angle,
+   so it works however far back the phone is tilted or which way round it is held. */
+const Tilt = {
+  on: false, steer: null,
+  onTilt(ev) {
+    if (!this.on || ev.beta === null || ev.gamma === null) return;
+    const b = ev.beta * Math.PI / 180, g = ev.gamma * Math.PI / 180;
+    const ux = -Math.sin(g) * Math.cos(b), uy = Math.sin(b);          // world-up in device x/y
+    const ang = ((screen.orientation && screen.orientation.angle) || window.orientation || 0) * Math.PI / 180;
+    const sx = ux * Math.cos(ang) - uy * Math.sin(ang), sy = ux * Math.sin(ang) + uy * Math.cos(ang);
+    if (Math.hypot(sx, sy) < 0.2) return;                              // phone nearly flat: hold last value
+    let a = -Math.atan2(sx, sy) * 180 / Math.PI;                       // + = rotated clockwise = carve right
+    a = Math.abs(a) < 3 ? 0 : a - Math.sign(a) * 3;                    // 3° dead zone
+    this.steer = clamp(a / 25, -1, 1);                                 // full lock at ~28°
+  },
+  // iOS needs requestPermission() inside the tap
+  async toggle() {
+    if (this.on) { this.on = false; this.steer = null; return 'off'; }
+    try {
+      const DOE = window.DeviceOrientationEvent;
+      if (DOE && typeof DOE.requestPermission === 'function' && await DOE.requestPermission() !== 'granted') return 'denied';
+    } catch (err) { return 'https'; }
+    this.on = true;
+    if (!this._bound) { this._bound = true; addEventListener('deviceorientation', (ev) => this.onTilt(ev)); }
+    return 'on';
+  }
+};
+
+/* ---------------- autopilot ----------------
+   Holds a line along the open face toward the shoulder (mid-face; low and deep once
+   covered) with a gentle weave for turn points, and pumps when the curl is on you.
+   Your stick / tilt / keys blend in on top and take over as you push harder, and
+   stall (B / S) is still yours, so you choose when to let the barrel catch you.
+   Pop-up and airs stay on A / Space. */
+const Auto = {
+  on: false,
+  apply(In) {
+    const S = Surfer, P = S.pos, q = S.q || {};
+    if (!this.on || S.mode !== 'ride' || !S.rideWave) return In;
+    const w = S.rideWave, dir = Math.sign(P.x - w.xPeak) || 1;
+    const frac = q.wave ? (P.y - q.yT) / q.H : 0.5;
+    const want = Math.atan2(dir * 7, SEA.C + clamp((frac - (S.covered ? 0.2 : 0.45)) * 8, -4, 4));
+    const weave = In.down ? 0 : Math.sin(Ocean.t * 1.3) * 0.3;
+    const a = clamp(angDelta(S.yaw, want + weave) * 2.5, -1, 1), p = In.steer;
+    In.steer = clamp(a * (1 - Math.min(1, Math.abs(p) * 1.5)) + p, -1, 1);
+    if (!In.down && Ocean.age(w, P.x) > 0.6) In.up = Math.max(In.up, 1);
+    return In;
+  }
+};
+const Opts = {
+  KEY: 'swellline.opts',
+  load() {
+    let o = {}; try { o = JSON.parse(localStorage.getItem(this.KEY) || '{}') || {}; } catch (e) { }
+    // autopilot defaults on for touch screens
+    Auto.on = o.auto !== undefined ? !!o.auto : document.body.classList.contains('touch');
+  },
+  save() { try { localStorage.setItem(this.KEY, JSON.stringify({ auto: Auto.on })); } catch (e) { } },
+  label() {
+    for (const el of document.querySelectorAll('.autoBtn')) { el.textContent = 'Autopilot: ' + (Auto.on ? 'ON' : 'OFF'); el.classList.toggle('on', Auto.on); }
+    document.body.classList.toggle('auto', Auto.on);
+  },
+  init() {
+    this.load(); this.label();
+    const stop = (el) => { for (const t of ['pointerdown', 'touchstart', 'mousedown']) el.addEventListener(t, (e) => e.stopPropagation()); };
+    for (const el of document.querySelectorAll('.autoBtn')) {
+      stop(el); el.addEventListener('click', (e) => { e.stopPropagation(); Auto.on = !Auto.on; this.save(); this.label(); el.blur(); });
+    }
+    for (const el of document.querySelectorAll('.tiltBtn')) {
+      stop(el);
+      el.addEventListener('click', async (e) => {
+        e.stopPropagation(); el.blur();
+        const r = await Tilt.toggle();
+        const txt = { on: 'Tilt: ON', off: 'Tilt: OFF', denied: 'Tilt: permission denied', https: 'Tilt needs https' }[r];
+        for (const b of document.querySelectorAll('.tiltBtn')) { b.textContent = txt; b.classList.toggle('on', Tilt.on); }
+        if (r === 'on') setTimeout(() => { if (Tilt.on && Tilt.steer === null) el.textContent = 'Tilt: no sensor data'; }, 1500);
+      });
+    }
+  }
+};
+
 // steering sign: the camera looks along the board, so "right" on the keys turns the board to screen-right
 function steerSign() { return -1; }
 
@@ -446,6 +528,7 @@ addEventListener('keydown', (e) => {
   Input.keys.add(e.code);
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
   if (TouchLayout.editing) { if (e.code === 'Escape' || e.code === 'Enter') TouchLayout.closeEditor(); return; }
+  if (e.code === 'KeyT') { Auto.on = !Auto.on; Opts.save(); Opts.label(); return; }
   Sfx.start();
   if (Game.state === 'menu') { Game.start(); return; }
   if (Game.state === 'over') { if (e.code === 'KeyR' || e.code === 'Space' || e.code === 'Enter') Game.start(); return; }
@@ -642,6 +725,7 @@ const TouchLayout = {
   }
 };
 TouchLayout.init();
+Opts.init();
 
 /* ---------------- loop ---------------- */
 let last = performance.now();
@@ -652,7 +736,8 @@ function frame(now) {
   In.steer *= steerSign();
   if (Game.manual) return;           // a test harness is stepping and drawing
   // fixed steps keep the physics identical at any frame rate
-  while (dt > 1e-4) { const h = Math.min(dt, 1 / 60); Game.update(h, In); In.actionPressed = false; dt -= h; }
+  const raw = { steer: In.steer, up: In.up };
+  while (dt > 1e-4) { const h = Math.min(dt, 1 / 60); In.steer = raw.steer; In.up = raw.up; Game.update(h, Auto.apply(In)); In.actionPressed = false; dt -= h; }
   Gfx.frame(Game.state === 'menu' || Game.state === 'over' ? null : Surfer);
   if (Game.state === 'play') Game.hud();
 }
